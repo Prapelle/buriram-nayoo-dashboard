@@ -1,0 +1,20 @@
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
+import { InitButton } from "@/components/InitButton";
+
+export default async function SettingsPage() {
+  const s = await auth();
+  if (s?.user?.role !== "admin") redirect("/");
+  return (
+    <section className="max-w-2xl space-y-6">
+      <h1 className="text-2xl font-bold">ตั้งค่า</h1>
+      <div className="rounded-lg border border-slate-200 bg-white p-5">
+        <h2 className="mb-1 font-semibold">ฐานข้อมูล Google Sheets</h2>
+        <p className="mb-4 text-sm text-slate-600">
+          สร้างแท็บและ Header ที่ขาด เพิ่มผู้ใช้ Admin คนแรก และค่า Config เริ่มต้น โดยไม่ลบหรือแก้ข้อมูลเดิม
+        </p>
+        <InitButton />
+      </div>
+    </section>
+  );
+}
