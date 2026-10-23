@@ -1,0 +1,29 @@
+import { redirect } from "next/navigation";
+import { auth, signIn } from "@/auth";
+
+export const dynamic = "force-dynamic";
+
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  const session = await auth();
+  if (session?.user?.role) redirect("/");
+  const { error } = await searchParams;
+
+  return (
+    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 p-6">
+      <div>
+        <h1 className="text-2xl font-bold">Buriram NAYOO</h1>
+        <p className="text-sm text-slate-600">Marketing Dashboard — เฉพาะผู้ได้รับอนุญาต</p>
+      </div>
+      {error && (
+        <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+          เข้าสู่ระบบไม่สำเร็จ หรืออีเมลนี้ยังไม่ได้รับสิทธิ์ กรุณาติดต่อ Admin
+        </p>
+      )}
+      <form action={async () => { "use server"; await signIn("google", { redirectTo: "/" }); }}>
+        <button className="w-full rounded-md bg-slate-900 px-4 py-2.5 font-medium text-white hover:bg-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900">
+          เข้าสู่ระบบด้วย Google
+        </button>
+      </form>
+    </main>
+  );
+}
