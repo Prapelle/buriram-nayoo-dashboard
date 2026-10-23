@@ -1,4 +1,3 @@
-tsx
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { GoogleButton } from "@/components/GoogleButton";
