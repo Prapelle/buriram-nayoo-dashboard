@@ -1,5 +1,7 @@
+tsx
 import { redirect } from "next/navigation";
-import { auth, signIn } from "@/auth";
+import { auth } from "@/auth";
+import { GoogleButton } from "@/components/GoogleButton";
 
 export const dynamic = "force-dynamic";
 
@@ -19,11 +21,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           เข้าสู่ระบบไม่สำเร็จ หรืออีเมลนี้ยังไม่ได้รับสิทธิ์ กรุณาติดต่อ Admin
         </p>
       )}
-      <form action={async () => { "use server"; await signIn("google", { redirectTo: "/" }); }}>
-        <button className="w-full rounded-md bg-slate-900 px-4 py-2.5 font-medium text-white hover:bg-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-900">
-          เข้าสู่ระบบด้วย Google
-        </button>
-      </form>
+      <GoogleButton />
     </main>
   );
 }
