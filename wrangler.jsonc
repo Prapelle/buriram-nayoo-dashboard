@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "buriram-nayoo-dashboard",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2025-06-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
+  // ค่าที่ไม่ลับ ตั้งตรงนี้ได้; ค่าลับ (AUTH_SECRET, AUTH_GOOGLE_SECRET, GOOGLE_PRIVATE_KEY) ใช้ `wrangler secret put`
+  "vars": {
+    "AUTH_TRUST_HOST": "true"
+  }
+}
