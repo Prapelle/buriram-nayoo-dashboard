@@ -79,21 +79,29 @@ async function prepare(input: ImportInput) {
     if (String(r.confirmed).toUpperCase() === "TRUE" && (AREAS as readonly string[]).includes(r.area)) areaMap.set(`${r.source_platform}|${r.source_name}`, r.area);
 
   let plan: Plan;
+  let periodError: string | undefined;
   try { plan = buildPlan({ spec, table, ctx, existing, areaMap }); }
-  catch (e) { if (e instanceof PlanError) throw new HttpError(422, e.message, e.code); throw e; }
+  catch (e) {
+    if (e instanceof PlanError && (e.code === "PERIOD_REQUIRED" || e.code === "PERIOD_INVALID")) {
+      // ยังไม่มีช่วงวันที่ที่ถูกต้อง: ไม่ถือเป็น error ให้ผู้ใช้กรอกต่อในหน้าจอได้
+      periodError = e.message;
+      plan = { planned: [], counts: { total: table.records.length, insert: 0, update: 0, skip: 0, invalid: 0 }, errors: [], warnings: [], period: { start: "", end: "" } };
+    } else if (e instanceof PlanError) throw new HttpError(422, e.message, e.code);
+    else throw e;
+  }
 
   const sha256 = await sha256Hex(input.text);
-  const dup = tabs.IMPORT_BATCHES.rows.find((b) =>
+  const dup = periodError ? undefined : tabs.IMPORT_BATCHES.rows.find((b) =>
     b.status === "success" && b.file_sha256 === sha256 && b.source === spec.source && b.report_type === spec.id
     && b.report_start === plan.period.start && b.report_end === plan.period.end);
-  return { spec, ctx, plan, sha256, detected, target, batches: tabs.IMPORT_BATCHES, fileDuplicate: dup ? { batchId: dup.batch_id, uploadedAt: dup.uploaded_at, uploadedBy: dup.uploaded_by } : null };
+  return { spec, ctx, plan, sha256, detected, periodError, target, batches: tabs.IMPORT_BATCHES, fileDuplicate: dup ? { batchId: dup.batch_id, uploadedAt: dup.uploaded_at, uploadedBy: dup.uploaded_by } : null };
 }
 
 function summarize(p: Awaited<ReturnType<typeof prepare>>) {
   const { spec, plan } = p;
   return {
     spec: { id: spec.id, label: spec.label, tab: spec.tab, source: spec.source, period: spec.period, comparison: !!spec.comparison },
-    detected: p.detected, ctx: p.ctx, sha256: p.sha256, period: plan.period,
+    detected: p.detected, ctx: p.ctx, sha256: p.sha256, period: plan.period, periodError: p.periodError,
     counts: plan.counts, warnings: plan.warnings, errors: plan.errors.slice(0, 1000),
     fileDuplicate: p.fileDuplicate,
     previewColumns: spec.previewKeys,
@@ -106,6 +114,7 @@ export async function runPlan(input: ImportInput) { return summarize(await prepa
 export async function runCommit(input: ImportInput, actor: string, role: Role) {
   const p = await prepare(input);
   const { spec, plan } = p;
+  if (p.periodError) throw new HttpError(422, p.periodError, "PERIOD_REQUIRED");
   if (p.fileDuplicate) {
     const allowed = input.overrideDuplicate === true && role === "admin";
     if (!allowed) throw new HttpError(409, "ไฟล์นี้เคยนำเข้าสำเร็จแล้ว (Admin เท่านั้นที่ยืนยันนำเข้าซ้ำได้)", "DUPLICATE_FILE");
