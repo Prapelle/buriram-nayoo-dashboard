@@ -33,23 +33,28 @@ npm run dev
 
 ผู้ใช้เพิ่มเติม: เพิ่มแถวในแท็บ `APP_USERS` (email, role = admin/marketing/sales, active = TRUE) — หน้าจัดการผู้ใช้จะมาในขั้นถัดไป
 
-## 4. Deploy ขึ้น Cloudflare (ฟรี)
+## 4. Deploy จาก GitHub ไป Cloudflare (ฟรี ไม่ต้องรันในเครื่อง)
 
-```bash
-npx wrangler login
-npm run deploy                      # build + deploy เป็น Worker
-npx wrangler secret put AUTH_SECRET
-npx wrangler secret put AUTH_GOOGLE_ID
-npx wrangler secret put AUTH_GOOGLE_SECRET
-npx wrangler secret put INITIAL_ADMIN_EMAIL
-npx wrangler secret put GOOGLE_SHEET_ID
-npx wrangler secret put GOOGLE_SERVICE_ACCOUNT_EMAIL
-npx wrangler secret put GOOGLE_PRIVATE_KEY   # วางทั้งก้อน รวม -----BEGIN...
-```
+1. Push โค้ดขึ้น GitHub repo (private ได้)
+2. https://dash.cloudflare.com → **Workers & Pages → Create → Import a repository** → เลือก repo
+3. ชื่อโปรเจกต์ต้องเป็น `buriram-nayoo-dashboard` (ตรงกับ `name` ใน `wrangler.jsonc`)
+4. ตั้งค่า Build:
+   - Build command: `npx opennextjs-cloudflare build`
+   - Deploy command: `npx opennextjs-cloudflare deploy`
+5. หลัง deploy ครั้งแรก ไปที่ Worker → **Settings → Variables and secrets** เพิ่มค่า (ชนิด Secret) ตาม `.env.example` ทั้ง 7 ตัว: `AUTH_SECRET`, `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `INITIAL_ADMIN_EMAIL`, `GOOGLE_SHEET_ID`, `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_PRIVATE_KEY`
+6. นำ URL `*.workers.dev` ไปเพิ่มใน OAuth redirect URI (ข้อ 1.4) แล้วเข้าเว็บ → ตั้งค่า → เตรียม Google Sheet
 
-จากนั้นนำ URL `*.workers.dev` ไปเพิ่มใน OAuth redirect URI (ข้อ 1.4)
+ทุกครั้งที่ commit ขึ้น GitHub Cloudflare จะ build และ deploy ใหม่อัตโนมัติ
 
-ทดสอบแบบ Workers จริงในเครื่อง: คัดลอกค่าไว้ใน `.dev.vars` แล้ว `npm run preview`
+## ขั้น 2: นำเข้า CSV (เมนู "นำเข้า CSV")
+
+1. หลังอัปเดตโค้ด ไปที่ **ตั้งค่า → เตรียม Google Sheet** อีกครั้ง 1 ครั้ง (เพิ่มแท็บ/คอลัมน์ใหม่ ไม่ลบข้อมูลเดิม)
+2. ที่หน้า **นำเข้า CSV** ลากไฟล์มาวาง ระบบตรวจประเภทอัตโนมัติ รองรับ Facebook Page, Facebook Ads และ Google Ads 16 ประเภท
+3. ตรวจประเภท ช่วงวันที่ (Google Ads เดาจากชื่อไฟล์ ต้องตรวจเอง) และ Area แล้วดูพรีวิว/จำนวนเพิ่ม-อัปเดต-ข้าม-ผิด จากนั้นกดยืนยัน
+4. นำเข้าไฟล์เดิมซ้ำได้ ตัวเลขไม่ซ้ำ เพราะระบบอัปเดตตามคีย์ของข้อมูล (Admin เท่านั้นที่ยืนยันนำเข้าไฟล์ที่เคยสำเร็จแล้วได้)
+5. Area ของ Meta/Google ตั้งอัตโนมัติจากแท็บ `AREA_MAPPINGS` (source_platform = `meta_ads` + source_name = ชื่อ Ad set, หรือ `google_ads` + ชื่อแคมเปญ, confirmed = TRUE, area = buriram/surin/multi_province) ถ้าไม่มีจะใช้ Area ที่เลือกในหน้านำเข้า
+
+ทดสอบ: ใส่ไฟล์ตัวอย่างใน `tests/fixtures/` แล้วรัน `npx tsx tests/import.test.ts` และ `npx tsx tests/e2e.test.mts`
 
 ## ข้อควรรู้
 
