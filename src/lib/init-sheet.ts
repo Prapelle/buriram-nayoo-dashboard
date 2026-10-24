@@ -50,6 +50,7 @@ export async function initializeSpreadsheet(actor: string): Promise<InitReport> 
     ["max_upload_mb", "10", "ขนาดไฟล์ CSV สูงสุด (MB)"],
     ["timezone", "Asia/Bangkok", "เขตเวลาที่ใช้แสดงผล"],
     ["date_format", "DD/MM/YYYY", "รูปแบบวันที่ในหน้าจอ"],
+    ["excluded_fb_pages", "BAAN Prompt Community - Buriram&Surin", "ชื่อหรือ Page ID ของเพจ Facebook ที่ไม่นับใน Dashboard (คั่นหลายค่าด้วย |)"],
   ].filter(([k]) => !have.has(k));
   if (defaults.length) {
     await appendRows("APP_CONFIG", defaults.map(([k, v, d]) => toRow(cfg.headers, { config_key: k, config_value: v, description: d, updated_at: now })));
