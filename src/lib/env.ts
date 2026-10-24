@@ -4,7 +4,7 @@ function req(name: string): string {
   return v;
 }
 
-// ทนต่อการวางคีย์ผิดรูป: มีเครื่องหมายคำพูด, \n เป็นตัวอักษร, ขึ้นบรรทัดใหม่ถูกแทนด้วยเว้นวรรค
+/** ทนต่อการวางคีย์ผิดรูป: มีเครื่องหมายคำพูด, \\n เป็นตัวอักษร, ขึ้นบรรทัดใหม่ถูกแทนด้วยเว้นวรรค */
 function normalizePem(raw: string): string {
   const cleaned = raw.trim().replace(/^["']|["'],?$/g, "").replace(/\\n/g, "\n");
   const body = cleaned
@@ -18,6 +18,7 @@ function normalizePem(raw: string): string {
 export const env = {
   get sheetId() { return req("GOOGLE_SHEET_ID"); },
   get saEmail() { return req("GOOGLE_SERVICE_ACCOUNT_EMAIL"); },
+  // รองรับทั้งกรณีใส่ \n เป็นตัวอักษร และขึ้นบรรทัดจริง
   get saKey() { return normalizePem(req("GOOGLE_PRIVATE_KEY")); },
   get initialAdmin() { return (process.env.INITIAL_ADMIN_EMAIL ?? "").trim().toLowerCase(); },
 };

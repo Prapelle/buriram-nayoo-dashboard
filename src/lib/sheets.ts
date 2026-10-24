@@ -75,8 +75,11 @@ export async function expandColumns(sheetId: number, by: number) {
 
 export async function batchGet(ranges: string[]): Promise<string[][][]> {
   const q = ranges.map((r) => `ranges=${encodeURIComponent(r)}`).join("&");
-  const j = await call<{ valueRanges: { values?: string[][] }[] }>(`/values:batchGet?${q}&majorDimension=ROWS`);
-  return j.valueRanges.map((v) => v.values ?? []);
+  const j = await call<{ valueRanges: { values?: (string | number | boolean)[][] }[] }>(
+    `/values:batchGet?${q}&majorDimension=ROWS&valueRenderOption=UNFORMATTED_VALUE`,
+  );
+  // แปลงเป็นข้อความทั้งหมด (ตัวเลขได้ค่าเต็มความละเอียด ไม่ถูกปัดตามรูปแบบเซลล์)
+  return j.valueRanges.map((v) => (v.values ?? []).map((r) => r.map((c) => String(c))));
 }
 
 export async function batchUpdateValues(data: { range: string; values: (string | number)[][] }[]) {
@@ -87,12 +90,32 @@ export async function batchUpdateValues(data: { range: string; values: (string |
   });
 }
 
-export async function appendRows(tab: string, rows: (string | number)[][]) {
-  if (!rows.length) return;
-  await call(`/values/${encodeURIComponent(`'${tab}'!A1`)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
-    method: "POST",
-    body: JSON.stringify({ values: rows }),
+/** เพิ่มแถวต่อท้ายตาราง คืนค่า range ที่เขียน เช่น 'TAB'!A5:T7 (ใช้หาเลขแถว) */
+export async function appendRows(tab: string, rows: (string | number)[][]): Promise<string> {
+  if (!rows.length) return "";
+  const j = await call<{ updates?: { updatedRange?: string } }>(
+    `/values/${encodeURIComponent(`'${tab}'!A1`)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+    { method: "POST", body: JSON.stringify({ values: rows }) },
+  );
+  return j.updates?.updatedRange ?? "";
+}
+
+/** อ่านหลายแท็บในคำขอเดียว (ลดจำนวน API calls) */
+export async function readTabs(tabs: string[]): Promise<Record<string, { headers: string[]; rows: Record<string, string>[] }>> {
+  const all = await batchGet(tabs.map((t) => `'${t}'`));
+  const out: Record<string, { headers: string[]; rows: Record<string, string>[] }> = {};
+  tabs.forEach((t, i) => {
+    const values = all[i];
+    const headers = values[0] ?? [];
+    out[t] = { headers, rows: values.slice(1).map((r) => Object.fromEntries(headers.map((h, j) => [h, r[j] ?? ""]))) };
   });
+  return out;
+}
+
+/** เลขแถวแรกจาก updatedRange เช่น 'TAB'!A5:T7 -> 5 */
+export function firstRowOf(range: string): number {
+  const m = /!?[A-Z]+(\d+)(?::[A-Z]+\d+)?$/.exec(range);
+  return m ? Number(m[1]) : 0;
 }
 
 /** อ่านทั้งแท็บ คืนค่าเป็น object ตามชื่อ header (ไม่พึ่งลำดับคอลัมน์) */

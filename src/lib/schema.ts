@@ -1,13 +1,12 @@
 export type TabDef = { name: string; group: "system" | "marketing" | "manual"; headers: string[] };
 
-const RANGE = ["record_id", "report_start", "report_end"];
-const TAIL = ["area", "row_key", "raw_json", "source_batch_id", "imported_at"];
+import { SPECS, headersFromSpec } from "./import/specs";
 
-// แท็บรายละเอียด Google Ads: คอลัมน์มิติ/KPI เฉพาะประเภทจะถูกเพิ่มในขั้น 3 จากไฟล์ตัวอย่างจริง
-// (Initializer เพิ่มคอลัมน์ที่ขาดต่อท้ายได้โดยไม่แตะข้อมูลเดิม)
-const gads = (name: string, extra: string[] = []): TabDef => ({
-  name, group: "marketing", headers: [...RANGE, ...extra, ...TAIL],
-});
+// แท็บ Google Ads รายละเอียดสร้างจาก spec เดียวกับตัว Import เพื่อให้คอลัมน์ตรงกันเสมอ
+const gads = (id: string): TabDef => {
+  const spec = SPECS.find((x) => x.id === id)!;
+  return { name: spec.tab, group: "marketing", headers: headersFromSpec(spec) };
+};
 
 export const TABS: TabDef[] = [
   { name: "APP_USERS", group: "system", headers: ["user_id","email","display_name","role","active","created_at","updated_at","created_by"] },
@@ -21,18 +20,21 @@ export const TABS: TabDef[] = [
   { name: "FB_PAGE_POSTS", group: "marketing", headers: ["record_id","page_id","post_id","page_name","title","description","publish_time","permalink","post_type","metric_period_label","snapshot_date","views","reach","reactions_comments_shares","reactions","comments","shares","seconds_viewed","average_seconds_viewed","estimated_earnings_usd","ad_cpm_usd","ad_impressions","total_clicks","other_clicks","link_clicks","raw_json","row_key","source_batch_id","source_filename","imported_at"] },
   { name: "META_ADS", group: "marketing", headers: ["record_id","report_start","report_end","ad_name","ad_delivery","attribution_setting","results","result_indicator","cost_per_results","ad_set_budget","ad_set_budget_type","amount_spent_thb","impressions","reach","facebook_likes","ends","bid","bid_type","last_significant_edit","quality_ranking","engagement_rate_ranking","conversion_rate_ranking","ad_set_name","results_initial","results_initial_indicator","area","row_key","raw_json","source_batch_id","imported_at"] },
   { name: "GOOGLE_ADS_CAMPAIGNS", group: "marketing", headers: ["record_id","report_start","report_end","campaign_name","campaign_group_name","campaign_status","cost_thb","clicks","ctr_pct","area","row_key","raw_json","source_batch_id","imported_at"] },
-  gads("GOOGLE_ADS_SEARCH_TERMS"),
-  gads("GOOGLE_ADS_SEARCH_WORDS"),
-  gads("GOOGLE_ADS_KEYWORDS"),
-  gads("GOOGLE_ADS_NETWORK"),
-  gads("GOOGLE_ADS_AGE"),
-  gads("GOOGLE_ADS_GENDER"),
-  gads("GOOGLE_ADS_GENDER_AGE"),
-  gads("GOOGLE_ADS_SCHEDULE_DAY"),
-  gads("GOOGLE_ADS_SCHEDULE_HOUR"),
-  gads("GOOGLE_ADS_SCHEDULE_DAY_HOUR"),
-  gads("GOOGLE_ADS_OPT_SCORE"),
-  gads("GOOGLE_ADS_CAMPAIGN_CHANGES", ["comparison_start", "comparison_end"]),
+  gads("gads_search_terms"),
+  gads("gads_search_words"),
+  gads("gads_keywords"),
+  gads("gads_network"),
+  gads("gads_age"),
+  gads("gads_gender"),
+  gads("gads_gender_age"),
+  gads("gads_schedule_day"),
+  gads("gads_schedule_hour"),
+  gads("gads_schedule_day_hour"),
+  gads("gads_opt_score"),
+  gads("gads_changes"),
+  gads("gads_devices"),
+  gads("gads_time_series"),
+  gads("gads_auction"),
 
   { name: "LINE_OA_MONTHLY", group: "manual", headers: ["record_id","report_month","friends_start","friends_end","new_friends","blocked_users","broadcast_count","messages_sent","messages_delivered","opens","clicks","new_chats","inquiries","leads","qualified_leads","campaign_activity","notes","created_by","created_at","updated_at"] },
   { name: "LEADS", group: "manual", headers: ["lead_id","lead_code","received_at","customer_name","company_name","phone","email","source_channel","campaign_name","utm_source","utm_medium","utm_campaign","area","service_category","service_interest","need_description","owner_email","status","contactable","last_contacted_at","next_follow_up_at","qualified_at","won_at","lost_reason","notes","created_by","created_at","updated_by","updated_at"] },
