@@ -8,6 +8,7 @@ type Counts = { total: number; insert: number; update: number; skip: number; inv
 type Plan = {
   spec: { id: string; label: string; tab: string; source: string; period: "file" | "user" | "snapshot"; comparison: boolean };
   detected: boolean;
+  periodError?: string;
   ctx: { reportStart?: string; reportEnd?: string; comparisonStart?: string; comparisonEnd?: string; area: string; snapshotDate?: string };
   period: { start: string; end: string };
   counts: Counts; warnings: string[]; errors: Err[];
@@ -100,8 +101,10 @@ export function ImportWizard() {
   function reset() { setFile(null); setPlan(null); setSpecId(""); setState("idle"); setError(""); setResult(null); setOverride(false); if (input.current) input.current.value = ""; }
 
   const committing = state === "committing";
+  const locked = state === "committing" || state === "done";
+  const setP = (k: keyof typeof period, v: string) => { setPeriod({ ...period, [k]: v }); runPlan(file, { [k]: v } as Partial<typeof period>); };
   const blocked = !!plan?.fileDuplicate && !override;
-  const canCommit = state === "ready" && plan && plan.counts.insert + plan.counts.update + plan.counts.skip > 0 && !blocked;
+  const canCommit = state === "ready" && plan && !plan.periodError && plan.counts.insert + plan.counts.update + plan.counts.skip > 0 && !blocked;
   const dateInput = "rounded-md border border-slate-300 px-2 py-1.5 text-sm";
 
   return (
@@ -120,18 +123,18 @@ export function ImportWizard() {
         {state === "loading" && <p role="status" className="text-sm text-slate-600">กำลังตรวจไฟล์...</p>}
         {state === "error" && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
-        {plan && (state === "ready" || state === "committing" || state === "done") && (
+        {plan && state !== "idle" && state !== "error" && (
           <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
             <div className="flex flex-wrap items-end gap-4">
               <label className="text-sm">
                 <span className="mb-1 block font-medium">ประเภทรายงาน {plan.detected ? <span className="font-normal text-green-700">(ตรวจพบอัตโนมัติ)</span> : <span className="font-normal text-amber-700">(เลือกเอง — header ไม่ตรงกับประเภทนี้)</span>}</span>
-                <select value={specId} disabled={state !== "ready"} className={dateInput + " min-w-72"} onChange={(e) => { setSpecId(e.target.value); runPlan(file, { specId: e.target.value }); }}>
+                <select value={specId} disabled={locked} className={dateInput + " min-w-72"} onChange={(e) => { setSpecId(e.target.value); runPlan(file, { specId: e.target.value }); }}>
                   {SPECS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
                 </select>
               </label>
               <label className="text-sm">
                 <span className="mb-1 block font-medium">Area</span>
-                <select value={area} disabled={state !== "ready"} className={dateInput} onChange={(e) => { setArea(e.target.value); runPlan(file, { area: e.target.value }); }}>
+                <select value={area} disabled={locked} className={dateInput} onChange={(e) => { setArea(e.target.value); runPlan(file, { area: e.target.value }); }}>
                   {AREAS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                 </select>
               </label>
@@ -139,11 +142,11 @@ export function ImportWizard() {
 
             {plan.spec.period === "user" && (
               <div className="flex flex-wrap items-end gap-4 text-sm">
-                <label><span className="mb-1 block font-medium">ช่วงรายงาน เริ่ม</span><input type="date" className={dateInput} value={period.reportStart} disabled={state !== "ready"} onChange={(e) => setPeriod({ ...period, reportStart: e.target.value })} onBlur={() => runPlan(file, {})} /></label>
-                <label><span className="mb-1 block font-medium">สิ้นสุด</span><input type="date" className={dateInput} value={period.reportEnd} disabled={state !== "ready"} onChange={(e) => setPeriod({ ...period, reportEnd: e.target.value })} onBlur={() => runPlan(file, {})} /></label>
+                <label><span className="mb-1 block font-medium">ช่วงรายงาน เริ่ม</span><input type="date" className={dateInput} value={period.reportStart} disabled={locked} onChange={(e) => setP("reportStart", e.target.value)} /></label>
+                <label><span className="mb-1 block font-medium">สิ้นสุด</span><input type="date" className={dateInput} value={period.reportEnd} disabled={locked} onChange={(e) => setP("reportEnd", e.target.value)} /></label>
                 {plan.spec.comparison && <>
-                  <label><span className="mb-1 block font-medium">เปรียบเทียบกับ เริ่ม</span><input type="date" className={dateInput} value={period.comparisonStart} disabled={state !== "ready"} onChange={(e) => setPeriod({ ...period, comparisonStart: e.target.value })} onBlur={() => runPlan(file, {})} /></label>
-                  <label><span className="mb-1 block font-medium">สิ้นสุด</span><input type="date" className={dateInput} value={period.comparisonEnd} disabled={state !== "ready"} onChange={(e) => setPeriod({ ...period, comparisonEnd: e.target.value })} onBlur={() => runPlan(file, {})} /></label>
+                  <label><span className="mb-1 block font-medium">เปรียบเทียบกับ เริ่ม</span><input type="date" className={dateInput} value={period.comparisonStart} disabled={locked} onChange={(e) => setP("comparisonStart", e.target.value)} /></label>
+                  <label><span className="mb-1 block font-medium">สิ้นสุด</span><input type="date" className={dateInput} value={period.comparisonEnd} disabled={locked} onChange={(e) => setP("comparisonEnd", e.target.value)} /></label>
                 </>}
                 <p className="basis-full text-xs text-slate-500">ไฟล์ Google Ads ไม่มีวันที่ในเนื้อไฟล์ ระบบเดาจากชื่อไฟล์ — โปรดตรวจให้ถูกต้องก่อนยืนยัน ({dmy(period.reportStart)} – {dmy(period.reportEnd)})</p>
               </div>
@@ -151,12 +154,14 @@ export function ImportWizard() {
             {plan.spec.period === "file" && <p className="text-sm text-slate-600">ช่วงรายงานจากไฟล์: <b>{dmy(plan.period.start)} – {dmy(plan.period.end)}</b></p>}
             {plan.spec.period === "snapshot" && (
               <div className="text-sm">
-                <label><span className="mb-1 block font-medium">วันที่ส่งออกข้อมูล (snapshot)</span><input type="date" className={dateInput} value={period.snapshotDate} disabled={state !== "ready"} onChange={(e) => setPeriod({ ...period, snapshotDate: e.target.value })} onBlur={() => runPlan(file, {})} /></label>
+                <label><span className="mb-1 block font-medium">วันที่ส่งออกข้อมูล (snapshot)</span><input type="date" className={dateInput} value={period.snapshotDate} disabled={locked} onChange={(e) => setP("snapshotDate", e.target.value)} /></label>
                 <p className="mt-2 rounded-md bg-amber-50 p-2 text-amber-800">ข้อมูลโพสต์เป็นยอด <b>สะสม (Lifetime) ณ วันส่งออก</b> ไม่ใช่ยอดของเดือนที่เผยแพร่โพสต์</p>
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            {plan.periodError && <p role="alert" className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">{plan.periodError} — ระบบตรวจประเภทไฟล์ได้แล้ว แต่หาช่วงวันที่จากชื่อไฟล์ไม่เจอ กรุณากรอกวันที่ด้านบน</p>}
+
+            <div className={`grid grid-cols-2 gap-3 sm:grid-cols-5 ${plan.periodError ? "hidden" : ""}`}>
               {([["total", "ทั้งหมด", "text-slate-900"], ["insert", "เพิ่มใหม่", "text-green-700"], ["update", "อัปเดต", "text-blue-700"], ["skip", "ข้าม (ไม่เปลี่ยน)", "text-slate-600"], ["invalid", "ไม่ถูกต้อง", "text-red-700"]] as const).map(([k, l, c]) => (
                 <div key={k} className="rounded-md border border-slate-200 p-3"><div className={`text-2xl font-bold ${c}`}>{plan.counts[k].toLocaleString("th-TH")}</div><div className="text-xs text-slate-500">{l}</div></div>
               ))}
@@ -170,7 +175,7 @@ export function ImportWizard() {
             )}
             {plan.warnings.map((w, i) => <p key={i} className="rounded-md bg-amber-50 p-2 text-sm text-amber-900">⚠ {w}</p>)}
 
-            <div className="overflow-x-auto">
+            <div className={`overflow-x-auto ${plan.periodError ? "hidden" : ""}`}>
               <table className="w-full text-left text-sm">
                 <caption className="mb-1 text-left text-xs text-slate-500">ตัวอย่าง {plan.preview.length} แถวแรก (จากทั้งหมด {plan.counts.total.toLocaleString("th-TH")})</caption>
                 <thead><tr className="border-b text-xs text-slate-500"><th className="py-1 pr-3">แถว</th><th className="pr-3">สถานะ</th>{plan.previewColumns.map((c) => <th key={c} className="pr-3">{c}</th>)}</tr></thead>
