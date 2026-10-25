@@ -1,5 +1,5 @@
 export type Kind = "text" | "int" | "num" | "thb" | "pct" | "date" | "datetime" | "clip";
-export type Col = { key: string; label: string; kind?: Kind };
+export type Col = { key: string; label: string; kind?: Kind; href?: (row: Record<string, string>) => string };
 export type View = { q?: string; searchKeys?: string[]; filters?: Record<string, string>; sort?: string; dir?: "asc" | "desc"; page?: number; size?: number };
 
 const nf = (n: number, d = 0) => n.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d === 0 ? 2 : d });
