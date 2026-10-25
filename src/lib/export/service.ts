@@ -1,5 +1,6 @@
 import { writeAudit } from "../audit";
 import { toCsv } from "../csv";
+import { csvSafe } from "../csvsafe";
 import { DEFAULT_EXCLUDED_PAGES, num } from "../dashboard";
 import { isIsoDate } from "../import/normalize";
 import type { Role } from "../roles";
@@ -96,5 +97,5 @@ export async function exportDataset(id: string, f: ExportFilters, role: Role, ac
   }
   if (opts.countOnly) return { rows: body.length, filename: ds.filename };
   await writeAudit(actor, "export", "dataset", id, `${ds.filename}: ${body.length} แถว${ds.sensitive ? ` (${ds.sensitive})` : ""}`);
-  return { csv: toCsv([columns, ...body]), rows: body.length, filename: ds.filename };
+  return { csv: toCsv([columns, ...body.map((r) => r.map(csvSafe))]), rows: body.length, filename: ds.filename };
 }
