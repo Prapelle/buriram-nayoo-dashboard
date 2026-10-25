@@ -1,6 +1,7 @@
 export type TabDef = { name: string; group: "system" | "marketing" | "manual"; headers: string[] };
 
 import { SPECS, headersFromSpec } from "./import/specs";
+import { SALES_LOG_COLUMNS, SALES_TX_COLUMNS } from "./sales/model";
 
 // แท็บ Google Ads รายละเอียดสร้างจาก spec เดียวกับตัว Import เพื่อให้คอลัมน์ตรงกันเสมอ
 const gads = (id: string): TabDef => {
@@ -38,7 +39,9 @@ export const TABS: TabDef[] = [
 
   { name: "LINE_OA_MONTHLY", group: "manual", headers: ["record_id","report_month","friends_start","friends_end","new_friends","blocked_users","broadcast_count","messages_sent","messages_delivered","opens","clicks","new_chats","inquiries","leads","qualified_leads","campaign_activity","notes","created_by","created_at","updated_at"] },
   { name: "LEADS", group: "manual", headers: ["lead_id","lead_code","received_at","customer_name","company_name","phone","email","source_channel","campaign_name","utm_source","utm_medium","utm_campaign","area","service_category","service_interest","need_description","owner_email","status","contactable","last_contacted_at","next_follow_up_at","qualified_at","won_at","lost_reason","notes","created_by","created_at","updated_by","updated_at"] },
-  { name: "SALES", group: "manual", headers: ["sale_id","sale_code","lead_id","closing_date","revenue_date","customer_name","company_name","service_category","package_name","deal_value_thb","company_revenue_thb","direct_cost_thb","payment_status","source_channel","campaign_name","owner_email","notes","created_by","created_at","updated_by","updated_at"] },
+  { name: "SALES", group: "manual", headers: ["sale_id","sale_code","lead_id","closing_date","revenue_date","customer_name","company_name","service_category","package_name","deal_value_thb","company_revenue_thb","direct_cost_thb","payment_status","source_channel","campaign_name","owner_email","notes","created_by","created_at","updated_by","updated_at","invoice_no"] },
+  { name: "SALES_TRANSACTIONS", group: "manual", headers: SALES_TX_COLUMNS },
+  { name: "SALES_IMPORT_LOG", group: "system", headers: SALES_LOG_COLUMNS },
 ];
 
 export const AREAS = ["buriram", "surin", "multi_province", "unknown"] as const;
