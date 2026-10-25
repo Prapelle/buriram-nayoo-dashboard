@@ -1,4 +1,5 @@
 import { toCsv } from "../csv";
+import { csvSafe } from "../csvsafe";
 
 /** คอลัมน์ส่งออกที่คงที่ (ไม่รวม raw_json และโน้ตภายในบริษัท) เงิน/ตัวเลขเป็น Numeric วันที่ ISO ช่องว่างเป็นว่าง */
 export const SALES_EXPORT_COLUMNS = [
@@ -12,6 +13,6 @@ export function salesCsv(rows: Record<string, string>[]): string {
   return toCsv([SALES_EXPORT_COLUMNS, ...rows.map((r) => SALES_EXPORT_COLUMNS.map((c) => {
     const v = r[c] ?? "";
     if (NUMERIC.has(c) && v !== "" && !isNaN(Number(v))) return Number(v);
-    return v;
+    return csvSafe(v);
   }))]);
 }
