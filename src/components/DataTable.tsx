@@ -32,7 +32,7 @@ export function DataTable({ cols, rows, base, params, sort, dir, page, pages, to
               <tr key={i} className="border-b border-slate-100">
                 {cols.map((c) => {
                   const v = fmtCell(c.kind, r[c.key] ?? "");
-                  return <td key={c.key} className={`p-2 ${right(c.kind) ? "text-right tabular-nums" : "max-w-72 truncate"}`} title={r[c.key]}>{v === "" ? <span className="text-slate-300">ว่าง</span> : v}</td>;
+                  return <td key={c.key} className={`p-2 ${right(c.kind) ? "text-right tabular-nums" : "max-w-72 truncate"}`} title={r[c.key]}>{v === "" ? <span className="text-slate-300">ว่าง</span> : c.href ? <Link href={c.href(r)} className="underline">{v}</Link> : v}</td>;
                 })}
               </tr>
             ))}
