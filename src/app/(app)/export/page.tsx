@@ -1,0 +1,29 @@
+import { auth } from "@/auth";
+import { ExportForm, type DatasetInfo } from "@/components/ExportForm";
+import { CHANNELS } from "@/lib/dashboard";
+import { DATASETS } from "@/lib/export/datasets";
+import { readColumns } from "@/lib/tabdata";
+
+export const dynamic = "force-dynamic";
+
+export default async function ExportPage() {
+  const role = (await auth())!.user.role!;
+  const datasets: DatasetInfo[] = DATASETS.filter((d) => d.roles.includes(role)).map((d) => ({
+    id: d.id, label: d.label, group: d.group, filename: d.filename, note: d.note, sensitive: d.sensitive, route: d.route, applies: d.applies,
+  }));
+  let campaigns: string[] = [];
+  try {
+    const src: [string, string][] = role === "sales" ? [["LEADS", "campaign_name"], ["SALES", "campaign_name"]] : [["META_ADS", "ad_set_name"], ["GOOGLE_ADS_CAMPAIGNS", "campaign_name"], ...(role === "admin" ? [["LEADS", "campaign_name"], ["SALES", "campaign_name"]] as [string, string][] : [])];
+    const lists = await Promise.all(src.map(async ([t, c]) => (await readColumns(t, { only: [c] })).rows.map((r) => r[c])));
+    campaigns = [...new Set(lists.flat().filter(Boolean))].sort();
+  } catch { /* ไม่มีรายการ Campaign ก็ยังพิมพ์เองได้ */ }
+  return (
+    <section className="max-w-4xl space-y-4">
+      <div>
+        <h1 className="text-2xl font-bold">ส่งออกข้อมูล</h1>
+        <p className="text-sm text-slate-500">ดาวน์โหลดเป็น CSV เพื่อนำไปวิเคราะห์ต่อใน Looker Studio · แต่ละไฟล์เป็นข้อมูลระดับเดียว ไม่รวมยอดข้ามระดับรายงาน</p>
+      </div>
+      <ExportForm datasets={datasets} channels={CHANNELS} campaigns={campaigns} />
+    </section>
+  );
+}
