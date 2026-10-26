@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/guard";
-import { LeadError, listLeads, saveLead } from "@/lib/leads-service";
+import { deleteLead, LeadError, listLeads, saveLead } from "@/lib/leads-service";
 
 export const dynamic = "force-dynamic";
 
@@ -20,4 +20,13 @@ export async function POST(req: Request) {
   const g = await requireRole(["admin", "sales"]);
   if (!g.ok) return g.res;
   try { return NextResponse.json(await saveLead((await req.json()) as Record<string, unknown>, g.email)); } catch (e) { return fail(e); }
+}
+
+export async function DELETE(req: Request) {
+  const g = await requireRole(["admin", "sales"]);
+  if (!g.ok) return g.res;
+  try {
+    const b = (await req.json()) as { lead_id?: string; updated_at_seen?: string };
+    return NextResponse.json(await deleteLead(String(b.lead_id ?? ""), String(b.updated_at_seen ?? ""), g.email));
+  } catch (e) { return fail(e); }
 }
