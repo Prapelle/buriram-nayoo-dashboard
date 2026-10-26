@@ -47,9 +47,10 @@ export function stampStatus(prev: Lead | null, rec: Lead, today: string): { qual
   };
 }
 
-export function nextLeadCode(codes: string[], year: number): string {
+/** floor = เลขสูงสุดที่เคยออกไปแล้วแต่ถูกลบ (กันไม่ให้ใช้รหัสซ้ำหลังลบ) */
+export function nextLeadCode(codes: string[], year: number, floor = 0): string {
   const re = new RegExp(`^LD-${year}-(\\d+)$`);
-  const max = codes.reduce((m, c) => { const x = re.exec(c); return x ? Math.max(m, Number(x[1])) : m; }, 0);
+  const max = codes.reduce((m, c) => { const x = re.exec(c); return x ? Math.max(m, Number(x[1])) : m; }, floor);
   return `LD-${year}-${String(max + 1).padStart(4, "0")}`;
 }
 
