@@ -20,6 +20,7 @@ export function LeadsManager({ me }: { me: string }) {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ type: "ok" | "error"; text: string } | null>(null);
   const [rowBusy, setRowBusy] = useState("");
+  const [delAsk, setDelAsk] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -43,7 +44,7 @@ export function LeadsManager({ me }: { me: string }) {
 
   async function save(confirmDuplicate = false) {
     if (!form) return;
-    setSaving(true); setMsg(null); setErrors({}); setDups(null);
+    setSaving(true); setMsg(null); setErrors({}); setDups(null); setDelAsk(false);
     try {
       const { ok, j } = await post({ ...form, lead_id: editing?.lead_id, updated_at_seen: editing?.updated_at, confirmDuplicate });
       if (!ok) {
@@ -54,6 +55,19 @@ export function LeadsManager({ me }: { me: string }) {
       setMsg({ type: "ok", text: j.created ? `สร้าง ${j.lead.lead_code} แล้ว` : `บันทึก ${j.lead.lead_code} แล้ว` });
       setForm(null); setEditing(null); await load();
     } catch (e) { setMsg({ type: "error", text: e instanceof Error ? e.message : "เกิดข้อผิดพลาด" }); }
+    finally { setSaving(false); }
+  }
+
+  async function remove() {
+    if (!editing) return;
+    setSaving(true); setMsg(null);
+    try {
+      const r = await fetch("/api/leads", { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ lead_id: editing.lead_id, updated_at_seen: editing.updated_at }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error ?? "ลบไม่สำเร็จ");
+      setMsg({ type: "ok", text: `ลบ ${j.lead_code} แล้ว` });
+      setForm(null); setEditing(null); setDelAsk(false); await load();
+    } catch (e) { setMsg({ type: "error", text: e instanceof Error ? e.message : "เกิดข้อผิดพลาด" }); setDelAsk(false); }
     finally { setSaving(false); }
   }
 
@@ -92,7 +106,7 @@ export function LeadsManager({ me }: { me: string }) {
       {form && (
         <section className="space-y-4 rounded-lg border border-slate-300 bg-white p-5">
           <div className="flex items-center justify-between"><h2 className="font-semibold">{editing ? `แก้ไข ${editing.lead_code}` : "เพิ่ม Lead ใหม่"}</h2>
-            <button onClick={() => { setForm(null); setEditing(null); setErrors({}); setDups(null); }} className="text-sm underline">ปิด</button></div>
+            <button onClick={() => { setForm(null); setEditing(null); setErrors({}); setDups(null); setDelAsk(false); }} className="text-sm underline">ปิด</button></div>
           <div className="grid gap-3 md:grid-cols-4">
             {field("received_at", "วันที่รับ Lead", { type: "date", required: true })}
             {field("customer_name", "ชื่อลูกค้า", { required: true })}
@@ -126,6 +140,21 @@ export function LeadsManager({ me }: { me: string }) {
             </div>
           )}
           <button onClick={() => save(false)} disabled={saving} className="rounded-md bg-slate-900 px-5 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-40">{saving ? "กำลังบันทึก..." : "บันทึก"}</button>
+          {editing && (
+            <div className="border-t pt-4">
+              {!delAsk
+                ? <button onClick={() => setDelAsk(true)} disabled={saving} className="text-sm text-red-700 underline">ลบ Lead นี้</button>
+                : (
+                  <div role="alert" className="space-y-2 rounded-md bg-red-50 p-3 text-sm text-red-900">
+                    <p>ลบ <b>{editing.lead_code}</b> · {editing.customer_name} ถาวร? ข้อมูลจะหายจากระบบ (กู้คืนได้เฉพาะจาก Version history ของ Google Sheet) รหัส Lead นี้จะไม่ถูกนำกลับมาใช้อีก</p>
+                    <div className="flex gap-3">
+                      <button onClick={remove} disabled={saving} className="rounded-md bg-red-700 px-3 py-1.5 font-medium text-white hover:bg-red-800 disabled:opacity-50">{saving ? "กำลังลบ..." : "ยืนยันลบถาวร"}</button>
+                      <button onClick={() => setDelAsk(false)} disabled={saving} className="underline">ยกเลิก</button>
+                    </div>
+                  </div>
+                )}
+            </div>
+          )}
         </section>
       )}
 
@@ -134,7 +163,7 @@ export function LeadsManager({ me }: { me: string }) {
           <input value={f.q} onChange={(e) => { setF({ ...f, q: e.target.value }); setPage(1); }} placeholder="ชื่อ / บริษัท / เบอร์ / อีเมล / รหัส" className="w-64 rounded-md border border-slate-300 px-2 py-1.5 text-sm" /></label>
         {fsel("channel", "ช่องทาง", pair(CHANNELS))}{fsel("area", "พื้นที่", AREA_OPTIONS)}{fsel("status", "สถานะ", pair(PIPELINE))}{fsel("service", "บริการ", pair(SERVICES))}
         {Object.values(f).some(Boolean) && <button onClick={() => { setF({ q: "", channel: "", area: "", status: "", service: "" }); setPage(1); }} className="py-1.5 text-sm underline">ล้าง</button>}
-        <button onClick={() => { setForm(emptyForm(me)); setEditing(null); setErrors({}); setDups(null); setMsg(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="ml-auto rounded-md bg-slate-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-slate-700">+ เพิ่ม Lead</button>
+        <button onClick={() => { setForm(emptyForm(me)); setEditing(null); setErrors({}); setDups(null); setDelAsk(false); setMsg(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="ml-auto rounded-md bg-slate-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-slate-700">+ เพิ่ม Lead</button>
       </div>
 
       {data.state === "loading" && <p className="text-sm text-slate-500">กำลังโหลด...</p>}
@@ -155,7 +184,7 @@ export function LeadsManager({ me }: { me: string }) {
                     <td>{r.source_channel}</td><td>{r.service_category}</td><td>{AREA_TH[r.area || "unknown"]}</td><td className="max-w-40 truncate">{r.owner_email}</td>
                     <td><select aria-label={`สถานะ ${r.lead_code}`} value={r.status} disabled={rowBusy === r.lead_id} onChange={(e) => changeStatus(r, e.target.value)} className={`rounded px-1.5 py-1 text-xs ${STATUS_COLOR[r.status]}`}>{PIPELINE.map((s) => <option key={s}>{s}</option>)}</select></td>
                     <td className={`whitespace-nowrap ${overdue ? "font-semibold text-red-600" : ""}`}>{dmy(r.next_follow_up_at) || <span className="text-slate-300">ว่าง</span>}{overdue && " (เลยกำหนด)"}</td>
-                    <td className="p-2 text-right"><button onClick={() => { setForm({ ...emptyForm(me), ...Object.fromEntries(EDITABLE.map((k) => [k, r[k] ?? ""])) }); setEditing(r); setErrors({}); setDups(null); setMsg(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="underline">แก้ไข</button></td>
+                    <td className="p-2 text-right"><button onClick={() => { setForm({ ...emptyForm(me), ...Object.fromEntries(EDITABLE.map((k) => [k, r[k] ?? ""])) }); setEditing(r); setErrors({}); setDups(null); setDelAsk(false); setMsg(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="underline">แก้ไข</button></td>
                   </tr>);
               })}</tbody>
             </table>
