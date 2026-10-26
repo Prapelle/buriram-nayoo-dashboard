@@ -73,6 +73,15 @@ export async function expandColumns(sheetId: number, by: number) {
   });
 }
 
+/** ลบทั้งแถวออกจากชีต (แถวถัดไปเลื่อนขึ้น) ห้ามลบแถว header */
+export async function deleteRow(sheetId: number, rowNumber: number) {
+  if (rowNumber < 2) throw new Error("ไม่สามารถลบแถว header");
+  await call("/:batchUpdate", {
+    method: "POST",
+    body: JSON.stringify({ requests: [{ deleteDimension: { range: { sheetId, dimension: "ROWS", startIndex: rowNumber - 1, endIndex: rowNumber } } }] }),
+  });
+}
+
 export async function batchGet(ranges: string[]): Promise<string[][][]> {
   const q = ranges.map((r) => `ranges=${encodeURIComponent(r)}`).join("&");
   const j = await call<{ valueRanges: { values?: (string | number | boolean)[][] }[] }>(
