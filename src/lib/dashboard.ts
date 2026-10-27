@@ -26,7 +26,7 @@ export type Dashboard = {
     spendByChannel: { label: string; value: number }[] | null;
     leadsByChannel: { label: string; value: number }[] | null;
     pipeline: { label: string; value: number }[] | null;
-    /** Lead Qualification (Call Status = ติดต่อได้แล้ว) แยกตามช่องทางของ Lead */
+    /** Qualified Leads (Call Status = ติดต่อได้แล้ว) แยกตามช่องทางของ Lead */
     leadQualByChannel: { label: string; value: number }[] | null;
     /** Phase 6: Lead แยกตาม Buy Status (ซื้อ/เช่า/สร้าง) และ Sell Status (ขาย) */
     buyStatus: { label: string; value: number }[] | null;
@@ -171,7 +171,8 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
 
   const lineNew = sumOf(line, "new_friends"), lineInq = sumOf(line, "inquiries"), lineLeads = sumOf(line, "leads");
 
-  const qualified = (r: Row) => r.qualified_at !== "" && r.qualified_at !== undefined || ["Qualified", "Proposal", "Won"].includes(r.status);
+  // Qualified Lead = Lead ที่ Call Status = ติดต่อได้แล้ว (ตามที่ผู้ใช้กำหนด 28/10/2026)
+  const qualified = (r: Row) => r.call_status === "ติดต่อได้แล้ว";
   const leadsTotal = leads.length;
   // ช่วงเวลาของ CPL: ใช้ช่วงที่เลือก หรือถ้าไม่ได้เลือก ใช้ช่วงของรายงานโฆษณาที่นำมาคิด เพื่อให้ค่าโฆษณาและ Lead เป็นช่วงเดียวกัน
   const adSpan = mergeSpans([...meta, ...google]);
@@ -180,8 +181,7 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
   const leadsQ = leads.filter(qualified).length;
   const paidLeads = leads.filter((r) => PAID_CHANNELS.includes(r.source_channel));
   const paidLeadsQ = paidLeads.filter(qualified).length;
-  // Lead Qualification = Lead ที่ Call Status = ติดต่อได้แล้ว (นับ lead_id ไม่ซ้ำ ตามตัวกรองเดียวกับ Total Leads)
-  const contacted = leads.filter((r) => r.call_status === "ติดต่อได้แล้ว");
+  const contacted = leads.filter(qualified);
 
 
   const ex = (key: string, label: string, fmt: Kpi["fmt"], c: keyof typeof CH, v: number | null, note?: string) =>
@@ -220,13 +220,12 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
     ] },
     { title: "Leads", items: [
       kpi("leads", "Total Leads", "int", leadsAll.length ? leadsTotal : null, undefined, "นับ lead_id ไม่ซ้ำ ตามวันที่รับ Lead ในช่วงที่เลือก"),
-      kpi("qualified", "Qualified Leads", "int", leadsTotal ? leadsQ : null, undefined, "นับ Lead ที่สถานะ Qualified / Proposal / Won หรือมีวันที่ Qualified"),
+      kpi("qualified", "Qualified Leads", "int", leadsAll.length ? leadsQ : null, undefined, `จำนวน Lead ที่ Call Status = ติดต่อได้แล้ว จาก ${leadsTotal} Lead ในช่วงที่เลือก (แยกตามช่องทางดูที่กราฟ)`),
     ] },
     { title: "ประสิทธิภาพ (ไม่ใช่ ROI เชิงสาเหตุ)", items: [
       cplKpi("cpl", "CPL (Lead จากโฆษณา)", cplAdsBase, "Lead จาก Facebook Ads + Google Ads"),
       cplKpi("cpl_all", "CPL (Lead ทั้งหมด)", cplLeads, "Total Leads ทุกช่องทาง"),
-      cplKpi("cplq", "Cost per Qualified Lead", cplAdsBase.filter(qualified), "Qualified Lead จากโฆษณา"),
-      kpi("lead_qual", "Lead Qualification", "int", leadsAll.length ? contacted.length : null, undefined, `จำนวน Lead ที่ Call Status = ติดต่อได้แล้ว จาก ${leadsTotal} Lead ในช่วงที่เลือก (แยกตามช่องทางดูที่กราฟ)`),
+      cplKpi("cplq", "Cost per Qualified Lead", cplAdsBase.filter(qualified), "Qualified Lead จากโฆษณา (Call Status = ติดต่อได้แล้ว)"),
     ] },
   ];
 

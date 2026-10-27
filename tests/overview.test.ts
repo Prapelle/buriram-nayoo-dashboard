@@ -14,7 +14,7 @@ const rows = (file: string): Row[] => {
 const meta = rows("Facebookads.csv"), google = rows("Campaigns_2026_09_01-2026_09_30_.csv"), gtime = rows("Time_series_2026_09_01-2026_09_30_.csv");
 const L = (id: string, date: string, ch: string, extra: Row = {}): Row => ({ lead_id: id, received_at: date, source_channel: ch, status: "New", service_category: "Product", area: "", campaign_name: "", qualified_at: "", ...extra });
 const leads: Row[] = [
-  L("A1", "2026-09-02", "Facebook Ads", { status: "Qualified" }), L("A2", "2026-09-12", "Facebook Ads"), L("A3", "2026-09-18", "Facebook Ads"),
+  L("A1", "2026-09-02", "Facebook Ads", { status: "Qualified", call_status: "ติดต่อได้แล้ว" }), L("A2", "2026-09-12", "Facebook Ads"), L("A3", "2026-09-18", "Facebook Ads"),
   L("G1", "2026-09-25", "Google Ads", { service_category: "Project" }), L("R1", "2026-09-05", "Referral"), L("R2", "2026-09-29", "Referral"),
   L("X1", "2026-10-03", "Facebook Ads"), // นอกช่วงของรายงานโฆษณา (ก.ย.)
 ];

@@ -754,3 +754,11 @@ Not Tested: หน้าเว็บจริงหลังการเปล�
 - ไฟล์: `src/lib/users-service.ts`, `src/app/api/users/route.ts`, `src/components/UsersManager.tsx` (ใหม่), `src/app/(app)/settings/page.tsx`
 - Test: **318/318 ผ่าน** (security ตรวจว่า /api/users เป็น Admin เท่านั้น, e2e 15c 4 ข้อ, HTTP Integration 2 ข้อ — สมาชิกในการทดสอบ HTTP ถูกเพิ่มผ่าน API นี้จริง) · Cloudflare build ผ่าน
 - Not Tested: หน้า ตั้งค่า บนเว็บจริง / Google Login จริงของสมาชิกที่เพิ่มใหม่
+
+## 24) Qualified Leads นับจาก Call Status = ติดต่อได้แล้ว (28/10/2026)
+- **Qualified Leads** (ภาพรวมการตลาด) = จำนวน Lead (lead_id ไม่ซ้ำ ตามตัวกรอง) ที่ Call Status = **ติดต่อได้แล้ว** (เดิมนับจากสถานะ Qualified/Proposal/Won หรือ qualified_at)
+- การ์ด **Lead Qualification** (คำขอ 22) มีนิยามเดียวกันแล้ว จึง **รวมเป็นการ์ด Qualified Leads ใบเดียว** · กราฟเปลี่ยนชื่อเป็น "Qualified Leads แยกตามช่องทาง"
+- ใช้นิยามเดียวกันใน **Cost per Qualified Lead** (Lead จากโฆษณาที่ติดต่อได้แล้ว) และคอลัมน์ `leads_qualified` ของ `marketing_monthly_summary.csv`
+- **ไม่เปลี่ยน:** ขั้น Pipeline / กราฟ Pipeline / `qualified_at` ยังคำนวณจาก Buy/Sell Status ตามเดิม · ไม่เปลี่ยน Schema
+- ไฟล์: `src/lib/dashboard.ts`, `src/app/(app)/page.tsx`, `src/lib/export/service.ts`, `src/lib/export/datasets.ts`, ชุดทดสอบ
+- Test: **318/318 ผ่าน** · Cloudflare build ผ่าน · Not Tested: บนเว็บจริง

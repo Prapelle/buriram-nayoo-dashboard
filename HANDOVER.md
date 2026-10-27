@@ -137,7 +137,7 @@
 - ระบบคำนวณขั้น Pipeline ให้เอง: Qualified = Hot, Warm, Close, นัดทำสัญญา, ทำสัญญา, เซ็นสัญญา, สัญญาเปิด, เป็นนายหน้า, ขายแล้ว · Won = Close, ขายแล้ว · Lost = Archive, ยกเลิก, บ้านไม่พร้อมขาย
 
 ### 4.3 Dashboard
-- **ภาพรวมการตลาด:** Total Paid Media Spend, Total Leads (lead_id ไม่ซ้ำ), Qualified Leads, CPL จาก Ads / ทั้งหมด, **Lead Qualification** (จำนวน Lead ที่ Call Status = ติดต่อได้แล้ว + กราฟแยกตามช่องทาง), Facebook, LINE OA, กราฟ Lead ตาม Buy/Sell Status (ไม่มีการ์ดยอดขาย/การเงินแล้ว — ดูที่หน้า Sales) · ตัวกรอง วันที่/ช่องทาง/Campaign/พื้นที่/Service · **เปรียบเทียบ ปีก่อน/ช่วงก่อน** (ต้องเลือกวันที่ก่อน)
+- **ภาพรวมการตลาด:** Total Paid Media Spend, Total Leads (lead_id ไม่ซ้ำ), **Qualified Leads** (จำนวน Lead ที่ Call Status = ติดต่อได้แล้ว + กราฟแยกตามช่องทาง), CPL จาก Ads / ทั้งหมด, Cost per Qualified Lead, Facebook, LINE OA, กราฟ Lead ตาม Buy/Sell Status (ไม่มีการ์ดยอดขาย/การเงินแล้ว — ดูที่หน้า Sales) · ตัวกรอง วันที่/ช่องทาง/Campaign/พื้นที่/Service · **เปรียบเทียบ ปีก่อน/ช่วงก่อน** (ต้องเลือกวันที่ก่อน)
 - **Marketing Performance:** Google Ads Spend/Clicks/CPC, Meta Ads, Facebook Page (Organic), Website (รอข้อมูล) แยก Paid/Organic/Website · กราฟรายวัน/รายเดือน · ตารางตามแพลตฟอร์ม · สถานะความครบของข้อมูล · เปรียบเทียบ YoY
 - อ่านสถานะ: **รอข้อมูล** = ไม่มีข้อมูล (ไม่ใช่ 0) · **N/A** = หารด้วย 0 · **ข้อมูลไม่ครบ** = มีค่าแต่ช่วงข้อมูลไม่ครบ (อ่านเหตุผลบนการ์ด) · **Missing Data** = ไม่มีข้อมูลช่วงเปรียบเทียบ
 

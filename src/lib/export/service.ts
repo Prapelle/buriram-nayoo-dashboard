@@ -70,7 +70,7 @@ export function buildSummary(d: { meta: Row[]; google: Row[]; posts: Row[]; line
   for (const r of d.leads) if (!f.area || (r.area || "unknown") === f.area) {
     if (r.lead_id !== undefined) { if (!r.lead_id || seenLead.has(r.lead_id)) continue; seenLead.add(r.lead_id); }
     const m = String(r.received_at).slice(0, 7); mark(m, "leads_total");
-    if (r.qualified_at || ["Qualified", "Proposal", "Won"].includes(r.status)) mark(m, "leads_qualified");
+    if (r.call_status === "ติดต่อได้แล้ว") mark(m, "leads_qualified"); // นิยามเดียวกับ Dashboard: Call Status = ติดต่อได้แล้ว
     if (["Facebook Ads", "Google Ads"].includes(r.source_channel)) mark(m, "leads_from_ads");
     if (BUY_NEEDS.includes(r.need ?? "")) mark(m, "leads_need_buy_rent_build");
     if (SELL_NEEDS.includes(r.need ?? "")) mark(m, "leads_need_sell");
@@ -111,7 +111,7 @@ export async function exportDataset(id: string, f: ExportFilters, role: Role, ac
       const [meta, google, posts, line, leads, sales, excluded] = await Promise.all([
         read("META_ADS", ["report_start", "report_end", "amount_spent_thb", "area"]), read("GOOGLE_ADS_CAMPAIGNS", ["report_start", "report_end", "cost_thb", "clicks", "area"]),
         read("FB_PAGE_POSTS", ["page_id", "post_id", "page_name", "publish_time", "metric_date", "metric_scope", "snapshot_date", "reach", "link_clicks", "reactions_comments_shares", "seconds_viewed"]), read("LINE_OA_MONTHLY", ["report_month", "new_friends", "inquiries", "leads"]),
-        read("LEADS", ["lead_id", "received_at", "status", "qualified_at", "area", "source_channel", "need"]),
+        read("LEADS", ["lead_id", "received_at", "status", "qualified_at", "area", "source_channel", "need", "call_status"]),
         role === "marketing" ? read("SALES", ["closing_date", "payment_status"]) : read("SALES", ["closing_date", "revenue_date", "payment_status", "deal_value_thb", "company_revenue_thb", "direct_cost_thb"]),
         getExcludedPages(DEFAULT_EXCLUDED_PAGES),
       ]);

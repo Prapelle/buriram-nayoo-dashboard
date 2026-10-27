@@ -151,9 +151,9 @@ try {
   const toCall = r.json.rows.find((x) => x.source_channel === "Google Ads");
   r = await call("/api/leads", { as: SALES, method: "POST", body: { ...toCall, call_status: "ติดต่อได้แล้ว", updated_at_seen: toCall.updated_at } }); assert.equal(r.status, 200, r.text);
   r = await call("/?from=2026-09-01&to=2026-09-30", { as: MKT });
-  assert.ok(/Lead Qualification<\/div>[\s\S]{0,120}>1</.test(r.html), "Lead Qualification = 1"); assert.ok(r.html.includes("Lead Qualification แยกตามช่องทาง"));
+  assert.ok(/Qualified Leads<\/div>[\s\S]{0,120}>1</.test(r.html), "Qualified Leads = 1"); assert.ok(r.html.includes("Qualified Leads แยกตามช่องทาง")); assert.ok(!r.html.includes("Lead Qualification"));
   for (const gone of ["Won Deals", "Deal Value", "Company Revenue", "Direct Cost", "Gross Profit", "Lead-to-Sale"]) assert.ok(!r.html.includes(gone), gone);
-  ok("Overview", "Lead Qualification = 1 (Call Status ติดต่อได้แล้ว) + กราฟแยกช่องทาง · ไม่มีการ์ด Won/Deal/Revenue/Cost/Gross Profit/Lead-to-Sale");
+  ok("Overview", "Qualified Leads = 1 (Call Status ติดต่อได้แล้ว) + กราฟแยกช่องทาง · ไม่มีการ์ด Won/Deal/Revenue/Cost/Gross Profit/Lead-to-Sale");
   ok("Leads", "รายการ Lead 4 ราย · รายชื่อ Staff สำหรับเลือก");
 
   console.log("6) Website Analytics");
