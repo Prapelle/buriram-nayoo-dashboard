@@ -2,16 +2,8 @@ import { CHANNELS, SERVICES } from "./dashboard";
 import { isIsoDate } from "./import/normalize";
 
 export const AREA_OPTIONS: [string, string][] = [["unknown", "ไม่ทราบ (Unknown)"], ["buriram", "บุรีรัมย์"], ["surin", "สุรินทร์"], ["multi_province", "หลายจังหวัด"]];
-// ---- Phase 4: Need / Buy-Sell Status / Call Status (ข้อ E ของผู้ใช้) ----
-export const NEEDS = ["ซื้อ", "ขาย", "เช่า", "สร้าง"];
-export const BUY_NEEDS = ["ซื้อ", "เช่า", "สร้าง"]; // ใช้ Buy Status
-export const SELL_NEEDS = ["ขาย"]; // ใช้ Sell Status
-export const BUY_STATUS = ["Hot", "Warm", "Cold", "Archive", "Close"];
-export const SELL_STATUS = ["นัดทำสัญญา", "ทำสัญญา", "เซ็นสัญญา", "ยกเลิก", "เป็นนายหน้า", "บ้านไม่พร้อมขาย", "ขายแล้ว", "สัญญาเปิด"];
-export const CALL_STATUS = ["ยังไม่ได้โทร", "ติดต่อไม่ได้", "ติดต่อได้แล้ว"];
-export const PROPERTY_TYPES = ["บ้านเดี่ยว", "อาคารพาณิชย์", "ที่ดิน", "ทาวโฮม", "ทรัพย์ลงทุน", "คอนโด"];
-export const CONDITIONS = ["มือ 1", "มือ 2", "1 และ 2"];
-export const PRICE_RANGES = ["ต่ำกว่าล้าน", "1–1.5 m", "1.5–2.5 m", "2.5–3.5 m", "3.5–5 m", "5 up"];
+import { NEEDS, BUY_NEEDS, SELL_NEEDS, BUY_STATUS, SELL_STATUS, CALL_STATUS, PROPERTY_TYPES, CONDITIONS, PRICE_RANGES } from "./lead-options";
+export { NEEDS, BUY_NEEDS, SELL_NEEDS, BUY_STATUS, SELL_STATUS, CALL_STATUS, PROPERTY_TYPES, CONDITIONS, PRICE_RANGES };
 
 /** ช่องสถานะที่ใช้กับ Need นั้น */
 export const statusFieldOf = (need: string): "buy_status" | "sell_status" | "" => (BUY_NEEDS.includes(need) ? "buy_status" : SELL_NEEDS.includes(need) ? "sell_status" : "");

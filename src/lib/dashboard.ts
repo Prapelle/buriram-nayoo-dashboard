@@ -1,5 +1,6 @@
 import { excludePages, summarizeFb } from "./fbmetrics";
 import type { Role } from "./roles";
+import { BUY_NEEDS, BUY_STATUS, SELL_NEEDS, SELL_STATUS } from "./lead-options";
 
 export type Row = Record<string, string>;
 export type DashData = {
@@ -23,6 +24,9 @@ export type Dashboard = {
     spendByChannel: { label: string; value: number }[] | null;
     leadsByChannel: { label: string; value: number }[] | null;
     pipeline: { label: string; value: number }[] | null;
+    /** Phase 6: Lead แยกตาม Buy Status (ซื้อ/เช่า/สร้าง) และ Sell Status (ขาย) */
+    buyStatus: { label: string; value: number }[] | null;
+    sellStatus: { label: string; value: number }[] | null;
     lineGrowth: { month: string; newFriends: number | null; friendsEnd: number | null }[] | null;
     monthly: { month: string; meta: number; google: number }[] | null;
     daily: { date: string; cost: number }[] | null;
@@ -33,6 +37,15 @@ export type Dashboard = {
   unknownAreaRows: number;
   hasAnyData: boolean;
 };
+
+/** นับ Lead ตามสถานะของกลุ่ม Need · ไม่มีสถานะ = "(ยังไม่ระบุสถานะ)" · แสดงทุกสถานะตามลำดับ (รวมที่เป็น 0) */
+export function statusChart(leads: Row[], needs: string[], key: string, order: string[]) {
+  const mine = leads.filter((r) => needs.includes(r.need ?? ""));
+  if (!mine.length) return null;
+  const out = order.map((s) => ({ label: s, value: mine.filter((r) => r[key] === s).length }));
+  const none = mine.filter((r) => !order.includes(r[key] ?? "")).length;
+  return none ? [...out, { label: "(ยังไม่ระบุสถานะ)", value: none }] : out;
+}
 
 export const num = (v: unknown): number | null => {
   const s = String(v ?? "").trim();
@@ -63,9 +76,9 @@ function kpi(key: string, label: string, fmt: Kpi["fmt"], value: number | null, 
 }
 
 // ---------- ความครบถ้วนของข้อมูลโฆษณา (Phase 2) ----------
-type Span = [string, string];
-const addDays = (d: string, n: number) => new Date(Date.parse(d + "T00:00:00Z") + n * 86400000).toISOString().slice(0, 10);
-const dmyS = (d: string) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : "");
+export type Span = [string, string];
+export const addDays = (d: string, n: number) => new Date(Date.parse(d + "T00:00:00Z") + n * 86400000).toISOString().slice(0, 10);
+export const dmyS = (d: string) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : "");
 /** รวมช่วงวันที่ของรายงาน (ช่วงที่ติดกัน/ทับกันรวมเป็นช่วงเดียว) */
 export function mergeSpans(rows: Row[]): Span[] {
   const sp = rows.map((r) => [r.report_start, r.report_end] as Span).filter(([a, b]) => a && b).sort((x, y) => x[0].localeCompare(y[0]));
@@ -87,7 +100,7 @@ export function gapsIn(spans: Span[], from: string, to: string): Span[] {
   if (cur <= to) gaps.push([cur, to]);
   return gaps;
 }
-const fmtGaps = (g: Span[]) => g.map(([a, b]) => (a === b ? dmyS(a) : `${dmyS(a)}–${dmyS(b)}`)).join(", ");
+export const fmtGaps = (g: Span[]) => g.map(([a, b]) => (a === b ? dmyS(a) : `${dmyS(a)}–${dmyS(b)}`)).join(", ");
 
 export function computeDashboard(data: DashData, f: Filters, role: Role): Dashboard {
   const notes: string[] = [];
@@ -280,6 +293,8 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
       spendByChannel: spendByChannel.length ? spendByChannel : null,
       leadsByChannel: leadsTotal ? countBy(leads, "source_channel") : null,
       pipeline: leadsTotal ? countBy(leads, "status", PIPELINE) : null,
+      buyStatus: statusChart(leads, BUY_NEEDS, "buy_status", BUY_STATUS),
+      sellStatus: statusChart(leads, SELL_NEEDS, "sell_status", SELL_STATUS),
       lineGrowth, monthly: monthly.length ? monthly : null, daily: daily.length ? daily : null,
     },
   };

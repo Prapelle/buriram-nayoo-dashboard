@@ -10,6 +10,7 @@ const SALES: Role[] = ["admin", "sales"];
 // Marketing ไม่เห็น Leads/Sales (PII) ตามค่าเริ่มต้น
 export const NAV: NavItem[] = [
   { href: "/", label: "ภาพรวมการตลาด", roles: ALL },
+  { href: "/performance", label: "Marketing Performance", roles: MKT },
   { href: "/import", label: "นำเข้า CSV", roles: MKT },
   { href: "/facebook-page", label: "Facebook Page", roles: MKT },
   { href: "/facebook-ads", label: "Facebook Ads", roles: MKT },

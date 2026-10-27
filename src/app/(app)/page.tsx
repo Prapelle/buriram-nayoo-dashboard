@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { auth } from "@/auth";
 import { fetchDashboardData } from "@/lib/dashboard-data";
-import { CHANNELS, SERVICES, computeDashboard, type Dashboard, type Filters, type Kpi } from "@/lib/dashboard";
+import { CHANNELS, SERVICES, computeDashboard, type Dashboard, type Filters } from "@/lib/dashboard";
+import { KpiCard } from "@/components/KpiCard";
 import { BarList, LineChart, Pending, StackedMonths, dm, my } from "@/components/charts";
 
 export const dynamic = "force-dynamic";
@@ -9,24 +10,9 @@ export const dynamic = "force-dynamic";
 const AREAS: [string, string][] = [["buriram", "บุรีรัมย์"], ["surin", "สุรินทร์"], ["multi_province", "หลายจังหวัด"], ["unknown", "ไม่ทราบ (Unknown)"]];
 const dmy = (iso?: string) => (iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "-");
 const when = (iso: string) => { if (!iso) return "ยังไม่มีข้อมูล"; try { return new Date(iso).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", dateStyle: "short", timeStyle: "short" }); } catch { return iso; } };
-const show = (k: Kpi) => k.fmt === "thb" ? `฿${k.value!.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : k.fmt === "pct" ? `${k.value}%` : k.value!.toLocaleString("en-US");
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 const iso = (v: string) => (/^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
 
-function KpiCard({ k }: { k: Kpi }) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <div className="text-xs text-slate-500">{k.label}</div>
-      {k.state === "value" && <div className="mt-1 text-2xl font-bold tabular-nums">{show(k)}</div>}
-      {k.state === "pending" && <div className="mt-1 text-lg font-semibold text-slate-400">รอข้อมูล</div>}
-      {k.state === "excluded" && <div className="mt-1 text-sm text-slate-400">ไม่รวมในตัวกรองนี้</div>}
-      {k.state === "restricted" && <div className="mt-1 text-sm text-slate-400">ไม่มีสิทธิ์ดูข้อมูลนี้</div>}
-      {k.state === "na" && <div className="mt-1 text-lg font-semibold text-slate-500">N/A</div>}
-      {k.incomplete && (k.state === "value") && <div className="mt-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900" title={k.incomplete}>ข้อมูลไม่ครบ: {k.incomplete}</div>}
-      {k.note && (k.state === "value" || k.state === "na") && <div className="mt-1 text-xs text-slate-500">{k.note}</div>}
-    </div>
-  );
-}
 const Card = ({ title, children }: { title: string; children: React.ReactNode }) => (
   <div className="rounded-lg border border-slate-200 bg-white p-4"><h3 className="mb-3 text-sm font-semibold">{title}</h3>{children}</div>
 );
@@ -102,7 +88,9 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="ค่าโฆษณาแยกตามช่องทาง (฿)">{c.spendByChannel ? <BarList items={c.spendByChannel} unit="฿" title="ค่าโฆษณาแยกตามช่องทาง" /> : <Pending />}</Card>
         <Card title="Leads แยกตามช่องทาง">{c.leadsByChannel ? <BarList items={c.leadsByChannel} title="Leads แยกตามช่องทาง" /> : <Pending />}</Card>
-        <Card title="Sales Pipeline (จำนวน Lead ตามสถานะ)">{c.pipeline ? <BarList items={c.pipeline} title="Sales Pipeline" /> : <Pending />}</Card>
+        <Card title="Lead ซื้อ / เช่า / สร้าง แยกตาม Buy Status">{c.buyStatus ? <BarList items={c.buyStatus} title="Lead แยกตาม Buy Status" /> : <Pending text="ยังไม่มี Lead ที่ Need เป็น ซื้อ / เช่า / สร้าง" />}</Card>
+        <Card title="Lead ขาย แยกตาม Sell Status">{c.sellStatus ? <BarList items={c.sellStatus} title="Lead แยกตาม Sell Status" /> : <Pending text="ยังไม่มี Lead ที่ Need เป็น ขาย" />}</Card>
+        <Card title="Sales Pipeline (คำนวณจาก Buy/Sell Status)">{c.pipeline ? <BarList items={c.pipeline} title="Sales Pipeline" /> : <Pending />}</Card>
         <Card title="LINE OA Growth (เพื่อนทั้งหมดสิ้นเดือน)">
           {c.lineGrowth && c.lineGrowth.some((r) => r.friendsEnd !== null)
             ? <LineChart label="เพื่อน LINE OA" points={c.lineGrowth.filter((r) => r.friendsEnd !== null).map((r) => ({ x: my(r.month), y: r.friendsEnd! }))} />

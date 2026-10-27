@@ -1,6 +1,6 @@
 # DEVELOPMENT_STATUS — Buriram NAYOO Marketing Dashboard
 
-อัปเดตล่าสุด: Phase 4 (27/10/2026) · Phase ปัจจุบันเสร็จแล้ว รอคำสั่ง "ทำขั้นต่อไป" สำหรับ Phase 6 (Phase 5 ข้ามไว้)
+อัปเดตล่าสุด: Phase 6 (27/10/2026) · Phase ปัจจุบันเสร็จแล้ว รอคำสั่ง "ทำขั้นต่อไป" สำหรับ Phase 7
 
 ## สถานะรวม
 | Phase | งาน | สถานะ |
@@ -9,9 +9,9 @@
 | 1 | Facebook Page CSV: Metric Date + Business Key | เสร็จ · ผู้ใช้ยืนยันบนเว็บจริงแล้ว (27/10/2026) |
 | 2 | Marketing Overview: Total Paid Media Spend / Total Leads / CPL | เสร็จ · ผู้ใช้ยืนยันบนเว็บจริงแล้ว (27/10/2026) |
 | 3 | Facebook Ads Action Names | เสร็จ · ผู้ใช้ยืนยันบนเว็บจริงแล้ว (27/10/2026) |
-| 4 | Lead Management (ฟิลด์ใหม่ + Need/Status Logic) | **เสร็จ (ทดสอบอัตโนมัติผ่าน · ยังไม่ทดสอบบนเว็บจริง) — รอคำสั่ง** |
+| 4 | Lead Management (ฟิลด์ใหม่ + Need/Status Logic) | เสร็จ (ทดสอบอัตโนมัติผ่าน · ผู้ใช้ยังไม่ได้รายงานผลบนเว็บจริง) |
 | 5 | Website Analytics Import | **ข้ามไปก่อน (รอข้อมูลจากผู้ใช้)** |
-| 6 | Marketing Performance Dashboard | ยังไม่เริ่ม |
+| 6 | Marketing Performance Dashboard (+ กราฟ Lead ตาม Buy/Sell Status) | **เสร็จ (ทดสอบอัตโนมัติผ่าน · ยังไม่ทดสอบบนเว็บจริง) — รอคำสั่ง** |
 | 7 | YoY Comparison | ยังไม่เริ่ม |
 | 8 | Export (Looker Studio ถูกตัดออกจากขอบเขต) | ยังไม่เริ่ม |
 | 9 | Integration Testing | ยังไม่เริ่ม |
@@ -459,3 +459,69 @@
 
 ### Next Phase
 **Phase 5 — Website Analytics:** ข้ามไว้ตามที่ผู้ใช้แจ้ง (รอข้อมูล) → ขั้นต่อไปคือ **Phase 6 — Marketing Performance Dashboard** เริ่มเมื่อผู้ใช้สั่ง "ทำขั้นต่อไป"
+
+## 17) รายงาน Phase 6 — Marketing Performance Dashboard
+
+คำสั่งผู้ใช้: "กราฟแยกตาม Hot/Warm/Cold แล้วไปต่อ Phase 6" → ทำกราฟ Lead ตาม Buy/Sell Status (ต่อจาก Known Issue ของ Phase 4) รวมใน Phase นี้
+
+### สิ่งที่ทำแล้ว
+- **กราฟ Lead ตาม Buy Status** (Hot / Warm / Cold / Archive / Close + ยังไม่ระบุสถานะ) สำหรับ Need ซื้อ/เช่า/สร้าง และ **กราฟ Lead ตาม Sell Status** สำหรับ Need ขาย ในหน้า ภาพรวมการตลาด (ใช้ตัวกรองเดิม) · แสดงทุกสถานะแม้เป็น 0 · Lead ไม่มี Need ไม่ปน · กราฟ Pipeline เดิมยังอยู่ (เปลี่ยนชื่อเป็น "คำนวณจาก Buy/Sell Status")
+- **หน้าใหม่ Marketing Performance** (`/performance`, Admin/Marketing, อยู่ในเมนู) แยกเป็น 5 กลุ่มพร้อมป้าย Paid / Organic / Website:
+  | กลุ่ม | KPI | แหล่ง/สูตร |
+  |---|---|---|
+  | Google Ads (Paid) | Spend, Clicks, CPC, Impressions (เมื่อมี) | ใช้ **Time series รายวัน** ถ้าครบทุกวันในช่วง (ตัดช่วงได้ตรง) → มิฉะนั้น Campaign Report ที่อยู่ในช่วงพอดี → มิฉะนั้นใช้ที่มีพร้อม ข้อมูลไม่ครบ · **CPC = Spend ÷ Clicks จากแหล่งและช่วงเดียวกัน** ไม่ใช้ Total Paid Media Spend · Clicks = 0 → N/A |
+  | Meta Ads (Paid) | Spend, Impressions, ผลรวม Reach ระดับโฆษณา (ระบุว่าไม่ใช่ Unique) + Results แยกตาม Action | Meta Ads Report (ยอดรวมทั้งช่วง) |
+  | Facebook Page (Organic) | Reach, Reactions + Comments + Shares, Reactions, Comments, Shares, Seconds viewed (+ Views / Link Clicks เฉพาะเมื่อไฟล์มี) | กฎเดียวกับ Phase 1 · ไฟล์รายวันไม่มี Reach → รอข้อมูลพร้อมเหตุผล · ไม่รวมเพจที่ตั้งให้ตัดออก |
+  | Website | Users, Page Views, Page Views per User, Duration | **รอข้อมูล** (Phase 5 ข้ามไว้) — ไม่แสดง 0 |
+  | Google Ads Spend เทียบ Website | Ads Cost per Website Page View, Ads Spend per Website User | **รอข้อมูล** พร้อมหมายเหตุว่าเป็นการเทียบกับยอด Website รวมทุกช่องทาง ไม่ใช่ต้นทุนที่พิสูจน์ Attribution |
+- **ตัวกรองวันที่** (ไม่เลือก = ช่วงของข้อมูลทั้งหมดที่มี และแสดงช่วงที่ใช้คำนวณบนหัวหน้า)
+- **เปรียบเทียบช่วงก่อนหน้า** (ยาวเท่ากัน) ใช้กฎความครบถ้วนเดียวกัน · แสดงค่าและ % เปลี่ยนแปลง · ช่วงก่อนไม่มีข้อมูล → "ช่วงก่อน: รอข้อมูล"
+- **กราฟแนวโน้มรายวัน/รายเดือน:** Google Ads Spend, Google Ads Clicks (จาก Time series เท่านั้น — ไม่แบ่ง Campaign Report เป็นรายวันเอง), Facebook Engagement (รายวัน)
+- **ตารางสรุปตามแพลตฟอร์ม:** Spend / Clicks / Engagement / Impressions / ช่วงข้อมูล / แหล่งข้อมูล / สถานะ (ครบ · ไม่ครบ · รอข้อมูล) · ช่องที่ไม่มีข้อมูลแสดง — ไม่ใช่ 0
+- **ความครบถ้วนและแหล่งข้อมูล:** แต่ละแหล่งแสดงสถานะ, ช่วงที่มีข้อมูล และเหตุผล
+- **ตรวจไขว้:** Time series กับ Campaign Report ช่วงเดียวกันยอดไม่ตรงกัน (> ฿1) → เตือน
+- การ์ด KPI ย้ายเป็น Component กลาง (`KpiCard`) ใช้ทั้งหน้า ภาพรวม และ Performance
+
+### ไฟล์ที่เปลี่ยน
+| ไฟล์ | การเปลี่ยนแปลง |
+|---|---|
+| `src/lib/performance.ts` (ใหม่) | คำนวณ Google/Meta/Facebook/Website, ช่วงเริ่มต้น, ช่วงเปรียบเทียบ, แนวโน้ม, สถานะความครบ |
+| `src/app/(app)/performance/page.tsx` (ใหม่) | หน้า Marketing Performance |
+| `src/components/KpiCard.tsx` (ใหม่) | การ์ด KPI กลาง + การเปรียบเทียบช่วงก่อน |
+| `src/lib/lead-options.ts` (ใหม่) | ย้ายรายการตัวเลือก Lead มาจาก `leads.ts` (กันการ import วนกับ dashboard) — `leads.ts` ยัง export ชื่อเดิม |
+| `src/lib/leads.ts` | import ตัวเลือกจาก `lead-options.ts` |
+| `src/lib/dashboard.ts` | `statusChart` + กราฟ buyStatus/sellStatus · export ตัวช่วยช่วงวันที่ |
+| `src/lib/dashboard-data.ts` | อ่านคอลัมน์เพิ่ม: clicks/impressions (Google), impressions/reach/results/result_indicator (Meta), views (Facebook), need/buy_status/sell_status (Leads — ไม่มีข้อมูลส่วนบุคคล) |
+| `src/app/(app)/page.tsx` | กราฟ Buy/Sell Status + ใช้ KpiCard กลาง |
+| `src/lib/roles.ts` | เมนู Marketing Performance (Admin/Marketing) |
+| `tests/performance.test.ts` (ใหม่), `tests/e2e.test.mts` (ส่วนที่ 16), `tests/run-all.sh` | ทดสอบ Phase 6 |
+
+### Data / Schema Impact
+- **ไม่เปลี่ยน Schema ของ Google Sheets** ไม่เขียน/ลบข้อมูล (อ่านอย่างเดียว) · อ่านคอลัมน์ที่มีอยู่แล้วเพิ่มขึ้นเท่านั้น
+
+### Test Results
+**Passed (รันจริง):** 254/254
+| ชุด | ผล |
+|---|---|
+| performance (ใหม่ · ไฟล์จริง Google/Meta/Facebook) | 23/23 |
+| e2e (ส่วนที่ 16 ใหม่ 2 ข้อ) | 98/98 |
+| overview / fbactions / fbpage / import / dashboard / sales / security | 20 / 9 / 22 / 33 / 19 / 18 / 12 |
+| TypeScript และ Production build (มี route `/performance`) | ผ่าน |
+
+ตัวเลขที่ยืนยัน (ก.ย. 2026): Google Spend ฿28,814.82 · Clicks 31,513 · CPC ฿0.91 (Time series = Campaign Report) · 10–20 ก.ย. Spend ฿9,613.98 / Clicks 9,360 จาก Time series · Meta Spend ฿37,557.54 · Facebook Engagement 319 (24–30 ก.ย. = 129 เท่ากับ Dashboard) · 16–30 เทียบ 1–15 ก.ย. สองช่วงรวมกัน = ฿28,814.82 · ไม่มี Time series + เลือกช่วงย่อย → ข้อมูลไม่ครบ · Clicks 0 → N/A · Website ทุกตัว รอข้อมูล
+
+**Failed:** 0
+
+**Not Tested:**
+- หน้า Marketing Performance และกราฟ Buy/Sell Status บนเบราว์เซอร์จริงและมือถือ (ตรวจด้วย TypeScript/build และทดสอบการคำนวณเท่านั้น)
+- Google Sheet จริง
+- Website Metrics ทั้งหมด (ยังไม่มีข้อมูล)
+- Phase 4 บนเว็บจริง: ผู้ใช้ยังไม่ได้รายงานผล
+
+### Known Issues
+- Meta Ads มีแต่รายงานยอดรวมทั้งช่วง เลือกช่วงย่อยจะได้ยอดทั้งรายงานพร้อมป้าย ข้อมูลไม่ครบ (ถ้าต้องการรายวัน ต้องส่งออกรายงาน Meta แบบแยกวัน)
+- ถ้าเลือกช่วงยาวมาก ตัวนับวันจำกัดไว้ 1,200 วันต่อการคำนวณ
+- Website และอัตราส่วนเทียบ Website จะใช้งานได้หลังทำ Phase 5
+
+### Next Phase
+**Phase 7 — YoY Comparison** เริ่มเมื่อผู้ใช้สั่ง "ทำขั้นต่อไป" (ข้อมูลปัจจุบันมีเฉพาะ ก.ย. 2026 → ทุก KPI ปีก่อนจะเป็น รอข้อมูล จนกว่าจะนำเข้าข้อมูลปี 2025)
