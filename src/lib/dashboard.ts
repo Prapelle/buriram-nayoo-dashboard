@@ -15,8 +15,8 @@ export const DEFAULT_EXCLUDED_PAGES = ["BAAN Prompt Community - Buriram&Surin"];
 const PAID_CHANNELS = ["Facebook Ads", "Google Ads"];
 const CH = { meta: "Facebook Ads", google: "Google Ads", posts: "Facebook Organic", line: "LINE OA" };
 
-export type KpiState = "value" | "pending" | "excluded" | "restricted";
-export type Kpi = { key: string; label: string; fmt: "thb" | "int" | "pct"; value: number | null; state: KpiState; note?: string };
+export type KpiState = "value" | "pending" | "excluded" | "restricted" | "na";
+export type Kpi = { key: string; label: string; fmt: "thb" | "int" | "pct"; value: number | null; state: KpiState; note?: string; /** มีค่าแต่ข้อมูลไม่ครบ: เหตุผล */ incomplete?: string };
 export type Dashboard = {
   groups: { title: string; items: Kpi[] }[];
   charts: {
@@ -58,9 +58,36 @@ function overlapWarning(rows: Row[], label: string): string | null {
   return null;
 }
 
-function kpi(key: string, label: string, fmt: Kpi["fmt"], value: number | null, state?: KpiState, note?: string): Kpi {
-  return { key, label, fmt, value, state: state ?? (value === null ? "pending" : "value"), note };
+function kpi(key: string, label: string, fmt: Kpi["fmt"], value: number | null, state?: KpiState, note?: string, incomplete?: string): Kpi {
+  return { key, label, fmt, value, state: state ?? (value === null ? "pending" : "value"), note, incomplete };
 }
+
+// ---------- ความครบถ้วนของข้อมูลโฆษณา (Phase 2) ----------
+type Span = [string, string];
+const addDays = (d: string, n: number) => new Date(Date.parse(d + "T00:00:00Z") + n * 86400000).toISOString().slice(0, 10);
+const dmyS = (d: string) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : "");
+/** รวมช่วงวันที่ของรายงาน (ช่วงที่ติดกัน/ทับกันรวมเป็นช่วงเดียว) */
+export function mergeSpans(rows: Row[]): Span[] {
+  const sp = rows.map((r) => [r.report_start, r.report_end] as Span).filter(([a, b]) => a && b).sort((x, y) => x[0].localeCompare(y[0]));
+  const out: Span[] = [];
+  for (const [a, b] of sp) {
+    const last = out[out.length - 1];
+    if (last && a <= addDays(last[1], 1)) { if (b > last[1]) last[1] = b; } else out.push([a, b]);
+  }
+  return out;
+}
+/** ช่วงใน [from,to] ที่ไม่มีรายงานครอบคลุม */
+export function gapsIn(spans: Span[], from: string, to: string): Span[] {
+  const gaps: Span[] = []; let cur = from;
+  for (const [a, b] of spans) {
+    if (b < cur) continue; if (a > to) break;
+    if (a > cur) gaps.push([cur, addDays(a, -1) < to ? addDays(a, -1) : to]);
+    cur = addDays(b, 1) > cur ? addDays(b, 1) : cur; if (cur > to) break;
+  }
+  if (cur <= to) gaps.push([cur, to]);
+  return gaps;
+}
+const fmtGaps = (g: Span[]) => g.map(([a, b]) => (a === b ? dmyS(a) : `${dmyS(a)}–${dmyS(b)}`)).join(", ");
 
 export function computeDashboard(data: DashData, f: Filters, role: Role): Dashboard {
   const notes: string[] = [];
@@ -93,7 +120,13 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
     return m && (!f.from || m >= f.from.slice(0, 7)) && (!f.to || m <= f.to.slice(0, 7));
   }) : [];
 
-  const leads = data.leads.filter((r) =>
+  // Total Leads นับ lead_id ไม่ซ้ำ (แถวซ้ำจากการแก้ใน Sheet/ส่งออกหลายครั้งไม่ถูกนับซ้ำ) ตามวันที่รับ Lead
+  const seenLead = new Set<string>(); let leadNoId = 0;
+  const leadsAll = data.leads.filter((r) => { if (!r.lead_id) { leadNoId++; return false; } if (seenLead.has(r.lead_id)) return false; seenLead.add(r.lead_id); return true; });
+  if (leadNoId) warnings.push(`Leads: ${leadNoId} แถวในแท็บ LEADS ไม่มี lead_id จึงไม่ถูกนับ`);
+  const leadFilter = (r: Row) => (!f.channel || r.source_channel === f.channel) && (!f.campaign || r.campaign_name === f.campaign)
+    && (!f.area || areaOf(r) === f.area) && (!f.service || r.service_category === f.service);
+  const leads = leadsAll.filter((r) =>
     ((!f.from && !f.to) || inRange(day(r.received_at), f))
     && (!f.channel || r.source_channel === f.channel) && (!f.campaign || r.campaign_name === f.campaign)
     && (!f.area || areaOf(r) === f.area) && (!f.service || r.service_category === f.service));
@@ -105,12 +138,31 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
   const mSum = sumOf(meta, "amount_spent_thb"), gSum = sumOf(google, "cost_thb");
   const metaV = mSum.n ? mSum.sum : null, googleV = gSum.n ? gSum.sum : null;
   const paidTotal = metaV === null && googleV === null ? null : Math.round(((metaV ?? 0) + (googleV ?? 0)) * 100) / 100;
-  const paidNote = paidTotal !== null && (metaV === null || googleV === null) && chOk("meta") && chOk("google") ? "รวมเฉพาะแหล่งที่มีข้อมูล" : undefined;
+  // ความครบถ้วน: ทั้งสองแพลตฟอร์ม (ที่อยู่ในตัวกรอง) ต้องมีรายงานครอบคลุมช่วงเดียวกัน ถ้าไม่ครบแสดง "ข้อมูลไม่ครบ" ไม่ใช่ 0
+  const included = [["Meta Ads", chOk("meta"), meta] as const, ["Google Ads", chOk("google"), google] as const].filter(([, ok]) => ok);
+  const missingReasons: string[] = [];
+  if (paidTotal !== null) {
+    const allRows = included.flatMap(([, , rows]) => rows);
+    const span = mergeSpans(allRows);
+    const from = f.from ?? span[0]?.[0] ?? "", to = f.to ?? span[span.length - 1]?.[1] ?? "";
+    for (const [name, , rows] of included) {
+      if (!rows.length) { if (!f.campaign) missingReasons.push(`ไม่มีข้อมูล ${name} ในช่วงนี้`); continue; }
+      if (f.campaign) continue; // ตัวกรองแคมเปญเลือกแคมเปญของแพลตฟอร์มเดียวโดยตั้งใจ
+      const g = gapsIn(mergeSpans(rows), from, to);
+      if (g.length) missingReasons.push(`${name} ไม่มีรายงานช่วง ${fmtGaps(g)}`);
+    }
+  }
+  const paidIncomplete = missingReasons.length ? missingReasons.join(" · ") : undefined;
+  const paidNote = included.length === 2 ? "Meta Ads Spend + Google Ads Campaign Spend (ไม่รวมรายงาน Google Ads รายละเอียด และไม่รวม Facebook Page)" : `เฉพาะ ${included.map(([n]) => n).join(", ")} ตามตัวกรองช่องทาง`;
 
   const lineNew = sumOf(line, "new_friends"), lineInq = sumOf(line, "inquiries"), lineLeads = sumOf(line, "leads");
 
   const qualified = (r: Row) => r.qualified_at !== "" && r.qualified_at !== undefined || ["Qualified", "Proposal", "Won"].includes(r.status);
   const leadsTotal = leads.length;
+  // ช่วงเวลาของ CPL: ใช้ช่วงที่เลือก หรือถ้าไม่ได้เลือก ใช้ช่วงของรายงานโฆษณาที่นำมาคิด เพื่อให้ค่าโฆษณาและ Lead เป็นช่วงเดียวกัน
+  const adSpan = mergeSpans([...meta, ...google]);
+  const cplFrom = f.from ?? adSpan[0]?.[0], cplTo = f.to ?? adSpan[adSpan.length - 1]?.[1];
+  const cplLeads = leadsAll.filter((r) => leadFilter(r) && cplFrom !== undefined && cplTo !== undefined && day(r.received_at) >= cplFrom && day(r.received_at) <= cplTo);
   const leadsQ = leads.filter(qualified).length;
   const paidLeads = leads.filter((r) => PAID_CHANNELS.includes(r.source_channel));
   const paidLeadsQ = paidLeads.filter(qualified).length;
@@ -127,16 +179,25 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
   const ex = (key: string, label: string, fmt: Kpi["fmt"], c: keyof typeof CH, v: number | null, note?: string) =>
     excluded(c) ? kpi(key, label, fmt, null, "excluded") : kpi(key, label, fmt, v, undefined, note);
 
-  const paidSpendForCpl = paidTotal;
-  const cpl = paidSpendForCpl !== null && paidLeads.length > 0 ? Math.round((paidSpendForCpl / paidLeads.length) * 100) / 100 : null;
-  const cplq = paidSpendForCpl !== null && paidLeadsQ > 0 ? Math.round((paidSpendForCpl / paidLeadsQ) * 100) / 100 : null;
+  // CPL: ค่าใช้จ่ายและ Lead ต้องเป็นช่วงเวลาเดียวกัน · Lead = 0 → N/A · ข้อมูลไม่ครบ → แสดงสถานะ ไม่แสดง 0
+  const cplPeriod = cplFrom && cplTo ? `${dmyS(cplFrom)}–${dmyS(cplTo)}` : "";
+  const cplBlock = f.service ? "ตัวกรอง Service ใช้กับ Lead เท่านั้น ค่าโฆษณาไม่ได้แยกตามบริการ จึงคำนวณ CPL ไม่ได้" : undefined;
+  const cplIncomplete = [paidIncomplete, partial ? "รายงานโฆษณาบางรายการครอบคลุมเกินช่วงที่เลือก ค่าโฆษณาจึงมากกว่าช่วงของ Lead" : undefined].filter(Boolean).join(" · ") || undefined;
+  const cplKpi = (key: string, label: string, base: Row[], what: string): Kpi => {
+    const formula = `Total Paid Media Spend ÷ ${what}`;
+    if (paidTotal === null) return kpi(key, label, "thb", null, included.length ? "pending" : "na", `${formula} · ไม่มีค่าโฆษณาในเงื่อนไขนี้`);
+    if (cplBlock) return kpi(key, label, "thb", null, "na", cplBlock);
+    if (!base.length) return kpi(key, label, "thb", null, "na", `${formula} · ไม่มี Lead ในช่วง ${cplPeriod} (หารด้วย 0 ไม่ได้)`);
+    return kpi(key, label, "thb", Math.round((paidTotal / base.length) * 100) / 100, undefined, `${formula} · ฐาน ${base.length} Lead ที่รับ ${cplPeriod} (ช่วงเดียวกับค่าโฆษณา)`, cplIncomplete);
+  };
+  const cplAdsBase = cplLeads.filter((r) => PAID_CHANNELS.includes(r.source_channel));
   const rate = leadsTotal > 0 ? Math.round((wonLeads / leadsTotal) * 1000) / 10 : null;
 
   const groups: Dashboard["groups"] = [
     { title: "ค่าโฆษณา", items: [
       ex("meta", "Meta Ads Spend", "thb", "meta", metaV),
       ex("google", "Google Ads Campaign Spend", "thb", "google", googleV, "จาก Campaign Report เท่านั้น"),
-      kpi("paid", "Total Paid Media Spend", "thb", paidTotal, undefined, paidNote),
+      kpi("paid", "Total Paid Media Spend", "thb", paidTotal, undefined, paidNote, paidIncomplete),
     ] },
     { title: "Facebook Page", items: [
       ex("posts", "จำนวน Facebook Posts (ที่เผยแพร่ในช่วง)", "int", "posts", fb.publishedPosts || null, `นับตามวันเผยแพร่${excludedPosts ? ` · ไม่รวม ${excludedPosts} โพสต์จากเพจที่ตัดออก` : ""}`),
@@ -151,7 +212,7 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
       ex("line_leads", "LINE OA Leads", "int", "line", lineLeads.n ? lineLeads.sum : null),
     ] },
     { title: "Leads และ Sales", items: [
-      kpi("leads", "Total Leads", "int", leadsTotal || null),
+      kpi("leads", "Total Leads", "int", leadsAll.length ? leadsTotal : null, undefined, "นับ lead_id ไม่ซ้ำ ตามวันที่รับ Lead ในช่วงที่เลือก"),
       kpi("qualified", "Qualified Leads", "int", leadsTotal ? leadsQ : null, undefined, "นับ Lead ที่สถานะ Qualified / Proposal / Won หรือมีวันที่ Qualified"),
       kpi("won", "Won Deals", "int", won.length || null, undefined, "ไม่นับ Cancelled / Refunded"),
       fin("deal", "Deal Value", dv.n ? dv.sum : null, "มูลค่าดีล ไม่ใช่รายได้บริษัท"),
@@ -160,8 +221,9 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
       fin("gp", "Gross Profit", both.length ? Math.round(gp * 100) / 100 : null, both.length ? `คำนวณจาก ${both.length} ดีลที่มีทั้งรายได้และต้นทุน (จาก ${revRows.length})` : undefined),
     ] },
     { title: "ประสิทธิภาพ (ไม่ใช่ ROI เชิงสาเหตุ)", items: [
-      kpi("cpl", "CPL", "thb", cpl, undefined, `ค่าโฆษณาทั้งหมด ÷ Lead จากช่องทางโฆษณา (Facebook Ads, Google Ads) ${paidLeads.length} รายการ`),
-      kpi("cplq", "Cost per Qualified Lead", "thb", cplq, undefined, `ฐาน: Qualified Lead จากช่องทางโฆษณา ${paidLeadsQ} รายการ`),
+      cplKpi("cpl", "CPL (Lead จากโฆษณา)", cplAdsBase, "Lead จาก Facebook Ads + Google Ads"),
+      cplKpi("cpl_all", "CPL (Lead ทั้งหมด)", cplLeads, "Total Leads ทุกช่องทาง"),
+      cplKpi("cplq", "Cost per Qualified Lead", cplAdsBase.filter(qualified), "Qualified Lead จากโฆษณา"),
       kpi("rate", "Lead-to-Sale Rate", "pct", rate, undefined, `Lead สถานะ Won ÷ Lead ทั้งหมดที่รับในช่วงที่เลือก (ฐาน ${leadsTotal} Lead)`),
     ] },
   ];

@@ -21,7 +21,9 @@ function KpiCard({ k }: { k: Kpi }) {
       {k.state === "pending" && <div className="mt-1 text-lg font-semibold text-slate-400">รอข้อมูล</div>}
       {k.state === "excluded" && <div className="mt-1 text-sm text-slate-400">ไม่รวมในตัวกรองนี้</div>}
       {k.state === "restricted" && <div className="mt-1 text-sm text-slate-400">ไม่มีสิทธิ์ดูข้อมูลนี้</div>}
-      {k.note && k.state === "value" && <div className="mt-1 text-xs text-slate-500">{k.note}</div>}
+      {k.state === "na" && <div className="mt-1 text-lg font-semibold text-slate-500">N/A</div>}
+      {k.incomplete && (k.state === "value") && <div className="mt-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900" title={k.incomplete}>ข้อมูลไม่ครบ: {k.incomplete}</div>}
+      {k.note && (k.state === "value" || k.state === "na") && <div className="mt-1 text-xs text-slate-500">{k.note}</div>}
     </div>
   );
 }
