@@ -63,12 +63,27 @@ try {
   ok("Login", "ยังไม่ล็อกอิน: หน้าเว็บพาไป /login · API ตอบ 401 (Leads, Export)");
   r = await call("/api/init", { as: ADMIN, method: "POST" }); assert.equal(r.status, 200, r.text); assert.ok(r.json.createdTabs.length > 20);
   ok("Login", `Admin คนแรก (INITIAL_ADMIN_EMAIL) เตรียม Google Sheet ได้ — สร้าง ${r.json.createdTabs.length} แท็บ`);
-  const users = (await ctl("/tab?name=APP_USERS")).rows; const uh = users[0];
-  const urow = (email, role, active) => uh.map((h) => ({ user_id: email, email, display_name: email, role, active, created_at: "2026-10-01T00:00:00.000Z" })[h] ?? "");
-  await ctl("/set", { name: "APP_USERS", rows: [...users, urow(MKT, "marketing", "TRUE"), urow(SALES, "sales", "TRUE"), urow(OFF, "sales", "FALSE")] });
+  // เพิ่มสมาชิกผ่านหน้า ตั้งค่า (API /api/users) แทนการแก้ Sheet ด้วยมือ
+  for (const [email, role, active] of [[MKT, "marketing", true], [SALES, "sales", true], [OFF, "sales", false]]) {
+    r = await call("/api/users", { as: ADMIN, method: "POST", body: { email: email.toUpperCase(), display_name: role, role, active } }); assert.equal(r.status, 200, r.text);
+  }
+  r = await call("/api/users", { as: ADMIN }); assert.equal(r.json.users.length, 4); assert.ok(r.json.users.every((u) => u.email === u.email.toLowerCase()));
+  assert.equal((await call("/api/users", { as: ADMIN, method: "POST", body: { email: MKT, role: "sales" } })).json.code, "DUPLICATE_EMAIL");
+  assert.equal((await call("/api/users", { as: MKT })).status, 403); assert.equal((await call("/api/users", { as: MKT, method: "POST", body: { email: "x@y.com", role: "admin" } })).status, 403);
+  const meRow = r.json.users.find((u) => u.email === ADMIN);
+  r = await call("/api/users", { as: ADMIN, method: "POST", body: { ...meRow, role: "sales", updated_at_seen: meRow.updated_at } }); assert.equal(r.status, 409); assert.equal(r.json.code, "SELF_CHANGE");
+  r = await call("/settings", { as: ADMIN }); assert.ok(r.html.includes("สมาชิกและสิทธิ์"));
+  ok("Login", "หน้า ตั้งค่า → เพิ่มสมาชิก 3 คน (อีเมลเก็บเป็นตัวเล็ก) · อีเมลซ้ำ 409 · Marketing จัดการผู้ใช้ไม่ได้ (403) · Admin ลด Role ตัวเองไม่ได้");
   assert.equal((await call("/api/leads", { as: MKT })).status, 403); assert.equal((await call("/api/import/plan", { as: SALES, method: "POST", body: {} })).status, 403);
   assert.equal((await call("/api/init", { as: MKT, method: "POST" })).status, 403);
   assert.equal((await call("/api/leads", { as: OFF })).status, 401); assert.equal((await call("/api/leads", { as: "stranger@example.com" })).status, 401);
+  let ul = (await call("/api/users", { as: ADMIN })).json.users; let mrow = ul.find((u) => u.email === MKT);
+  r = await call("/api/users", { as: ADMIN, method: "POST", body: { ...mrow, active: false, updated_at_seen: mrow.updated_at } }); assert.equal(r.status, 200);
+  assert.equal((await call("/api/export/facebook_ads", { as: MKT })).status, 401);
+  ul = (await call("/api/users", { as: ADMIN })).json.users; mrow = ul.find((u) => u.email === MKT);
+  r = await call("/api/users", { as: ADMIN, method: "POST", body: { ...mrow, active: true, updated_at_seen: mrow.updated_at } }); assert.equal(r.status, 200);
+  assert.equal((await call("/api/export/facebook_ads", { as: MKT })).status, 200);
+  ok("Login", "ระงับสมาชิกจากหน้า ตั้งค่า → เข้าไม่ได้ (401 — ในเทสต์ตรวจ Role ทุกคำขอ ใช้งานจริงมีผลภายใน 5 นาที) · เปิดใช้งานใหม่ → กลับมาใช้ได้");
   ok("Login", "Marketing เข้า Leads ไม่ได้ (403) · Sales นำเข้าไม่ได้ (403) · Marketing เตรียม Sheet ไม่ได้ · ผู้ใช้ปิดใช้งาน/ไม่อยู่ในรายชื่อ → 401");
   r = await call("/leads", { as: MKT }); assert.ok(redirectedTo(r, "/"), `/leads as MKT → ${r.status}`); assert.ok(!r.html.includes("เพิ่ม Lead"));
   r = await call("/performance", { as: SALES }); assert.ok(redirectedTo(r, "/"), `/performance as SALES → ${r.status}`); assert.ok(!r.html.includes("Google Ads Spend"));

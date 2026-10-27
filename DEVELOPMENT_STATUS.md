@@ -744,3 +744,13 @@
 Schema: ไม่เปลี่ยน (ใช้คอลัมน์ call_status เดิม)
 Test: **312/312 ผ่าน** (เพิ่ม e2e 15b และ HTTP Integration ตรวจหน้า ภาพรวม จริง) · TypeScript และ Cloudflare build ผ่าน
 Not Tested: หน้าเว็บจริงหลังการเปลี่ยนแปลงนี้
+
+## 23) เพิ่มระบบจัดการสมาชิกในหน้า ตั้งค่า (28/10/2026)
+- ส่วนใหม่ **สมาชิกและสิทธิ์** (Admin เท่านั้น): รายชื่อผู้ใช้, **เพิ่มสมาชิก** (อีเมล Google, ชื่อ, Role, ใช้งานได้), **แก้ไข**, **ระงับ / เปิดใช้งาน**
+- เก็บในแท็บ APP_USERS เดิม (ไม่เปลี่ยน Schema) · อีเมลเก็บเป็นตัวพิมพ์เล็ก · อีเมลซ้ำไม่ได้ · ไม่มีการลบแถว (ระงับแทน)
+- กันล็อกตัวเองออก: แก้ Role / อีเมล / ระงับบัญชีตัวเองไม่ได้ · ต้องมี Admin ที่ใช้งานได้อย่างน้อย 1 คน · แสดงป้าย "Admin เริ่มต้น" สำหรับ INITIAL_ADMIN_EMAIL
+- ตรวจข้อมูลเก่า (updated_at) · บันทึก Audit Log (user_create / user_update) · มีผลกับผู้ที่ล็อกอินอยู่ภายใน 5 นาที
+- หมายเหตุบนหน้า: ระหว่าง Google OAuth โหมด Testing ต้องเพิ่มอีเมลใน Test users ของ Google Cloud ด้วย
+- ไฟล์: `src/lib/users-service.ts`, `src/app/api/users/route.ts`, `src/components/UsersManager.tsx` (ใหม่), `src/app/(app)/settings/page.tsx`
+- Test: **318/318 ผ่าน** (security ตรวจว่า /api/users เป็น Admin เท่านั้น, e2e 15c 4 ข้อ, HTTP Integration 2 ข้อ — สมาชิกในการทดสอบ HTTP ถูกเพิ่มผ่าน API นี้จริง) · Cloudflare build ผ่าน
+- Not Tested: หน้า ตั้งค่า บนเว็บจริง / Google Login จริงของสมาชิกที่เพิ่มใหม่
