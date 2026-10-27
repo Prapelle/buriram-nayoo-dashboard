@@ -1,10 +1,10 @@
 import { writeAudit } from "./audit";
-import { findDuplicates, LEAD_COLUMNS, nextLeadCode, normalizeEmail, normalizePhone, stampStatus, todayBkk, validateLead, type DupMatch, type Lead } from "./leads";
+import { findDuplicates, LEAD_COLUMNS, leadStatusOf, nextLeadCode, normalizeEmail, normalizePhone, pipelineOf, resolveNeedStatus, stampStatus, todayBkk, validateLead, type DupMatch, type Lead } from "./leads";
 import { appendRows, batchUpdateValues, colLetter, deleteRow, listTabs, readTabs, toRow } from "./sheets";
 import { readColumns } from "./tabdata";
 
 export class LeadError extends Error {
-  constructor(public status: number, message: string, public code: string, public extra: { fields?: Record<string, string>; matches?: DupMatch[] } = {}) { super(message); }
+  constructor(public status: number, message: string, public code: string, public extra: { fields?: Record<string, string>; matches?: DupMatch[]; conflict?: { field: string; value: string } } = {}) { super(message); }
 }
 
 async function load() {
@@ -15,10 +15,11 @@ const pick = (r: Record<string, string>): Lead => Object.fromEntries(LEAD_COLUMN
 
 export async function listLeads() {
   const t = await load();
+  const staff = [...new Set(t.LEADS.rows.map((r) => String(r.staff ?? "").trim()).filter(Boolean))].sort();
   const owners = [...new Set(t.APP_USERS.rows.filter((u) => String(u.active).toUpperCase() === "TRUE" && ["admin", "sales"].includes(u.role)).map((u) => u.email))].sort();
   const rows = t.LEADS.rows.filter((r) => r.lead_id).map(pick)
     .sort((a, b) => b.received_at.localeCompare(a.received_at) || b.lead_code.localeCompare(a.lead_code));
-  return { rows, owners };
+  return { rows, owners, staff };
 }
 
 /** สร้าง/แก้ไข Lead: Lead Code สร้างฝั่ง Server, เตือนซ้ำจากเบอร์/อีเมลแต่ไม่ merge อัตโนมัติ */
@@ -27,7 +28,7 @@ export async function saveLead(input: Record<string, unknown>, actor: string) {
   if (!v.ok) throw new LeadError(422, "ข้อมูลไม่ถูกต้อง กรุณาตรวจช่องที่ระบุ", "VALIDATION", { fields: v.errors });
   const t = await load();
   const tab = t.LEADS;
-  if (!tab.headers.includes("lead_id")) throw new LeadError(409, "แท็บ LEADS ยังไม่พร้อม กรุณากด เตรียม Google Sheet", "SHEET_NOT_READY");
+  if (!tab.headers.includes("lead_id") || !tab.headers.includes("need")) throw new LeadError(409, "แท็บ LEADS ยังไม่พร้อม กรุณากด เตรียม Google Sheet", "SHEET_NOT_READY");
   const rows = tab.rows;
   const now = new Date().toISOString();
   const today = todayBkk();
@@ -47,6 +48,18 @@ export async function saveLead(input: Record<string, unknown>, actor: string) {
     if (matches.length) throw new LeadError(409, "พบ Lead ที่เบอร์โทรหรืออีเมลซ้ำกับรายการนี้ (ระบบไม่รวมข้อมูลให้อัตโนมัติ)", "DUPLICATE_WARNING", { matches });
   }
 
+  // Need เปลี่ยนกลุ่ม แล้วช่องสถานะของกลุ่มเดิมมีค่าใน Sheet → ห้ามล้างเงียบ ๆ ต้องยืนยันก่อน
+  const ns = resolveNeedStatus(prev, v.rec);
+  if (ns.conflict && input.confirmNeedChange !== true) {
+    const label = ns.conflict.field === "buy_status" ? "Buy Status" : "Sell Status";
+    throw new LeadError(409, `เปลี่ยน Need เป็น "${v.rec.need}" แล้ว ${label} เดิม "${ns.conflict.value}" จะใช้ไม่ได้และจะถูกล้างเมื่อบันทึก (บันทึกค่าเดิมไว้ใน Audit Log)`, "NEED_CHANGE", { conflict: ns.conflict });
+  }
+  const recIn: Lead = { ...ns.rec };
+  // ขั้น Pipeline เดิม (ใช้ใน Dashboard) คำนวณจาก Buy/Sell Status · Lead เก่าที่ยังไม่มี Need ไม่ถูกลดขั้นโดยอัตโนมัติ
+  const derived = pipelineOf(recIn);
+  recIn.status = prev && !prev.need && !leadStatusOf(recIn) && ["Qualified", "Proposal", "Won", "Lost"].includes(prev.status) ? prev.status : derived;
+  if (recIn.call_status === "ติดต่อได้แล้ว") recIn.contactable = "TRUE"; else if (recIn.call_status === "ติดต่อไม่ได้") recIn.contactable = "FALSE";
+  v.rec = recIn;
   const stamps = stampStatus(prev, v.rec, today);
   if (!prev) {
     const rec: Lead = {
@@ -54,13 +67,16 @@ export async function saveLead(input: Record<string, unknown>, actor: string) {
       created_by: actor, created_at: now, updated_by: actor, updated_at: now,
     };
     await appendRows("LEADS", [toRow(tab.headers, rec)]);
-    await writeAudit(actor, "lead_create", "lead", rec.lead_id, `สร้าง ${rec.lead_code} (${rec.source_channel}, ${rec.status})`);
+    await writeAudit(actor, "lead_create", "lead", rec.lead_id, `สร้าง ${rec.lead_code} (${rec.source_channel}, ${rec.need}${leadStatusOf(rec) ? ` / ${leadStatusOf(rec)}` : ""})`);
     return { created: true, lead: rec };
   }
   const rec: Lead = { ...v.rec, ...stamps, lead_id: prev.lead_id, lead_code: prev.lead_code, created_by: prev.created_by, created_at: prev.created_at, updated_by: actor, updated_at: now };
   await batchUpdateValues([{ range: `'LEADS'!A${rowNo}:${colLetter(tab.headers.length - 1)}${rowNo}`, values: [toRow(tab.headers, rec)] }]);
-  await writeAudit(actor, prev.status !== rec.status ? "lead_status_change" : "lead_update", "lead", rec.lead_id,
-    prev.status !== rec.status ? `${rec.lead_code}: ${prev.status} → ${rec.status}` : `แก้ไข ${rec.lead_code}`);
+  const ps = leadStatusOf(prev), cs = leadStatusOf(rec);
+  const parts = [prev.need !== rec.need ? `Need ${prev.need || "(ว่าง)"} → ${rec.need}` : "", ps !== cs ? `สถานะ ${ps || "(ว่าง)"} → ${cs || "(ว่าง)"}` : "",
+    ns.conflict ? `ล้าง ${ns.conflict.field}="${ns.conflict.value}"` : "", prev.call_status !== rec.call_status ? `Call ${prev.call_status || "(ว่าง)"} → ${rec.call_status}` : ""].filter(Boolean);
+  await writeAudit(actor, ps !== cs || prev.need !== rec.need ? "lead_status_change" : "lead_update", "lead", rec.lead_id,
+    parts.length ? `${rec.lead_code}: ${parts.join(" · ")}` : `แก้ไข ${rec.lead_code}`);
   return { created: false, lead: rec };
 }
 

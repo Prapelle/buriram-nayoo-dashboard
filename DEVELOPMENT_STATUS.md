@@ -1,15 +1,15 @@
 # DEVELOPMENT_STATUS — Buriram NAYOO Marketing Dashboard
 
-อัปเดตล่าสุด: Phase 3 (27/10/2026) · Phase ปัจจุบันเสร็จแล้ว รอคำสั่ง "ทำขั้นต่อไป" สำหรับ Phase 4
+อัปเดตล่าสุด: Phase 4 (27/10/2026) · Phase ปัจจุบันเสร็จแล้ว รอคำสั่ง "ทำขั้นต่อไป" สำหรับ Phase 6 (Phase 5 ข้ามไว้)
 
 ## สถานะรวม
 | Phase | งาน | สถานะ |
 |---|---|---|
 | 0 | Audit, Backup & Plan | เสร็จ |
-| 1 | Facebook Page CSV: Metric Date + Business Key | เสร็จ (ทดสอบอัตโนมัติผ่าน · ผู้ใช้ยังไม่ได้รายงานผลบนเว็บจริง) |
-| 2 | Marketing Overview: Total Paid Media Spend / Total Leads / CPL | เสร็จ (ทดสอบอัตโนมัติผ่าน · ยังไม่ทดสอบบนเว็บจริง) |
-| 3 | Facebook Ads Action Names | **เสร็จ (ทดสอบอัตโนมัติผ่าน · ยังไม่ทดสอบบนเว็บจริง) — รอคำสั่ง** |
-| 4 | Lead Management (ฟิลด์ใหม่ + Need/Status Logic) | ยังไม่เริ่ม |
+| 1 | Facebook Page CSV: Metric Date + Business Key | เสร็จ · ผู้ใช้ยืนยันบนเว็บจริงแล้ว (27/10/2026) |
+| 2 | Marketing Overview: Total Paid Media Spend / Total Leads / CPL | เสร็จ · ผู้ใช้ยืนยันบนเว็บจริงแล้ว (27/10/2026) |
+| 3 | Facebook Ads Action Names | เสร็จ · ผู้ใช้ยืนยันบนเว็บจริงแล้ว (27/10/2026) |
+| 4 | Lead Management (ฟิลด์ใหม่ + Need/Status Logic) | **เสร็จ (ทดสอบอัตโนมัติผ่าน · ยังไม่ทดสอบบนเว็บจริง) — รอคำสั่ง** |
 | 5 | Website Analytics Import | **ข้ามไปก่อน (รอข้อมูลจากผู้ใช้)** |
 | 6 | Marketing Performance Dashboard | ยังไม่เริ่ม |
 | 7 | YoY Comparison | ยังไม่เริ่ม |
@@ -388,3 +388,74 @@
 
 ### Next Phase
 **Phase 4 — Lead Management & Migration:** ฟิลด์ใหม่ (Need, Buy/Sell Status, Type, Condition, Price, Remark, Call Status, Staff, Note) + Logic แสดงสถานะตาม Need (ข้อ E) — เริ่มเมื่อผู้ใช้สั่ง "ทำขั้นต่อไป"
+
+## 16) รายงาน Phase 4 — Lead Management & Migration
+
+### การตัดสินใจของผู้ใช้ (ก่อนเริ่ม Phase 4)
+| ข้อ | คำตอบ |
+|---|---|
+| สถานะเดิม (New/Contacted/Qualified/Proposal/Won/Lost) | **แปลงจาก Buy/Sell Status** — Qualified: Hot, Warm, Close, นัดทำสัญญา, ทำสัญญา, เซ็นสัญญา, สัญญาเปิด, เป็นนายหน้า, ขายแล้ว · Won: Close, ขายแล้ว · Lost: Archive, ยกเลิก, บ้านไม่พร้อมขาย · ที่เหลือ = กำลังติดตาม |
+| Staff | **พิมพ์ชื่อเอง** (ช่องข้อความ พร้อมรายชื่อที่เคยใช้ให้เลือก) |
+| หมวดบริการเดิม (Product/Project/Event) | **ไม่บังคับ แต่ยังเก็บไว้** (ยังกรองใน Dashboard ได้) |
+| Need → Status | ซื้อ / เช่า / สร้าง → Buy Status · ขาย → Sell Status (ข้อ E แทนที่ข้อความใน Master) |
+
+### สิ่งที่ทำแล้ว
+- **ฟิลด์ตาม Master** (ใช้คอลัมน์เดิมเมื่อมี):
+  | ฟิลด์ | คอลัมน์ |
+  |---|---|
+  | Date / Channel / Name / Phone / Area | `received_at` / `source_channel` (10 ตัวเลือกเดิม) / `customer_name` / `phone` / `area` — เดิม |
+  | Remark | `need_description` — เดิม (เปลี่ยนป้ายเป็น Remark) |
+  | Note | `notes` — เดิม |
+  | Need, Buy Status, Sell Status, Type, Condition, Price, Call Status, Staff | **ใหม่** `need, buy_status, sell_status, property_type, property_condition, price_range, call_status, staff` |
+- **Need/Status Logic:** ฟอร์มแสดงเฉพาะสถานะของกลุ่มตาม Need · เซิร์ฟเวอร์ตรวจซ้ำ (สถานะไม่ตรงกลุ่ม/ไม่อยู่ในรายการ → ปฏิเสธ) · เก็บเฉพาะช่องของ Need ปัจจุบัน
+- **เปลี่ยน Need ข้ามกลุ่ม:** ถ้าสถานะของกลุ่มเดิมมีค่าใน Sheet → ไม่ล้างเงียบ ๆ แจ้งเตือนในฟอร์มทันที และต้องกด "ยืนยันเปลี่ยน Need" ก่อนบันทึก · Audit Log บันทึกค่าเดิมที่ถูกล้าง · เปลี่ยนภายในกลุ่มเดียวกัน (ซื้อ ↔ เช่า ↔ สร้าง) สถานะคงเดิม
+- **Pipeline สำหรับ Dashboard:** คอลัมน์ `status` คำนวณอัตโนมัติจาก Buy/Sell Status (ไม่ต้องกรอก 2 สถานะ) · ติดต่อได้แล้ว + ยังไม่มีสถานะ = Contacted · qualified_at / won_at ตั้งอัตโนมัติเหมือนเดิม → Qualified Leads, Won, Lead-to-Sale, Cost per Qualified Lead ใช้งานต่อได้ ไม่ต้องแก้ Dashboard
+- **Call Status** (ยังไม่ได้โทร / ติดต่อไม่ได้ / ติดต่อได้แล้ว) ค่าเริ่มต้น ยังไม่ได้โทร · ซิงก์ช่อง `contactable` เดิม (ได้ = TRUE, ไม่ได้ = FALSE)
+- **หน้า Leads:** ฟอร์มเรียงตาม Master · ข้อมูลรองพับไว้ใน "ข้อมูลเพิ่มเติม" (บริษัท อีเมล Campaign หมวดบริการ วันติดตาม UTM) · **ดูรายละเอียด** (หน้าดูอย่างเดียว) · แก้ไข · ลบ (เดิม) · เปลี่ยน Status และ Call Status จากตารางได้ทันที
+- **ค้นหาและกรอง:** ช่วงวันที่รับ Lead, Channel, Need, Status (ตาม Need ที่เลือก), Call Status, Staff, พื้นที่, หมวดบริการ · ค้นหาชื่อ/เบอร์/รหัส/Staff/Remark/Note
+- **กันข้อมูลซ้ำ:** lead_id/lead_code เดิม + เตือนเบอร์/อีเมลซ้ำ (เดิม)
+- **Export:** `leads.csv` มีคอลัมน์ใหม่ต่อท้ายอัตโนมัติ (ตัวกรองเดิม: วันที่/พื้นที่/ช่องทาง/Campaign)
+
+### Migration และข้อมูลเดิม
+- เพิ่ม 8 คอลัมน์ **ต่อท้าย** แท็บ LEADS ผ่านปุ่ม **เตรียม Google Sheet** (ไม่เปลี่ยนชื่อ/ลำดับคอลัมน์เดิม ไม่แก้ข้อมูลเดิม) · ถ้ายังไม่กด ระบบปฏิเสธการบันทึก Lead (กันเขียนผิดคอลัมน์)
+- Lead เก่าที่ยังไม่มี Need: แสดงได้ นับใน Dashboard ตามสถานะเดิม · ตอนแก้ไขต้องเลือก Need · ใส่ Need อย่างเดียวไม่ลดขั้น Pipeline เดิม (เช่น Proposal ยังเป็น Proposal) จนกว่าจะเลือก Buy/Sell Status
+- `owner_email` เดิมไม่แสดงในฟอร์มแล้ว แต่ค่าเดิมยังเก็บไว้ (ไม่ถูกลบ)
+
+### ไฟล์ที่เปลี่ยน
+| ไฟล์ | การเปลี่ยนแปลง |
+|---|---|
+| `src/lib/schema.ts` | LEADS เพิ่ม 8 คอลัมน์ต่อท้าย |
+| `src/lib/leads.ts` | รายการตัวเลือก, Need → Status, `pipelineOf`, `resolveNeedStatus`, Validation, ตัวกรองใหม่ |
+| `src/lib/leads-service.ts` | ยืนยันการเปลี่ยน Need, คำนวณ status/contactable, รายชื่อ Staff, Audit ละเอียดขึ้น |
+| `src/components/LeadsManager.tsx` | ฟอร์ม/ตาราง/ตัวกรอง/หน้าดูรายละเอียดใหม่ |
+| `src/app/(app)/leads/page.tsx` | ปรับการเรียก Component |
+| `tests/e2e.test.mts` | ปรับส่วนที่ 8, 11, 12 ให้ใช้ Need/Buy Status + ส่วนที่ 15 ใหม่ (13 ข้อ) |
+
+### Data / Schema Impact
+- **LEADS:** +8 คอลัมน์ต่อท้าย `need, buy_status, sell_status, property_type, property_condition, price_range, call_status, staff` → **ต้องกด ตั้งค่า → เตรียม Google Sheet หลัง deploy**
+- คอลัมน์ `status` ยังอยู่ แต่ค่าถูกคำนวณจาก Buy/Sell Status เมื่อบันทึก (Lead ใหม่จะไม่มีค่า Proposal)
+- `leads.csv`: +8 คอลัมน์ต่อท้าย
+
+### Test Results
+**Passed (รันจริง):** 229/229
+| ชุด | ผล |
+|---|---|
+| e2e (ส่วนที่ 15 ใหม่ 13 ข้อ + ปรับส่วน Lead เดิม) | 96/96 |
+| overview / fbactions / fbpage / import / dashboard / sales / security | 20 / 9 / 22 / 33 / 19 / 18 / 12 |
+| TypeScript และ Production build | ผ่าน |
+
+ครอบคลุม: Migration แท็บเดิม (คอลัมน์และข้อมูลเดิมไม่เปลี่ยน), Lead เก่าไม่มี Need, Need → Buy/Sell Status, ค่าไม่ถูกต้อง, เปลี่ยน Need ต้องยืนยัน + Audit, Won/Lost/Qualified จากสถานะใหม่, Call Status → contactable, ตัวกรองใหม่, Dashboard Qualified = 4 จากข้อมูลทดสอบ, Export คอลัมน์ใหม่
+
+**Failed:** 0
+
+**Not Tested:**
+- หน้า Leads บนเบราว์เซอร์จริงและมือถือ (ฟอร์ม, การสลับ Need, ปุ่มยืนยัน) — ตรวจด้วย TypeScript/build และทดสอบ Logic ฝั่งเซิร์ฟเวอร์เท่านั้น
+- Google Sheet จริง (ทดสอบกับ Sheets จำลอง)
+
+### Known Issues
+- กราฟ Pipeline ใน Dashboard ยังใช้ขั้นเดิม (New/Contacted/Qualified/Proposal/Won/Lost) ซึ่ง Lead ใหม่จะไม่มี Proposal — ถ้าต้องการกราฟตาม Hot/Warm/Cold หรือ Sell Status ทำได้ใน Phase 6
+- ตัวกรองของ Export leads.csv ยังเป็นชุดเดิม (วันที่/พื้นที่/ช่องทาง/Campaign) ยังไม่มีตัวกรอง Need/Status
+- Staff เป็นข้อความอิสระ พิมพ์ต่างกันเล็กน้อย (เช่นเว้นวรรค) จะถือเป็นคนละคน — มีรายชื่อเดิมให้เลือกเพื่อลดปัญหานี้
+
+### Next Phase
+**Phase 5 — Website Analytics:** ข้ามไว้ตามที่ผู้ใช้แจ้ง (รอข้อมูล) → ขั้นต่อไปคือ **Phase 6 — Marketing Performance Dashboard** เริ่มเมื่อผู้ใช้สั่ง "ทำขั้นต่อไป"

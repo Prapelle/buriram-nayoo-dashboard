@@ -12,7 +12,7 @@ export default async function LeadsPage() {
         <h1 className="text-2xl font-bold">Leads</h1>
         <p className="text-sm text-slate-500">บันทึกและติดตามลูกค้า · มีข้อมูลส่วนบุคคล เข้าถึงได้เฉพาะ Admin และ Sales</p>
       </div>
-      <LeadsManager me={s!.user.email!} />
+      <LeadsManager />
     </section>
   );
 }
