@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { ExportForm, type DatasetInfo } from "@/components/ExportForm";
 import { CHANNELS } from "@/lib/dashboard";
@@ -8,7 +9,8 @@ import { readColumns } from "@/lib/tabdata";
 export const dynamic = "force-dynamic";
 
 export default async function ExportPage() {
-  const role = (await auth())!.user.role!;
+  const role = (await auth())?.user?.role;
+  if (!role) redirect("/login"); // layout ก็พาไป /login อยู่แล้ว แต่ page เรนเดอร์พร้อมกัน จึงต้องไม่ถือว่ามีเซสชันเสมอ
   const datasets: DatasetInfo[] = DATASETS.filter((d) => d.roles.includes(role)).map((d) => ({
     id: d.id, label: d.label, group: d.group, filename: d.filename, note: d.note, grain: d.grain, sensitive: d.sensitive, route: d.route, applies: d.applies,
   }));

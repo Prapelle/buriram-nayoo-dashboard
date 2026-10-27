@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/auth";
 import { fetchDashboardData } from "@/lib/dashboard-data";
@@ -20,7 +21,8 @@ const Card = ({ title, children }: { title: string; children: React.ReactNode })
 
 export default async function OverviewPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams;
-  const role = (await auth())!.user.role!;
+  const role = (await auth())?.user?.role;
+  if (!role) redirect("/login"); // layout ก็พาไป /login อยู่แล้ว แต่ page เรนเดอร์พร้อมกัน จึงต้องไม่ถือว่ามีเซสชันเสมอ
   const f: Filters = {
     from: iso(one(sp.from)), to: iso(one(sp.to)), channel: one(sp.channel) || undefined,
     campaign: one(sp.campaign) || undefined, area: one(sp.area) || undefined, service: one(sp.service) || undefined,

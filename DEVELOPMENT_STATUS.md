@@ -1,6 +1,6 @@
 # DEVELOPMENT_STATUS — Buriram NAYOO Marketing Dashboard
 
-อัปเดตล่าสุด: Phase 8 (27/10/2026) · Phase ปัจจุบันเสร็จแล้ว รอคำสั่ง "ทำขั้นต่อไป" สำหรับ Phase 9
+อัปเดตล่าสุด: Phase 9 (27/10/2026) · Phase ปัจจุบันเสร็จแล้ว รอคำสั่ง "ทำขั้นต่อไป" สำหรับ Phase 10
 
 ## สถานะรวม
 | Phase | งาน | สถานะ |
@@ -9,12 +9,12 @@
 | 1 | Facebook Page CSV: Metric Date + Business Key | เสร็จ · ผู้ใช้ยืนยันบนเว็บจริงแล้ว (27/10/2026) |
 | 2 | Marketing Overview: Total Paid Media Spend / Total Leads / CPL | เสร็จ · ผู้ใช้ยืนยันบนเว็บจริงแล้ว (27/10/2026) |
 | 3 | Facebook Ads Action Names | เสร็จ · ผู้ใช้ยืนยันบนเว็บจริงแล้ว (27/10/2026) |
-| 4 | Lead Management (ฟิลด์ใหม่ + Need/Status Logic) | เสร็จ (ทดสอบอัตโนมัติผ่าน · ผู้ใช้ยังไม่ได้รายงานผลบนเว็บจริง) |
+| 4 | Lead Management (ฟิลด์ใหม่ + Need/Status Logic) | เสร็จ · ผู้ใช้ยืนยันบนเว็บจริงแล้ว (27/10/2026) |
 | 5 | Website Analytics Import | **ข้ามไปก่อน (รอข้อมูลจากผู้ใช้)** |
-| 6 | Marketing Performance Dashboard (+ กราฟ Lead ตาม Buy/Sell Status) | เสร็จ (ทดสอบอัตโนมัติผ่าน · ผู้ใช้ยังไม่ได้รายงานผลบนเว็บจริง) |
-| 7 | YoY Comparison | เสร็จ (ทดสอบอัตโนมัติผ่าน · ผู้ใช้ยังไม่ได้รายงานผลบนเว็บจริง) |
-| 8 | Export (Looker Studio ถูกตัดออกจากขอบเขต) | **เสร็จ (ทดสอบอัตโนมัติผ่าน · ยังไม่ทดสอบบนเว็บจริง) — รอคำสั่ง** |
-| 9 | Integration Testing | ยังไม่เริ่ม |
+| 6 | Marketing Performance Dashboard (+ กราฟ Lead ตาม Buy/Sell Status) | เสร็จ · ผู้ใช้ยืนยันบนเว็บจริงแล้ว (27/10/2026) |
+| 7 | YoY Comparison | เสร็จ · ผู้ใช้ยืนยันบนเว็บจริงแล้ว (27/10/2026) |
+| 8 | Export (Looker Studio ถูกตัดออกจากขอบเขต) | เสร็จ (ทดสอบอัตโนมัติ + HTTP Integration ผ่าน · ผู้ใช้ยังไม่ได้รายงานผลบนเว็บจริง) |
+| 9 | Integration Testing | **เสร็จ (310/310 ผ่าน) — รอคำสั่ง** |
 | 10 | Final Audit & Handover | ยังไม่เริ่ม |
 
 ## ข้อจำกัดของ Audit รอบนี้ (ต้องอ่านก่อน)
@@ -637,3 +637,70 @@
 
 ### Next Phase
 **Phase 9 — Integration Testing** เริ่มเมื่อผู้ใช้สั่ง "ทำขั้นต่อไป"
+
+## 20) รายงาน Phase 9 — Integration Testing
+
+### วิธีทดสอบ
+1. **ชุดทดสอบเดิมทั้งหมด** (ระดับฟังก์ชันและ service + Google Sheets จำลอง) — 285 รายการ
+2. **ใหม่: Integration ระดับ HTTP** (`tests/integration/run.mjs`) — เปิด **เซิร์ฟเวอร์ Next จริงจาก production build** แล้วเรียกหน้าเว็บและ API แบบที่เบราว์เซอร์เรียก
+   - Google Sheets API และ OAuth token แทนด้วยตัวจำลองในหน่วยความจำ (`tests/integration/fake-sheets.mjs`, โหลดผ่าน `preload.mjs`)
+   - ล็อกอินด้วย **คุกกี้เซสชันจริงของ Auth.js** (เข้ารหัสด้วย AUTH_SECRET) — Role อ่านจากแท็บ APP_USERS ทุกคำขอ เหมือนระบบจริง
+   - เริ่มจาก Sheet ว่าง → เตรียม Sheet → เพิ่มผู้ใช้ → นำเข้าไฟล์จริง → Leads → Dashboard → Performance → YoY → Export → Health
+
+### ผลรวมตามโมดูล
+| # | โมดูล | ข้อมูลปกติ | ข้อมูลซ้ำ | ข้อมูลไม่ครบ | ตัวหารเป็นศูนย์ | กรองวันที่ | ไฟล์ผิด | ผล |
+|---|---|---|---|---|---|---|---|---|
+| 1 | Facebook Page Import | 120 แถว (ข้าม 270) | ไฟล์ซ้ำถูกบล็อก / Admin ยืนยัน +0 | ไฟล์รายวันไม่มี Reach → รอข้อมูล | — | ตาม metric_date | หัวไม่รู้จัก, ไฟล์ว่าง, วันที่ปน 2 รูปแบบ → 422 | ผ่าน |
+| 2 | Facebook Ads | 103 แถว, Spend 37,557.54 | (e2e) นำเข้าซ้ำ +0 | (e2e) ไม่มีผลลัพธ์ 29 แถว | — | ช่วงรายงานทับ | (e2e) | ผ่าน |
+| 3 | Google Ads | Campaign + Time series | (e2e) | ไม่มีช่วงวันที่ → 422 PERIOD_REQUIRED | CPC Clicks 0 → N/A (unit) | Time series ตัดช่วงได้ | (e2e) | ผ่าน |
+| 4 | Marketing Overview | Total Paid 66,372.36 | Lead ซ้ำนับครั้งเดียว | ไม่มี Lead → รอข้อมูล · ช่วงย่อยของรายงาน → เตือน | ไม่มี Lead จากโฆษณา → CPL N/A | CPL ช่วงเดียวกัน (Lead ต.ค. ไม่นับ) | — | ผ่าน |
+| 5 | Lead Management | สร้าง/แก้/ลบ, Staff | เบอร์ซ้ำ (+66) → 409 | Lead เก่าไม่มี Need | — | กรองวันที่รับ | สถานะไม่ตรง Need → 422 · เปลี่ยน Need ต้องยืนยัน | ผ่าน |
+| 6 | Website Analytics | **ไม่มีโมดูล (Phase 5 ข้าม)** — ตรวจว่าแสดง รอข้อมูล ไม่ใช่ 0 | — | ✔ | — | — | — | ผ่าน (ตามขอบเขต) |
+| 7 | Marketing Performance | 28,814.82 / 31,513 / CPC 0.91 · Meta · FB 319 | Time series ≠ Campaign → เตือน | ข้อมูลรายวันครึ่งเดือน → ไม่ครบ | Clicks 0 → N/A | 10–20 ก.ย. = 9,613.98 | — | ผ่าน |
+| 8 | YoY | ปีก่อนมีข้อมูล (ข้อมูลทดสอบ) | — | ไม่มีปีก่อน → Missing Data | ปีก่อน 0 → N/A | ช่วงวันเดียวกันของปีก่อน / 29 ก.พ. | — | ผ่าน |
+| 9 | Export | 24 ชุด, 17,139 ช่องตรงชนิด, ดาวน์โหลดจริง text/csv + BOM | สรุปไม่นับซ้ำ | ช่องว่าง = ไม่มีข้อมูล | yoy_status zero_base | from/to | Need ผิด → 400 | ผ่าน |
+| 10 | Login และสิทธิ์ | Admin/Marketing/Sales | — | ผู้ใช้ปิดใช้งาน / ไม่อยู่ในรายชื่อ → 401 | — | — | cross-site → 403 · หน้าเว็บที่ไม่มีสิทธิ์ถูกพาออกโดยไม่แสดงเนื้อหา | ผ่าน |
+| 11 | Looker Studio Compatibility | **ตัดออกจากขอบเขต (ข้อ G)** — ไม่ได้ทดสอบ | | | | | | ไม่ทดสอบ |
+
+### สิ่งที่พบและแก้ (แก้ทีละจุด ระบุสาเหตุ)
+| ปัญหา | สาเหตุ | แก้ |
+|---|---|---|
+| หน้า ภาพรวมการตลาด และ ส่งออกข้อมูล เกิด error ฝั่งเซิร์ฟเวอร์เมื่อไม่มีเซสชัน (ผู้ใช้ยังถูกพาไป /login ตามปกติ แต่เซิร์ฟเวอร์บันทึก error) | Next เรนเดอร์ layout และ page พร้อมกัน; page ใช้ `auth()!` โดยถือว่ามีเซสชันเสมอ | `src/app/(app)/page.tsx`, `src/app/(app)/export/page.tsx`: ตรวจเซสชันแล้ว redirect ไป /login (2 บรรทัดต่อไฟล์ ไม่เปลี่ยนการคำนวณ) |
+| (เทสต์) แถวทดสอบในตัวจำลองมีช่องว่างแบบ null | ตัวจำลองเท่านั้น — Google API จริงคืนค่าว่าง "" | แก้ข้อมูลทดสอบ (Phase 8) |
+
+ข้อสังเกต (ไม่ใช่ข้อผิดพลาด):
+- หน้าที่มี loading.tsx ใช้ streaming: การพาออกจากหน้าที่ไม่มีสิทธิ์ส่งเป็นคำสั่ง redirect ในเนื้อหา (สถานะ 200) ไม่ใช่ HTTP 307 — เนื้อหาของหน้าไม่ถูกส่งออก (ตรวจแล้ว) และ API ทุกตัวตรวจสิทธิ์ด้วย 401/403 แยกอยู่แล้ว
+- ภาพรวมการตลาด เมื่อเลือกช่วงย่อยของรายงานโฆษณา แสดงคำเตือนระดับหน้า (ไม่ใช่ป้ายบนการ์ด Total Paid) — ทำงานตามที่ออกแบบใน Phase 2
+
+### ไฟล์ที่เปลี่ยน
+| ไฟล์ | การเปลี่ยนแปลง |
+|---|---|
+| `src/app/(app)/page.tsx`, `src/app/(app)/export/page.tsx` | กันเซสชันว่าง (redirect /login) |
+| `tests/integration/fake-sheets.mjs`, `preload.mjs`, `run.mjs` (ใหม่), `tests/run-all.sh` | Integration ระดับ HTTP |
+
+### Data / Schema Impact
+- ไม่เปลี่ยน Schema ไม่เขียน/ลบข้อมูลจริง (ทดสอบกับ Sheet จำลองเท่านั้น)
+
+### Test Results
+**Passed (รันจริง):** 310/310
+| ชุด | ผล |
+|---|---|
+| http-integration (ใหม่ · เซิร์ฟเวอร์ Next จริง) | 25/25 |
+| e2e | 106/106 |
+| import / performance / fbpage / overview / dashboard / sales / yoy / security / fbactions / kpicard | 33 / 23 / 22 / 20 / 19 / 18 / 15 / 12 / 9 / 8 |
+| TypeScript และ Production build (Cloudflare) | ผ่าน |
+
+**Failed:** 0
+
+**Not Tested:**
+- Google Sheets จริงและ Google Login จริง (ใช้ตัวจำลองและคุกกี้เซสชันที่สร้างเอง) — ผู้ใช้ยืนยัน Phase 1–4, 6, 7 บนเว็บจริงแล้ว
+- Integration รันบน Node (next start) ไม่ใช่ Cloudflare Workers runtime — build สำหรับ Workers ผ่าน แต่ไม่ได้รันทดสอบใน workerd
+- Website Analytics (ไม่มีโมดูล) และ Looker Studio (ตัดออก)
+- เบราว์เซอร์จริง/มือถือ (ทดสอบผ่าน HTTP และ HTML ที่เซิร์ฟเวอร์ส่ง ไม่ได้รัน JavaScript ฝั่งหน้าเว็บ)
+- Phase 8 (Export) บนเว็บจริง: ผู้ใช้ยังไม่ได้รายงานผล
+
+### Known Issues
+- ไม่มีปัญหาค้างที่ทำให้ตัวเลขผิด · ข้อจำกัดเดิม: Meta Ads เป็นยอดรวมทั้งช่วง (ตัดรายวันไม่ได้), Website รอข้อมูล, ข้อมูลปีก่อนยังไม่มี
+
+### Next Phase
+**Phase 10 — Final Audit & Handover** เริ่มเมื่อผู้ใช้สั่ง "ทำขั้นต่อไป"
