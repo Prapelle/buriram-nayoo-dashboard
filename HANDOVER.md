@@ -131,13 +131,13 @@
 4. รายงานยอดขาย Excel: เมนู Sales → นำเข้ารายงานยอดขาย · LINE OA: เมนู LINE OA (เดือนละแถว)
 
 ### 4.2 Leads (Admin / Sales)
-- **+ เพิ่ม Lead:** Date, Channel, Name, Phone, **Need** → Status ตาม Need (ซื้อ/เช่า/สร้าง = Buy Status: Hot/Warm/Cold/Archive/Close · ขาย = Sell Status), Type, Condition, Price, Call Status, Staff, Remark, Note
+- **+ เพิ่ม Lead:** Date, Channel, Name, Phone, **Need** → Status ตาม Need (ซื้อ/เช่า/สร้าง = Buy Status: Hot/Warm/Cold/Archive/Close · ขาย = Sell Status), Type, Condition, Price, Call Status (ยังไม่ได้โทร / ติดต่อไม่ได้ / ติดต่อได้แล้ว / ไม่สนใจ), Staff, Remark, Note
 - เปลี่ยน Status / Call Status จากตารางได้ทันที · **ดู** = รายละเอียด · **แก้ไข** · ลบ (ยืนยัน 2 ขั้น)
 - เปลี่ยน Need ข้ามกลุ่ม (เช่น ขาย → ซื้อ) ระบบถามยืนยันก่อนล้างสถานะเดิม และบันทึกค่าเดิมใน Audit Log
 - ระบบคำนวณขั้น Pipeline ให้เอง: Qualified = Hot, Warm, Close, นัดทำสัญญา, ทำสัญญา, เซ็นสัญญา, สัญญาเปิด, เป็นนายหน้า, ขายแล้ว · Won = Close, ขายแล้ว · Lost = Archive, ยกเลิก, บ้านไม่พร้อมขาย
 
 ### 4.3 Dashboard
-- **ภาพรวมการตลาด:** Total Paid Media Spend, Total Leads (lead_id ไม่ซ้ำ), CPL จาก Ads / ทั้งหมด, Facebook, LINE OA, Sales, กราฟ Lead ตาม Buy/Sell Status · ตัวกรอง วันที่/ช่องทาง/Campaign/พื้นที่/Service · **เปรียบเทียบ ปีก่อน/ช่วงก่อน** (ต้องเลือกวันที่ก่อน)
+- **ภาพรวมการตลาด:** Total Paid Media Spend, Total Leads (lead_id ไม่ซ้ำ), Qualified Leads, CPL จาก Ads / ทั้งหมด, **Lead Qualification** (จำนวน Lead ที่ Call Status = ติดต่อได้แล้ว + กราฟแยกตามช่องทาง), Facebook, LINE OA, กราฟ Lead ตาม Buy/Sell Status (ไม่มีการ์ดยอดขาย/การเงินแล้ว — ดูที่หน้า Sales) · ตัวกรอง วันที่/ช่องทาง/Campaign/พื้นที่/Service · **เปรียบเทียบ ปีก่อน/ช่วงก่อน** (ต้องเลือกวันที่ก่อน)
 - **Marketing Performance:** Google Ads Spend/Clicks/CPC, Meta Ads, Facebook Page (Organic), Website (รอข้อมูล) แยก Paid/Organic/Website · กราฟรายวัน/รายเดือน · ตารางตามแพลตฟอร์ม · สถานะความครบของข้อมูล · เปรียบเทียบ YoY
 - อ่านสถานะ: **รอข้อมูล** = ไม่มีข้อมูล (ไม่ใช่ 0) · **N/A** = หารด้วย 0 · **ข้อมูลไม่ครบ** = มีค่าแต่ช่วงข้อมูลไม่ครบ (อ่านเหตุผลบนการ์ด) · **Missing Data** = ไม่มีข้อมูลช่วงเปรียบเทียบ
 

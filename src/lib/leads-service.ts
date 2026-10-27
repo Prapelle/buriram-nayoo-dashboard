@@ -58,7 +58,8 @@ export async function saveLead(input: Record<string, unknown>, actor: string) {
   // ขั้น Pipeline เดิม (ใช้ใน Dashboard) คำนวณจาก Buy/Sell Status · Lead เก่าที่ยังไม่มี Need ไม่ถูกลดขั้นโดยอัตโนมัติ
   const derived = pipelineOf(recIn);
   recIn.status = prev && !prev.need && !leadStatusOf(recIn) && ["Qualified", "Proposal", "Won", "Lost"].includes(prev.status) ? prev.status : derived;
-  if (recIn.call_status === "ติดต่อได้แล้ว") recIn.contactable = "TRUE"; else if (recIn.call_status === "ติดต่อไม่ได้") recIn.contactable = "FALSE";
+  // ติดต่อได้แล้ว / ไม่สนใจ = คุยกับลูกค้าได้แล้ว → contactable TRUE · ติดต่อไม่ได้ → FALSE
+  if (recIn.call_status === "ติดต่อได้แล้ว" || recIn.call_status === "ไม่สนใจ") recIn.contactable = "TRUE"; else if (recIn.call_status === "ติดต่อไม่ได้") recIn.contactable = "FALSE";
   v.rec = recIn;
   const stamps = stampStatus(prev, v.rec, today);
   if (!prev) {

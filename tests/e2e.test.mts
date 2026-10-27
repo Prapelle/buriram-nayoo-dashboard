@@ -161,7 +161,7 @@ const kv2 = Object.fromEntries(dash.groups.flatMap((g) => g.items).map((k) => [k
 assert.equal(kv2.paid.value, 66427.73); // 66,372.36 + 55.37 จากการแก้ค่าในหัวข้อ 4 assert.equal(kv2.posts.value, 54); assert.equal(kv2.reach.value, 191119); assert.equal(kv2.clicks.value, 2646);
 assert.equal(dash.charts.daily!.length, 30); assert.equal(dash.warnings.length, 0);
 ok("Dashboard จากแท็บจริง: Total Paid (หลังแก้ค่าทดสอบ +55.37) / 54 โพสต์ / Reach 191,119 / Link Clicks 2,646");
-const mk = computeDashboard(await fetchDashboardData("marketing"), {}, "marketing"); assert.equal(mk.groups[3].items[3].state, "restricted"); ok("Marketing: อ่านข้อมูลการเงินไม่ได้ (restricted)");
+const mkd = await fetchDashboardData("marketing"); const mk = computeDashboard(mkd, {}, "marketing"); assert.ok(mkd.sales.every((r) => !("deal_value_thb" in r) && !("company_revenue_thb" in r))); assert.ok(!mk.groups.flatMap((g) => g.items).some((k) => k.fmt === "thb" && /Deal Value|Company Revenue|Direct Cost|Gross Profit/.test(k.label))); ok("Marketing: ไม่อ่านคอลัมน์การเงินจาก Sheet และ Dashboard ไม่มีการ์ดการเงินแล้ว");
 const cols = await readColumns("META_ADS", { only: ["ad_name", "amount_spent_thb", "raw_json"], exclude: ["raw_json"] });
 assert.deepEqual(cols.headers, ["ad_name", "amount_spent_thb"]); assert.equal(cols.rows.length, 103); ok("readColumns: เลือกคอลัมน์ได้ และไม่ดึง raw_json");
 assert.deepEqual(await getExcludedPages(["x"]), ["BAAN Prompt Community - Buriram&Surin"]); ok("ค่า excluded_fb_pages อ่านจาก APP_CONFIG");
@@ -499,6 +499,15 @@ assert.equal(dash15.leads, all15.length); assert.equal(dash15.qualified, 4);
 ok("Dashboard: Total Leads = 6, Qualified = 4 (Proposal เดิม + Warm + Close + ขายแล้ว) แปลงจาก Buy/Sell Status ตามที่ตกลง");
 const lx = await exp("leads", {}, "admin"); assert.deepEqual(lx.headers.slice(-8), ["need", "buy_status", "sell_status", "property_type", "property_condition", "price_range", "call_status", "staff"]);
 assert.ok(lx.rows.some((r) => r.need === "ขาย" && r.sell_status === "ขายแล้ว")); ok("Export leads.csv: คอลัมน์ใหม่ 8 คอลัมน์ต่อท้าย ข้อมูลครบ");
+console.log("15b) คำขอเพิ่มเติม: Call Status ไม่สนใจ + Lead Qualification");
+const ni = (await saveLead({ ...base, customer_name: "ไม่สนใจ", phone: "0867777777", need: "ซื้อ", call_status: "ไม่สนใจ" }, "s@x.com")).lead;
+assert.equal(ni.call_status, "ไม่สนใจ"); assert.equal(ni.contactable, "TRUE");
+assert.equal(filterLeads((await listLeads()).rows, { callStatus: "ไม่สนใจ" }).length, 1);
+const dq = computeDashboard(await fetchDashboardData("marketing"), {}, "marketing"); const kq = Object.fromEntries(dq.groups.flatMap((g) => g.items).map((x) => [x.key, x]));
+const contactedNow = (await listLeads()).rows.filter((r) => r.call_status === "ติดต่อได้แล้ว");
+assert.equal(kq.lead_qual.value, contactedNow.length); assert.equal(dq.charts.leadQualByChannel!.reduce((t, x) => t + x.value, 0), contactedNow.length);
+assert.ok(!("won" in kq) && !("gp" in kq) && !("rate" in kq));
+ok(`Call Status "ไม่สนใจ" บันทึกได้ (contactable TRUE) และกรองได้ · Lead Qualification = ${contactedNow.length} (เฉพาะ ติดต่อได้แล้ว) รวมทุกช่องทางในกราฟเท่ากัน · ไม่มีการ์ด Won/Gross Profit/Lead-to-Sale`);
 console.log("16) Phase 6 — Marketing Performance ผ่าน Sheets จำลอง");
 const { computePerformance } = await import("../src/lib/performance");
 const pd = await fetchDashboardData("marketing"); const perf = computePerformance(pd, { from: "2026-09-01", to: "2026-09-30" });
@@ -507,7 +516,7 @@ assert.equal(pk.g_spend.value, 28814.82); assert.equal(pk.g_clicks.value, 31513)
 assert.equal(perf.warnings.length, 1); assert.ok(perf.warnings[0].includes("28,870.19")); // ส่วนที่ 3 แก้ Cost แคมเปญ +55.37 ไว้ → Time series กับ Campaign ไม่ตรงกันจริง
 ok("อ่านจาก Sheet (จำลอง): Google Spend 28,814.82 / Clicks 31,513 จาก Time series, Meta 37,557.54, Facebook Engagement 319 · เตือนเพราะ Campaign Report ถูกแก้ไว้ในส่วนที่ 3 (28,870.19) ยอดไม่ตรงกัน");
 const dc16 = computeDashboard(pd, {}, "marketing").charts;
-assert.deepEqual(dc16.buyStatus!.filter((x) => x.value).map((x) => [x.label, x.value]), [["Warm", 1], ["Close", 1], ["(ยังไม่ระบุสถานะ)", 1]]);
+assert.deepEqual(dc16.buyStatus!.filter((x) => x.value).map((x) => [x.label, x.value]), [["Warm", 1], ["Close", 1], ["(ยังไม่ระบุสถานะ)", 2]] /* +1 จาก Lead "ไม่สนใจ" ในส่วนที่ 15b */);
 assert.equal(dc16.sellStatus!.find((x) => x.label === "ขายแล้ว")!.value, 1); assert.equal(dc16.sellStatus!.find((x) => x.label === "บ้านไม่พร้อมขาย")!.value, 1);
 ok("Dashboard กราฟ Buy Status / Sell Status จาก Lead ใน Sheet (ข้อมูล Marketing ไม่มีชื่อ/เบอร์)");
 console.log("17) Phase 8 — Export: โครงสร้าง ชนิดข้อมูล และการไม่นับซ้ำ");

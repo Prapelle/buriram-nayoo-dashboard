@@ -26,6 +26,8 @@ export type Dashboard = {
     spendByChannel: { label: string; value: number }[] | null;
     leadsByChannel: { label: string; value: number }[] | null;
     pipeline: { label: string; value: number }[] | null;
+    /** Lead Qualification (Call Status = ติดต่อได้แล้ว) แยกตามช่องทางของ Lead */
+    leadQualByChannel: { label: string; value: number }[] | null;
     /** Phase 6: Lead แยกตาม Buy Status (ซื้อ/เช่า/สร้าง) และ Sell Status (ขาย) */
     buyStatus: { label: string; value: number }[] | null;
     sellStatus: { label: string; value: number }[] | null;
@@ -145,9 +147,6 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
     ((!f.from && !f.to) || inRange(day(r.received_at), f))
     && (!f.channel || r.source_channel === f.channel) && (!f.campaign || r.campaign_name === f.campaign)
     && (!f.area || areaOf(r) === f.area) && (!f.service || r.service_category === f.service));
-  const salesOk = (r: Row) => (!f.channel || r.source_channel === f.channel) && (!f.campaign || r.campaign_name === f.campaign) && (!f.service || r.service_category === f.service);
-  const won = data.sales.filter((r) => salesOk(r) && !["Cancelled", "Refunded"].includes(r.payment_status) && ((!f.from && !f.to) || inRange(day(r.closing_date), f)));
-  const revRows = data.sales.filter((r) => salesOk(r) && !["Cancelled", "Refunded"].includes(r.payment_status) && ((!f.from && !f.to) || inRange(day(r.revenue_date || r.closing_date), f)));
 
   // ---- KPI ----
   const mSum = sumOf(meta, "amount_spent_thb"), gSum = sumOf(google, "cost_thb");
@@ -181,15 +180,9 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
   const leadsQ = leads.filter(qualified).length;
   const paidLeads = leads.filter((r) => PAID_CHANNELS.includes(r.source_channel));
   const paidLeadsQ = paidLeads.filter(qualified).length;
-  const wonLeads = leads.filter((r) => r.status === "Won").length;
+  // Lead Qualification = Lead ที่ Call Status = ติดต่อได้แล้ว (นับ lead_id ไม่ซ้ำ ตามตัวกรองเดียวกับ Total Leads)
+  const contacted = leads.filter((r) => r.call_status === "ติดต่อได้แล้ว");
 
-  const restricted = role === "marketing";
-  const dv = sumOf(won, "deal_value_thb");
-  const rev = sumOf(revRows, "company_revenue_thb"), cost = sumOf(revRows, "direct_cost_thb");
-  const both = revRows.filter((r) => num(r.company_revenue_thb) !== null && num(r.direct_cost_thb) !== null);
-  const gp = both.reduce((s, r) => s + (num(r.company_revenue_thb) ?? 0) - (num(r.direct_cost_thb) ?? 0), 0);
-  const fin = (key: string, label: string, v: number | null, note?: string) =>
-    restricted ? kpi(key, label, "thb", null, "restricted") : kpi(key, label, "thb", v, undefined, note);
 
   const ex = (key: string, label: string, fmt: Kpi["fmt"], c: keyof typeof CH, v: number | null, note?: string) =>
     excluded(c) ? kpi(key, label, fmt, null, "excluded") : kpi(key, label, fmt, v, undefined, note);
@@ -206,7 +199,6 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
     return kpi(key, label, "thb", Math.round((paidTotal / base.length) * 100) / 100, undefined, `${formula} · ฐาน ${base.length} Lead ที่รับ ${cplPeriod} (ช่วงเดียวกับค่าโฆษณา)`, cplIncomplete);
   };
   const cplAdsBase = cplLeads.filter((r) => PAID_CHANNELS.includes(r.source_channel));
-  const rate = leadsTotal > 0 ? Math.round((wonLeads / leadsTotal) * 1000) / 10 : null;
 
   const groups: Dashboard["groups"] = [
     { title: "ค่าโฆษณา", items: [
@@ -226,20 +218,15 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
       ex("line_inq", "LINE OA Inquiries", "int", "line", lineInq.n ? lineInq.sum : null),
       ex("line_leads", "LINE OA Leads", "int", "line", lineLeads.n ? lineLeads.sum : null),
     ] },
-    { title: "Leads และ Sales", items: [
+    { title: "Leads", items: [
       kpi("leads", "Total Leads", "int", leadsAll.length ? leadsTotal : null, undefined, "นับ lead_id ไม่ซ้ำ ตามวันที่รับ Lead ในช่วงที่เลือก"),
       kpi("qualified", "Qualified Leads", "int", leadsTotal ? leadsQ : null, undefined, "นับ Lead ที่สถานะ Qualified / Proposal / Won หรือมีวันที่ Qualified"),
-      kpi("won", "Won Deals", "int", won.length || null, undefined, "ไม่นับ Cancelled / Refunded"),
-      fin("deal", "Deal Value", dv.n ? dv.sum : null, "มูลค่าดีล ไม่ใช่รายได้บริษัท"),
-      fin("revenue", "Company Revenue", rev.n ? rev.sum : null),
-      fin("cost", "Direct Cost", cost.n ? cost.sum : null),
-      fin("gp", "Gross Profit", both.length ? Math.round(gp * 100) / 100 : null, both.length ? `คำนวณจาก ${both.length} ดีลที่มีทั้งรายได้และต้นทุน (จาก ${revRows.length})` : undefined),
     ] },
     { title: "ประสิทธิภาพ (ไม่ใช่ ROI เชิงสาเหตุ)", items: [
       cplKpi("cpl", "CPL (Lead จากโฆษณา)", cplAdsBase, "Lead จาก Facebook Ads + Google Ads"),
       cplKpi("cpl_all", "CPL (Lead ทั้งหมด)", cplLeads, "Total Leads ทุกช่องทาง"),
       cplKpi("cplq", "Cost per Qualified Lead", cplAdsBase.filter(qualified), "Qualified Lead จากโฆษณา"),
-      kpi("rate", "Lead-to-Sale Rate", "pct", rate, undefined, `Lead สถานะ Won ÷ Lead ทั้งหมดที่รับในช่วงที่เลือก (ฐาน ${leadsTotal} Lead)`),
+      kpi("lead_qual", "Lead Qualification", "int", leadsAll.length ? contacted.length : null, undefined, `จำนวน Lead ที่ Call Status = ติดต่อได้แล้ว จาก ${leadsTotal} Lead ในช่วงที่เลือก (แยกตามช่องทางดูที่กราฟ)`),
     ] },
   ];
 
@@ -295,6 +282,7 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
       spendByChannel: spendByChannel.length ? spendByChannel : null,
       leadsByChannel: leadsTotal ? countBy(leads, "source_channel") : null,
       pipeline: leadsTotal ? countBy(leads, "status", PIPELINE) : null,
+      leadQualByChannel: leadsAll.length ? CHANNELS.map((c) => ({ label: c, value: contacted.filter((r) => r.source_channel === c).length })).filter((x) => x.value > 0 || leads.some((r) => r.source_channel === x.label)) : null,
       buyStatus: statusChart(leads, BUY_NEEDS, "buy_status", BUY_STATUS),
       sellStatus: statusChart(leads, SELL_NEEDS, "sell_status", SELL_STATUS),
       lineGrowth, monthly: monthly.length ? monthly : null, daily: daily.length ? daily : null,
@@ -305,7 +293,7 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
 /**
  * Phase 7: คำนวณช่วงเปรียบเทียบ (ปีก่อน / ช่วงก่อนหน้า) ด้วย computeDashboard ตัวเดิมและตัวกรองเดิม แล้วจับคู่ KPI ตาม key
  * - ต้องเลือกช่วงวันที่ก่อน (ไม่เลือก = ข้อมูลทุกช่วงเวลา เปรียบเทียบไม่ได้)
- * - อัตราส่วน % (Lead-to-Sale) ไม่คิด % เปลี่ยนแปลงซ้อน · ยอดสะสม Lifetime ของ Facebook เทียบข้ามช่วงไม่ได้
+ * - อัตราส่วน % ไม่คิด % เปลี่ยนแปลงซ้อน (ปัจจุบันไม่มี KPI แบบ %) · ยอดสะสม Lifetime ของ Facebook เทียบข้ามช่วงไม่ได้
  */
 export function computeDashboardCompared(data: DashData, f: Filters, role: Role, mode?: CompareMode): { dash: Dashboard; prevRange: DRange | null; note?: string } {
   const dash = computeDashboard(data, f, role);

@@ -731,3 +731,16 @@
 2. ส่งไฟล์ตัวอย่าง Website Analytics เพื่อทำ Phase 5
 3. นำเข้าข้อมูลปี 2025 เพื่อใช้ YoY
 4. อัปเดต dependency ตามขั้นตอนใน HANDOVER.md หัวข้อ 7
+
+## 22) คำขอเพิ่มเติมหลังส่งมอบ (28/10/2026)
+
+| คำขอ | สิ่งที่ทำ |
+|---|---|
+| 1. ตัด Won Deals, Deal Value, Company Revenue, Direct Cost, Gross Profit | ลบการ์ดทั้ง 5 ออกจาก **หน้า ภาพรวมการตลาด** (กลุ่มเปลี่ยนชื่อเป็น "Leads") · **ไม่ได้แตะ** หน้า Sales, ไฟล์ Export `marketing_monthly_summary.csv` (คอลัมน์ won_deals / deal_value_thb / company_revenue_thb / direct_cost_thb / gross_profit_thb ยังอยู่) และข้อมูลใน Sheet |
+| 2. Lead-to-Sale Rate → Lead Qualification | การ์ดใหม่ **Lead Qualification** = จำนวน Lead (lead_id ไม่ซ้ำ ตามตัวกรองเดียวกับ Total Leads) ที่ Call Status = **ติดต่อได้แล้ว** · กราฟ **Lead Qualification แยกตามช่องทาง** (ช่องทางที่มี Lead แต่ยังไม่มีคนติดต่อได้แสดง 0) · เทียบปีก่อน/ช่วงก่อนได้ |
+| 3. เพิ่ม Call Status "ไม่สนใจ" | ตัวเลือกที่ 4 ในฟอร์ม/ตาราง/ตัวกรอง · ตั้ง contactable = TRUE (ติดต่อถึงลูกค้าแล้ว) · **ไม่นับ** ใน Lead Qualification · ขั้น Pipeline ยังคำนวณจาก Buy/Sell Status ตามเดิม |
+
+ไฟล์: `src/lib/dashboard.ts`, `src/lib/dashboard-data.ts` (อ่าน call_status — ไม่ใช่ข้อมูลส่วนบุคคล), `src/lib/lead-options.ts`, `src/lib/leads-service.ts`, `src/components/LeadsManager.tsx`, `src/app/(app)/page.tsx`, `HANDOVER.md`, ชุดทดสอบ
+Schema: ไม่เปลี่ยน (ใช้คอลัมน์ call_status เดิม)
+Test: **312/312 ผ่าน** (เพิ่ม e2e 15b และ HTTP Integration ตรวจหน้า ภาพรวม จริง) · TypeScript และ Cloudflare build ผ่าน
+Not Tested: หน้าเว็บจริงหลังการเปลี่ยนแปลงนี้

@@ -73,7 +73,8 @@ assert.equal(o.k.meta.prev, r2(meta25.reduce((s, r) => s + Number(r.amount_spent
 assert.match(o.k.paid.prevIncomplete ?? "", /Google Ads/); ok("มี Meta ปีก่อนแต่ไม่มี Google ปีก่อน → Total Paid ปีก่อนแสดงพร้อม ปีก่อนข้อมูลไม่ครบ · CPL ปีก่อนคำนวณด้วยกฎเดียวกัน");
 o = dash({ leads: leads.filter((r) => r.received_at.startsWith("2026")) }, SEP, "yoy"); assert.equal(o.k.leads.prev, 0); assert.equal(changePct(o.k.leads.value, 0).reason, "zero");
 ok("ปีก่อนไม่มี Lead (= 0 จริง เพราะมี Lead ในระบบ) → YoY = N/A");
-o = dash({}, SEP, "yoy"); const rate = o.k.rate; assert.equal(rate.prevBlocked, "เป็นอัตราส่วน ดูค่าของแต่ละช่วงแทน % เปลี่ยนแปลง"); ok("Lead-to-Sale Rate (%) ไม่คิด % ซ้อน");
+o = dash({ leads: leads.map((r, i) => ({ ...r, call_status: i % 2 ? "ติดต่อได้แล้ว" : "ไม่สนใจ" })) }, SEP, "yoy"); assert.equal(o.k.lead_qual.value, 2); assert.equal(o.k.lead_qual.prev, 1); assert.equal(changePct(o.k.lead_qual.value, o.k.lead_qual.prev!).pct, 100); assert.equal(o.k.rate, undefined);
+ok("Lead Qualification (ติดต่อได้แล้ว) เทียบปีก่อนได้: ก.ย. 2026 = 2, ก.ย. 2025 = 1 → +100% · ไม่มี Lead-to-Sale Rate แล้ว");
 o = dash({}, {}, "yoy"); assert.equal(o.r.prevRange, null); assert.match(o.r.note!, /เลือกวันที่/); assert.equal(o.k.leads.prev, undefined); ok("ไม่เลือกช่วงวันที่ → ไม่เปรียบเทียบ และบอกให้เลือกวันที่");
 o = dash({}, SEP); assert.equal(o.k.leads.prev, undefined); ok("ไม่เลือกโหมดเปรียบเทียบ → การ์ดเหมือนเดิม");
 console.log(`\nผ่านทั้งหมด ${pass} รายการ`);
