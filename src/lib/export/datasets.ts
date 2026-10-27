@@ -1,6 +1,7 @@
 import { SPECS } from "../import/specs";
 import type { Role } from "../roles";
 import { TABS } from "../schema";
+import { normalizeActionRows } from "../fbactions";
 
 export type Row = Record<string, string>;
 export type ExportFilters = { from?: string; to?: string; area?: string; channel?: string; campaign?: string; includeExcluded?: boolean };
@@ -10,6 +11,8 @@ export type Dataset = {
   tab: string | null; columns: string[]; roles: Role[]; sensitive?: "pii" | "financial";
   applies: Applies; note: string; route?: string; special?: "summary";
   keep: (r: Row, f: ExportFilters) => boolean;
+  /** คอลัมน์ที่คำนวณเพิ่มตอนส่งออก (ต่อท้ายคอลัมน์เดิม ไม่เปลี่ยนลำดับเดิม) */
+  derive?: { columns: string[]; apply: (rows: Row[]) => Row[] };
 };
 
 const INTERNAL = new Set(["record_id", "row_key", "raw_json", "source_batch_id"]);
@@ -44,7 +47,9 @@ export const DATASETS: Dataset[] = [
     applies: { date: "วันที่ของสถิติ (metric_date)", area: false, channel: false, campaign: false },
     note: "หนึ่งแถวต่อ โพสต์ × วันที่ของสถิติ (metric_date) · metric_scope = daily คือยอดของวันนั้น (รวมข้ามวันได้), lifetime คือยอดสะสม ณ วันส่งออก (ห้ามรวมข้ามวัน) · average_seconds_viewed และ ad_cpm_usd เป็นค่าเฉลี่ย ห้ามรวม · ตัดเพจที่ตั้งไว้ใน APP_CONFIG (excluded_fb_pages) ออกโดยค่าเริ่มต้น",
     keep: (r, f) => inDay((r.metric_date || r.snapshot_date || "").slice(0, 10), f) },
-  { ...periodDataset("facebook_ads", "META_ADS", "Facebook Ads (Meta)", "ad_set_name"), filename: "facebook_ads.csv", note: "ยอดรวมทั้งช่วงรายงาน Results แยกตาม result_indicator ห้ามรวมต่างประเภทกัน" },
+  { ...periodDataset("facebook_ads", "META_ADS", "Facebook Ads (Meta)", "ad_set_name"), filename: "facebook_ads.csv",
+    note: "ยอดรวมทั้งช่วงรายงาน Results แยกตาม result_indicator ห้ามรวมต่างประเภทกัน · result_indicator แสดงชื่อ Action ที่ตัด prefix actions:/Action: แล้ว ค่าต้นฉบับอยู่ในคอลัมน์ result_indicator_raw (ท้ายไฟล์)",
+    derive: { columns: ["result_indicator_raw", "results_initial_indicator_raw"], apply: normalizeActionRows } },
   { ...periodDataset("google_ads_campaigns", "GOOGLE_ADS_CAMPAIGNS", "Google Ads — Campaign Report", "campaign_name"), note: "แหล่งยอดใช้จ่ายหลักของ Google Ads ห้ามรวมกับรายงานรายละเอียดอื่น" },
   ...GOOGLE_DETAIL,
   { id: "line_oa_monthly", filename: "line_oa_monthly.csv", label: "LINE OA รายเดือน", group: "การตลาด", tab: "LINE_OA_MONTHLY", columns: tabCols("LINE_OA_MONTHLY"), roles: MKT,

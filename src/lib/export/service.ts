@@ -103,10 +103,12 @@ export async function exportDataset(id: string, f: ExportFilters, role: Role, ac
       ]);
       ({ columns, rows: body } = buildSummary({ meta, google, posts, line, leads, sales, excluded }, f, role));
     } else {
-      columns = ds.columns;
+      columns = ds.derive ? [...ds.columns, ...ds.derive.columns] : ds.columns;
       let rows = await read(ds.tab!, ds.columns);
       if (id === "facebook_page_posts" && !f.includeExcluded) { const ex = new Set(await getExcludedPages(DEFAULT_EXCLUDED_PAGES)); rows = rows.filter((r) => !ex.has(r.page_name) && !ex.has(r.page_id)); }
-      body = rows.filter((r) => ds.keep(r, f)).map((r) => columns.map((c) => r[c] ?? ""));
+      rows = rows.filter((r) => ds.keep(r, f));
+      if (ds.derive) rows = ds.derive.apply(rows);
+      body = rows.map((r) => columns.map((c) => r[c] ?? ""));
     }
   } catch (e) {
     if (e instanceof ExportError) throw e;

@@ -1,14 +1,14 @@
 # DEVELOPMENT_STATUS — Buriram NAYOO Marketing Dashboard
 
-อัปเดตล่าสุด: Phase 2 (27/10/2026) · Phase ปัจจุบันเสร็จแล้ว รอคำสั่ง "ทำขั้นต่อไป" สำหรับ Phase 3
+อัปเดตล่าสุด: Phase 3 (27/10/2026) · Phase ปัจจุบันเสร็จแล้ว รอคำสั่ง "ทำขั้นต่อไป" สำหรับ Phase 4
 
 ## สถานะรวม
 | Phase | งาน | สถานะ |
 |---|---|---|
 | 0 | Audit, Backup & Plan | เสร็จ |
 | 1 | Facebook Page CSV: Metric Date + Business Key | เสร็จ (ทดสอบอัตโนมัติผ่าน · ผู้ใช้ยังไม่ได้รายงานผลบนเว็บจริง) |
-| 2 | Marketing Overview: Total Paid Media Spend / Total Leads / CPL | **เสร็จ (ทดสอบอัตโนมัติผ่าน · ยังไม่ทดสอบบนเว็บจริง) — รอคำสั่ง** |
-| 3 | Facebook Ads Action Names | ยังไม่เริ่ม |
+| 2 | Marketing Overview: Total Paid Media Spend / Total Leads / CPL | เสร็จ (ทดสอบอัตโนมัติผ่าน · ยังไม่ทดสอบบนเว็บจริง) |
+| 3 | Facebook Ads Action Names | **เสร็จ (ทดสอบอัตโนมัติผ่าน · ยังไม่ทดสอบบนเว็บจริง) — รอคำสั่ง** |
 | 4 | Lead Management (ฟิลด์ใหม่ + Need/Status Logic) | ยังไม่เริ่ม |
 | 5 | Website Analytics Import | **ข้ามไปก่อน (รอข้อมูลจากผู้ใช้)** |
 | 6 | Marketing Performance Dashboard | ยังไม่เริ่ม |
@@ -334,3 +334,57 @@
 
 ### Next Phase
 **Phase 3 — Facebook Ads Action Names:** ตัด prefix `actions:` / `Action:` ออก (ข้อ C) แสดงชื่อ Action ที่อ่านง่าย — เริ่มเมื่อผู้ใช้สั่ง "ทำขั้นต่อไป"
+
+## 15) รายงาน Phase 3 — Facebook Ads Action Names
+
+### สิ่งที่ทำแล้ว
+- ตัด prefix **`actions:`** (รูปแบบจริงในไฟล์) และ **`Action:`** (ตามตัวอย่างใน Master) ที่อยู่ **หน้าสุด** ของชื่อ Action เท่านั้น ไม่สนตัวพิมพ์เล็ก/ใหญ่ เช่น `actions:post_engagement` → `post_engagement`
+- ไม่แตะคำว่า action ตำแหน่งอื่น (เช่น `offsite_conversion.custom_action`) · ค่าที่ไม่มี prefix (`reach`) และค่าว่างคงเดิม
+- **ไม่รวม Action ต่างประเภท:** ถ้าค่าดิบ 2 ค่าตัดแล้วชื่อชนกัน (เช่น `actions:like` กับ `like`) จะแสดงชื่อเต็มของต้นฉบับทั้งคู่ และขึ้นคำเตือนในหน้า Facebook Ads
+- **ใช้รูปแบบเดียวกันทุกที่:**
+  - หน้า Facebook Ads: คอลัมน์ตาราง, ตัวกรอง (ป้ายชื่อตัดแล้ว แต่ค่าที่ใช้กรองยังเป็นค่าดิบ) และกล่อง Results แยกตาม Action
+  - Export `facebook_ads.csv`: `result_indicator` และ `results_initial_indicator` เป็นชื่อที่ตัดแล้ว และเพิ่มคอลัมน์ `result_indicator_raw`, `results_initial_indicator_raw` **ต่อท้าย** เก็บค่าต้นฉบับ
+- **เก็บค่าต้นฉบับ:** การนำเข้าไม่เปลี่ยน ค่าใน Google Sheet (`result_indicator`, `raw_json`) ยังเป็นต้นฉบับ การตัด prefix ทำตอนแสดงผลและส่งออก จึงใช้กับข้อมูลที่นำเข้าไว้ก่อนหน้า (ข้อมูลย้อนหลัง) ได้ทันทีโดยไม่ต้องนำเข้าใหม่
+
+### ไฟล์ที่เปลี่ยน
+| ไฟล์ | การเปลี่ยนแปลง |
+|---|---|
+| `src/lib/fbactions.ts` (ใหม่) | `stripActionPrefix`, `actionLabels` (กันชื่อชน), `actionCollisions`, `normalizeActionRows` |
+| `src/app/(app)/facebook-ads/page.tsx` | แสดงชื่อ Action ที่ตัดแล้วในตาราง/ตัวกรอง/สรุป + คำเตือนชื่อชน + หมายเหตุ |
+| `src/lib/export/datasets.ts` | Dataset รองรับ `derive` (คอลัมน์คำนวณต่อท้าย) · facebook_ads ใช้ `normalizeActionRows` |
+| `src/lib/export/service.ts` | ใช้ `derive` หลังกรองแถว |
+| `tests/fbactions.test.ts` (ใหม่), `tests/e2e.test.mts` (ส่วนที่ 14), `tests/run-all.sh` | ทดสอบ Phase 3 |
+
+### Data / Schema Impact
+- **ไม่เปลี่ยน Schema ของ Google Sheets** ไม่เขียน/ลบข้อมูล
+- `facebook_ads.csv`: ค่าในคอลัมน์ `result_indicator` / `results_initial_indicator` เปลี่ยนเป็นชื่อที่ตัด prefix · เพิ่ม 2 คอลัมน์ต่อท้าย · คอลัมน์เดิมลำดับเดิม
+
+### Test Results
+**Passed (รันจริง):** 216/216
+| ชุด | ผล |
+|---|---|
+| fbactions (ใหม่ · Facebookads.csv จริง) | 9/9 |
+| e2e (รวมส่วนที่ 14 ใหม่ 4 ข้อ) | 83/83 |
+| overview | 20/20 |
+| import | 33/33 |
+| fbpage | 22/22 |
+| dashboard | 19/19 |
+| sales | 18/18 |
+| security | 12/12 |
+| TypeScript และ Production build | ผ่าน |
+
+ตัวเลขที่ยืนยันจากไฟล์จริง (103 แถว): หลังตัด post_engagement 43, (ว่าง) 29, like 16, link_click 11, reach 3, leadgen.other 1 — จำนวนแถว, Results, Spend, Impressions, Reach ต่อ Action เท่ากับก่อนตัดทุกกลุ่ม · Spend รวม ฿37,557.54 · KPI Meta Ads Spend ใน Dashboard ไม่เปลี่ยน
+
+**Failed:** 0
+
+**Not Tested:**
+- หน้า Facebook Ads บนเว็บจริงและมือถือ (ตรวจด้วย TypeScript/build เท่านั้น ไม่ได้เปิดหน้าจริง)
+- กรณีชื่อชนกันกับข้อมูลจริง (ไฟล์ตัวอย่างไม่มี ทดสอบด้วยข้อมูลสมมติ)
+- Phase 1 และ Phase 2 บนเว็บจริง: ผู้ใช้ยังไม่ได้รายงานผล
+
+### Known Issues
+- หน้าพรีวิวการนำเข้ายังแสดง Result indicator ตามไฟล์ต้นฉบับ (`actions:...`) โดยตั้งใจ เพื่อให้ตรวจกับไฟล์ได้ตรง ๆ
+- ลิงก์ตัวกรองเดิมที่บันทึกไว้ยังใช้ได้ เพราะตัวกรองใช้ค่าดิบ
+
+### Next Phase
+**Phase 4 — Lead Management & Migration:** ฟิลด์ใหม่ (Need, Buy/Sell Status, Type, Condition, Price, Remark, Call Status, Staff, Note) + Logic แสดงสถานะตาม Need (ข้อ E) — เริ่มเมื่อผู้ใช้สั่ง "ทำขั้นต่อไป"
