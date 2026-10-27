@@ -6,7 +6,13 @@ import { DEFAULT_EXCLUDED_PAGES, num } from "../dashboard";
 import { isIsoDate } from "../import/normalize";
 import type { Role } from "../roles";
 import { getExcludedPages, readColumns } from "../tabdata";
-import { DATASET_BY_ID, SUMMARY_COLUMNS, SUMMARY_FINANCIAL, type Dataset, type ExportFilters, type Row } from "./datasets";
+import { DATASET_BY_ID, DATASETS, SUMMARY_COLUMNS, SUMMARY_FINANCIAL, type Dataset, type ExportFilters, type Row } from "./datasets";
+import { TYPE_DOC, columnType, normalizeExportValue } from "./dictionary";
+import { NEEDS, BUY_NEEDS, SELL_NEEDS } from "../lead-options";
+import { fetchDashboardData } from "../dashboard-data";
+import { computePerformance } from "../performance";
+import { changePct } from "../compare";
+import { SALES_EXPORT_COLUMNS } from "../sales/export";
 
 export class ExportError extends Error { constructor(public status: number, message: string, public code: string) { super(message); } }
 
@@ -19,7 +25,9 @@ export function parseFilters(sp: URLSearchParams): ExportFilters {
   if (from && to && from > to) throw new ExportError(400, "วันเริ่มต้องไม่หลังวันสิ้นสุด", "BAD_RANGE");
   const area = sp.get("area") || undefined;
   if (area && !["buriram", "surin", "multi_province", "unknown"].includes(area)) throw new ExportError(400, "Area ไม่ถูกต้อง", "BAD_AREA");
-  return { from, to, area, channel: sp.get("channel") || undefined, campaign: sp.get("campaign") || undefined, includeExcluded: sp.get("include_excluded") === "1" };
+  const need = sp.get("need") || undefined;
+  if (need && !NEEDS.includes(need)) throw new ExportError(400, "Need ไม่ถูกต้อง", "BAD_NEED");
+  return { from, to, area, channel: sp.get("channel") || undefined, campaign: sp.get("campaign") || undefined, includeExcluded: sp.get("include_excluded") === "1", need };
 }
 
 function overlapProblem(rows: Row[], label: string): string | null {
@@ -38,7 +46,7 @@ export function buildSummary(d: { meta: Row[]; google: Row[]; posts: Row[]; line
   const mark = (m: string, k: string) => { if (m) get(m)[k] = Number(((get(m)[k] as number) ?? 0)) + 1; };
 
   for (const r of d.meta) if (!f.area || (r.area || "unknown") === f.area) { add(r.report_start.slice(0, 7), "meta_ads_spend_thb", num(r.amount_spent_thb)); if (r.report_start.slice(0, 7) !== r.report_end.slice(0, 7)) get(r.report_start.slice(0, 7)).ads_reports_span_months = "TRUE"; }
-  for (const r of d.google) if (!f.area || (r.area || "unknown") === f.area) { add(r.report_start.slice(0, 7), "google_ads_campaign_spend_thb", num(r.cost_thb)); if (r.report_start.slice(0, 7) !== r.report_end.slice(0, 7)) get(r.report_start.slice(0, 7)).ads_reports_span_months = "TRUE"; }
+  for (const r of d.google) if (!f.area || (r.area || "unknown") === f.area) { add(r.report_start.slice(0, 7), "google_ads_campaign_spend_thb", num(r.cost_thb)); add(r.report_start.slice(0, 7), "google_ads_campaign_clicks", num(r.clicks)); if (r.report_start.slice(0, 7) !== r.report_end.slice(0, 7)) get(r.report_start.slice(0, 7)).ads_reports_span_months = "TRUE"; }
   // Facebook Page (กฎเดียวกับ lib/fbmetrics.ts): โพสต์นับไม่ซ้ำตามเดือนที่เผยแพร่, Lifetime ใช้ snapshot ล่าสุดต่อโพสต์, รายวันรวมตามเดือนของ metric_date
   const fbRows = d.posts.filter((r) => f.includeExcluded || (!ex.has(r.page_name) && !ex.has(r.page_id)));
   const pubMonth = new Map<string, string>();
@@ -57,9 +65,15 @@ export function buildSummary(d: { meta: Row[]; google: Row[]; posts: Row[]; line
     add(m, "fb_daily_reach_sum", num(r.reach)); add(m, "fb_daily_link_clicks", num(r.link_clicks));
   }
   for (const r of d.line) { const m = String(r.report_month).slice(0, 7); add(m, "line_new_friends", num(r.new_friends)); add(m, "line_inquiries", num(r.inquiries)); add(m, "line_leads", num(r.leads)); }
+  // Leads: นับ lead_id ไม่ซ้ำ (กฎเดียวกับ Dashboard) · แถวที่ไม่มี lead_id ไม่นับ
+  const seenLead = new Set<string>();
   for (const r of d.leads) if (!f.area || (r.area || "unknown") === f.area) {
+    if (r.lead_id !== undefined) { if (!r.lead_id || seenLead.has(r.lead_id)) continue; seenLead.add(r.lead_id); }
     const m = String(r.received_at).slice(0, 7); mark(m, "leads_total");
     if (r.qualified_at || ["Qualified", "Proposal", "Won"].includes(r.status)) mark(m, "leads_qualified");
+    if (["Facebook Ads", "Google Ads"].includes(r.source_channel)) mark(m, "leads_from_ads");
+    if (BUY_NEEDS.includes(r.need ?? "")) mark(m, "leads_need_buy_rent_build");
+    if (SELL_NEEDS.includes(r.need ?? "")) mark(m, "leads_need_sell");
   }
   const gp = new Map<string, number>(); 
   for (const r of d.sales) if (!["Cancelled", "Refunded"].includes(r.payment_status)) {
@@ -95,20 +109,25 @@ export async function exportDataset(id: string, f: ExportFilters, role: Role, ac
   try {
     if (ds.special === "summary") {
       const [meta, google, posts, line, leads, sales, excluded] = await Promise.all([
-        read("META_ADS", ["report_start", "report_end", "amount_spent_thb", "area"]), read("GOOGLE_ADS_CAMPAIGNS", ["report_start", "report_end", "cost_thb", "area"]),
+        read("META_ADS", ["report_start", "report_end", "amount_spent_thb", "area"]), read("GOOGLE_ADS_CAMPAIGNS", ["report_start", "report_end", "cost_thb", "clicks", "area"]),
         read("FB_PAGE_POSTS", ["page_id", "post_id", "page_name", "publish_time", "metric_date", "metric_scope", "snapshot_date", "reach", "link_clicks", "reactions_comments_shares", "seconds_viewed"]), read("LINE_OA_MONTHLY", ["report_month", "new_friends", "inquiries", "leads"]),
-        read("LEADS", ["received_at", "status", "qualified_at", "area"]),
+        read("LEADS", ["lead_id", "received_at", "status", "qualified_at", "area", "source_channel", "need"]),
         role === "marketing" ? read("SALES", ["closing_date", "payment_status"]) : read("SALES", ["closing_date", "revenue_date", "payment_status", "deal_value_thb", "company_revenue_thb", "direct_cost_thb"]),
         getExcludedPages(DEFAULT_EXCLUDED_PAGES),
       ]);
       ({ columns, rows: body } = buildSummary({ meta, google, posts, line, leads, sales, excluded }, f, role));
+    } else if (ds.special === "performance") {
+      ({ columns, rows: body } = buildPerformanceRows(computePerformance(await fetchDashboardData(role), { from: f.from, to: f.to, compare: "yoy" })));
+    } else if (ds.special === "dictionary") {
+      ({ columns, rows: body } = buildDictionary(role));
     } else {
       columns = ds.derive ? [...ds.columns, ...ds.derive.columns] : ds.columns;
       let rows = await read(ds.tab!, ds.columns);
       if (id === "facebook_page_posts" && !f.includeExcluded) { const ex = new Set(await getExcludedPages(DEFAULT_EXCLUDED_PAGES)); rows = rows.filter((r) => !ex.has(r.page_name) && !ex.has(r.page_id)); }
       rows = rows.filter((r) => ds.keep(r, f));
       if (ds.derive) rows = ds.derive.apply(rows);
-      body = rows.map((r) => columns.map((c) => r[c] ?? ""));
+      const types = columns.map((c) => columnType(ds.tab, c));
+      body = rows.map((r) => columns.map((c, i) => normalizeExportValue(types[i], r[c] ?? "")));
     }
   } catch (e) {
     if (e instanceof ExportError) throw e;
@@ -117,4 +136,38 @@ export async function exportDataset(id: string, f: ExportFilters, role: Role, ac
   if (opts.countOnly) return { rows: body.length, filename: ds.filename };
   await writeAudit(actor, "export", "dataset", id, `${ds.filename}: ${body.length} แถว${ds.sensitive ? ` (${ds.sensitive})` : ""}`);
   return { csv: toCsv([columns, ...body.map((r) => r.map(csvSafe))]), rows: body.length, filename: ds.filename };
+}
+
+/** Phase 8: KPI ของหน้า Marketing Performance + ปีก่อน (หนึ่งแถวต่อ KPI) */
+export function buildPerformanceRows(p: ReturnType<typeof computePerformance>) {
+  const columns = DATASET_BY_ID.marketing_performance_kpis.columns;
+  const unit = { thb: "THB", int: "count", pct: "percent" } as const;
+  const rows = p.groups.flatMap((g) => g.items.map((k) => {
+    const c = changePct(k.value, k.prev ?? null);
+    const status = k.state !== "value" ? "current_unavailable" : k.prevBlocked ? "not_comparable" : k.prev === null || k.prev === undefined ? "missing" : c.reason === "zero" ? "zero_base" : k.prevIncomplete ? "previous_incomplete" : "ok";
+    const rec: Record<string, string | number> = {
+      period_from: p.range?.from ?? "", period_to: p.range?.to ?? "", group: g.title, kind: g.kind, kpi_key: k.key, kpi_label: k.label, unit: unit[k.fmt],
+      value: k.value ?? "", state: k.state, incomplete_reason: k.incomplete ?? "", source_note: k.note ?? "",
+      yoy_period_from: p.prevRange?.from ?? "", yoy_period_to: p.prevRange?.to ?? "", yoy_value: k.prevBlocked ? "" : k.prev ?? "",
+      yoy_change_pct: status === "ok" || status === "previous_incomplete" ? c.pct ?? "" : "", yoy_status: status,
+    };
+    return columns.map((col) => rec[col] ?? "");
+  }));
+  return { columns, rows };
+}
+
+/** Phase 8: พจนานุกรมข้อมูล (ตามสิทธิ์ของผู้ใช้ — Marketing ไม่เห็นคอลัมน์การเงินของไฟล์สรุป) */
+export function buildDictionary(role: Role) {
+  const columns = DATASET_BY_ID.data_dictionary.columns;
+  const rows: (string | number)[][] = [];
+  for (const ds of DATASETS.filter((d) => d.roles.includes(role))) {
+    const cols = ds.special === "summary" ? SUMMARY_COLUMNS.filter((c) => !(role === "marketing" && SUMMARY_FINANCIAL.includes(c)))
+      : ds.id === "sales_transactions" ? SALES_EXPORT_COLUMNS : ds.derive ? [...ds.columns, ...ds.derive.columns] : ds.columns;
+    const tab = ds.id === "sales_transactions" ? "SALES_TRANSACTIONS" : ds.tab;
+    cols.forEach((c, i) => {
+      const t = ds.special === "performance" ? (c.endsWith("_from") || c.endsWith("_to") ? "date" : ["value", "yoy_value", "yoy_change_pct"].includes(c) ? "number" : "text") : ds.special === "dictionary" ? (c === "column_position" ? "integer" : "text") : columnType(tab, c);
+      rows.push([ds.id, ds.filename, ds.grain, i + 1, c, t, TYPE_DOC[t]]);
+    });
+  }
+  return { columns, rows };
 }

@@ -1,6 +1,6 @@
 # DEVELOPMENT_STATUS — Buriram NAYOO Marketing Dashboard
 
-อัปเดตล่าสุด: Phase 7 (27/10/2026) · Phase ปัจจุบันเสร็จแล้ว รอคำสั่ง "ทำขั้นต่อไป" สำหรับ Phase 8
+อัปเดตล่าสุด: Phase 8 (27/10/2026) · Phase ปัจจุบันเสร็จแล้ว รอคำสั่ง "ทำขั้นต่อไป" สำหรับ Phase 9
 
 ## สถานะรวม
 | Phase | งาน | สถานะ |
@@ -12,8 +12,8 @@
 | 4 | Lead Management (ฟิลด์ใหม่ + Need/Status Logic) | เสร็จ (ทดสอบอัตโนมัติผ่าน · ผู้ใช้ยังไม่ได้รายงานผลบนเว็บจริง) |
 | 5 | Website Analytics Import | **ข้ามไปก่อน (รอข้อมูลจากผู้ใช้)** |
 | 6 | Marketing Performance Dashboard (+ กราฟ Lead ตาม Buy/Sell Status) | เสร็จ (ทดสอบอัตโนมัติผ่าน · ผู้ใช้ยังไม่ได้รายงานผลบนเว็บจริง) |
-| 7 | YoY Comparison | **เสร็จ (ทดสอบอัตโนมัติผ่าน · ยังไม่ทดสอบบนเว็บจริง) — รอคำสั่ง** |
-| 8 | Export (Looker Studio ถูกตัดออกจากขอบเขต) | ยังไม่เริ่ม |
+| 7 | YoY Comparison | เสร็จ (ทดสอบอัตโนมัติผ่าน · ผู้ใช้ยังไม่ได้รายงานผลบนเว็บจริง) |
+| 8 | Export (Looker Studio ถูกตัดออกจากขอบเขต) | **เสร็จ (ทดสอบอัตโนมัติผ่าน · ยังไม่ทดสอบบนเว็บจริง) — รอคำสั่ง** |
 | 9 | Integration Testing | ยังไม่เริ่ม |
 | 10 | Final Audit & Handover | ยังไม่เริ่ม |
 
@@ -580,3 +580,60 @@
 
 ### Next Phase
 **Phase 8 — Export** (Looker Studio ตัดออกจากขอบเขตแล้ว) เริ่มเมื่อผู้ใช้สั่ง "ทำขั้นต่อไป"
+
+## 19) รายงาน Phase 8 — Export (Looker Studio ตัดออกจากขอบเขต)
+
+### ผลตรวจ Export เดิม
+- 23 ชุดข้อมูล ส่งออกได้ครบ · หัวคอลัมน์คงที่ตามลำดับ schema · UTF-8 BOM · ป้องกัน CSV Injection · เงินเป็นตัวเลขล้วน
+- **พบและแก้:** `marketing_monthly_summary.leads_total` เดิมนับ "แถว" Lead (ถ้ามีแถวซ้ำใน Sheet จะนับเกิน) → เปลี่ยนเป็นนับ `lead_id` ไม่ซ้ำ ตรงกับ Dashboard (Phase 2)
+- **พบ:** ไฟล์ยังไม่บอกระดับข้อมูล (grain) และชนิดของคอลัมน์แบบอ่านด้วยเครื่องได้ · Export Leads กรองตาม Need ไม่ได้ · ตัวเลขของหน้า Marketing Performance / YoY ส่งออกไม่ได้
+- รูปแบบวันเวลาที่มีอยู่: วันที่ `YYYY-MM-DD`, เวลาโพสต์ Facebook `YYYY-MM-DD HH:mm` (ตามแพลตฟอร์ม), เวลาระบบ ISO 8601 UTC — คงไว้ (ไม่เปลี่ยนค่าในคอลัมน์เดิม) และระบุชนิดให้ชัดใน data_dictionary
+
+### สิ่งที่ทำแล้ว
+- **ระดับข้อมูล (grain)** ทุกชุดข้อมูล แสดงในหน้า ส่งออกข้อมูล (เช่น "หนึ่งแถวต่อ campaign_name × campaign_group_name ต่อช่วงรายงาน", "หนึ่งแถวต่อ Lead (lead_id)")
+- **ไฟล์ใหม่ `data_dictionary.csv`** (ทุก Role ตามสิทธิ์ของตัวเอง): หนึ่งแถวต่อ คอลัมน์ × ไฟล์ — dataset_id, filename, grain, ลำดับคอลัมน์, ชื่อคอลัมน์, ชนิด (text/integer/number/money_thb/money_usd/percent/date/datetime_local/timestamp_utc/month/boolean/hour_label) และรูปแบบ · ชนิดมาจาก spec ตัวนำเข้าตัวเดียวกับที่ใช้แปลงค่า
+- **ไฟล์ใหม่ `marketing_performance_kpis.csv`** (Admin/Marketing): หนึ่งแถวต่อ KPI ของหน้า Marketing Performance สำหรับช่วงที่เลือก พร้อมค่าปีก่อน — period_from/to, group, kind (Paid/Organic/Website/Compare), kpi_key, kpi_label, unit, value, state, incomplete_reason, source_note, yoy_period_from/to, yoy_value, yoy_change_pct, yoy_status (ok / previous_incomplete / missing / zero_base / not_comparable / current_unavailable) · ไม่มีข้อมูล = ช่องว่าง ไม่ใช่ 0
+- **สรุปรายเดือน เพิ่ม 4 คอลัมน์ต่อท้าย:** `google_ads_campaign_clicks` (Campaign Report ชุดเดียวกับ Spend), `leads_from_ads`, `leads_need_buy_rent_build`, `leads_need_sell` · 22 คอลัมน์เดิมไม่เปลี่ยนชื่อ/ลำดับ
+- **Export Leads กรองตาม Need** ได้ (ค่าไม่อยู่ในรายการ → ปฏิเสธ)
+- **ปรับค่าให้สม่ำเสมอตอนส่งออก (ไม่แก้ข้อมูลใน Sheet):** วันที่ที่ถูกแก้มือใน Google Sheet จนกลายเป็นเลขลำดับวัน (เช่น 46266) → `YYYY-MM-DD` · `true/false` → `TRUE/FALSE`
+- **กันนับซ้ำ:** ไฟล์กลุ่ม "สรุป" ระบุใน grain และหน้า ส่งออก ว่าเป็นตัวเลขสรุปแล้ว ห้ามนำไปบวกกับไฟล์ต้นฉบับ
+- ข้อความหน้า ส่งออกข้อมูล ไม่อ้างถึง Looker Studio แล้ว (ใช้กับ Excel / Google Sheets)
+
+### ไฟล์ที่เปลี่ยน
+| ไฟล์ | การเปลี่ยนแปลง |
+|---|---|
+| `src/lib/export/dictionary.ts` (ใหม่) | ชนิดคอลัมน์, ตรวจค่า, ปรับค่าก่อนส่งออก |
+| `src/lib/export/datasets.ts` | grain ทุกชุด, ชุดใหม่ 2 ชุด, คอลัมน์สรุปใหม่, ตัวกรอง Need |
+| `src/lib/export/service.ts` | leads_total ไม่ซ้ำ, คอลัมน์สรุปใหม่, buildPerformanceRows, buildDictionary, ปรับค่าตามชนิด, ตัวกรอง Need |
+| `src/components/ExportForm.tsx`, `src/app/(app)/export/page.tsx` | แสดง grain, ตัวเลือก Need, ข้อความใหม่ |
+| `tests/e2e.test.mts` | ส่วนที่ 17 ใหม่ (8 ข้อ) + ปรับจำนวนชุดข้อมูล/ตำแหน่งคอลัมน์ Phase 1 + แก้แถวทดสอบที่มีช่องว่างแบบ null |
+
+### Data / Schema Impact
+- ไม่เปลี่ยน Schema ของ Google Sheets ไม่เขียน/ลบข้อมูล
+- `marketing_monthly_summary.csv`: +4 คอลัมน์ต่อท้าย · `leads_total` อาจลดลงถ้าเคยมีแถว Lead ซ้ำ (ค่าที่ถูกต้องคือไม่ซ้ำ)
+- ไฟล์ใหม่ 2 ไฟล์: `marketing_performance_kpis.csv`, `data_dictionary.csv`
+
+### Test Results
+**Passed (รันจริง):** 285/285
+| ชุด | ผล |
+|---|---|
+| e2e (ส่วนที่ 17 ใหม่ 8 ข้อ) | 106/106 |
+| performance / yoy / kpicard / overview / fbpage / import / dashboard / fbactions / sales / security | 23 / 15 / 8 / 20 / 22 / 33 / 19 / 9 / 18 / 12 |
+| TypeScript และ Production build | ผ่าน |
+
+ครอบคลุม: ส่งออกทุกชุด (24 ชุดผ่าน service) แล้ว **อ่านไฟล์กลับเข้ามาตรวจ 17,139 ช่อง** ว่าวันที่/ตัวเลข/TRUE-FALSE ตรงกับชนิดใน data_dictionary ทั้งหมด · ชื่อคอลัมน์ snake_case ไม่ซ้ำ ตรงกับ dictionary · คอลัมน์เดิมไม่เปลี่ยน · สรุปรายเดือน = ผลรวมจากไฟล์ต้นฉบับ (ไม่ซ้ำ) และนับ Lead ไม่ซ้ำแม้มีแถวซ้ำ · KPI Export = ตัวเลขหน้า Performance · สิทธิ์ตาม Role · ตัวกรอง Need · วันที่แบบเลขลำดับวัน → YYYY-MM-DD
+
+**Failed:** 0
+
+**Not Tested:**
+- การดาวน์โหลดจริงบนเบราว์เซอร์ และเปิดไฟล์ใน Excel / Google Sheets จริง
+- ไฟล์ `sales_transactions.csv` ตรวจชนิดผ่าน dictionary แต่ไม่ได้รวมในการอ่านกลับ (ใช้เส้นทางแยกของหน้า Sales — ตรวจไว้แล้วใน e2e ส่วนที่ 9)
+- Looker Studio (ตัดออกจากขอบเขตตามที่ผู้ใช้ตัดสินใจ — ไม่ได้ทดสอบ)
+- Phase 4, 6, 7 บนเว็บจริง: ผู้ใช้ยังไม่ได้รายงานผล
+
+### Known Issues
+- เวลาโพสต์ Facebook (`publish_time`) เป็นรูปแบบ `YYYY-MM-DD HH:mm` ต่างจากเวลาระบบ (ISO UTC) — คงไว้เพื่อไม่เปลี่ยนค่าในคอลัมน์เดิม ระบุใน data_dictionary แล้ว
+- `marketing_performance_kpis.csv` เทียบ YoY เสมอ (ไม่มีโหมดช่วงก่อนหน้าในไฟล์)
+
+### Next Phase
+**Phase 9 — Integration Testing** เริ่มเมื่อผู้ใช้สั่ง "ทำขั้นต่อไป"

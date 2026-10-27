@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { ExportForm, type DatasetInfo } from "@/components/ExportForm";
 import { CHANNELS } from "@/lib/dashboard";
+import { NEEDS } from "@/lib/lead-options";
 import { DATASETS } from "@/lib/export/datasets";
 import { readColumns } from "@/lib/tabdata";
 
@@ -9,7 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function ExportPage() {
   const role = (await auth())!.user.role!;
   const datasets: DatasetInfo[] = DATASETS.filter((d) => d.roles.includes(role)).map((d) => ({
-    id: d.id, label: d.label, group: d.group, filename: d.filename, note: d.note, sensitive: d.sensitive, route: d.route, applies: d.applies,
+    id: d.id, label: d.label, group: d.group, filename: d.filename, note: d.note, grain: d.grain, sensitive: d.sensitive, route: d.route, applies: d.applies,
   }));
   let campaigns: string[] = [];
   try {
@@ -21,9 +22,9 @@ export default async function ExportPage() {
     <section className="max-w-4xl space-y-4">
       <div>
         <h1 className="text-2xl font-bold">ส่งออกข้อมูล</h1>
-        <p className="text-sm text-slate-500">ดาวน์โหลดเป็น CSV เพื่อนำไปวิเคราะห์ต่อใน Looker Studio · แต่ละไฟล์เป็นข้อมูลระดับเดียว ไม่รวมยอดข้ามระดับรายงาน</p>
+        <p className="text-sm text-slate-500">ดาวน์โหลดเป็น CSV เพื่อใช้ต่อใน Excel / Google Sheets · แต่ละไฟล์เป็นข้อมูลระดับเดียว (ดู ระดับข้อมูล) · ไฟล์กลุ่ม สรุป เป็นตัวเลขที่สรุปแล้ว ห้ามนำไปบวกกับไฟล์ต้นฉบับ</p>
       </div>
-      <ExportForm datasets={datasets} channels={CHANNELS} campaigns={campaigns} />
+      <ExportForm datasets={datasets} channels={CHANNELS} campaigns={campaigns} needs={NEEDS} />
     </section>
   );
 }
