@@ -1,6 +1,7 @@
 import { excludePages, summarizeFb } from "./fbmetrics";
 import type { Role } from "./roles";
 import { BUY_NEEDS, BUY_STATUS, SELL_NEEDS, SELL_STATUS } from "./lead-options";
+import { COMPARE_LABEL, compareRange, type CompareMode, type DRange } from "./compare";
 
 export type Row = Record<string, string>;
 export type DashData = {
@@ -17,7 +18,8 @@ const PAID_CHANNELS = ["Facebook Ads", "Google Ads"];
 const CH = { meta: "Facebook Ads", google: "Google Ads", posts: "Facebook Organic", line: "LINE OA" };
 
 export type KpiState = "value" | "pending" | "excluded" | "restricted" | "na";
-export type Kpi = { key: string; label: string; fmt: "thb" | "int" | "pct"; value: number | null; state: KpiState; note?: string; /** มีค่าแต่ข้อมูลไม่ครบ: เหตุผล */ incomplete?: string };
+export type Kpi = { key: string; label: string; fmt: "thb" | "int" | "pct"; value: number | null; state: KpiState; note?: string; /** มีค่าแต่ข้อมูลไม่ครบ: เหตุผล */ incomplete?: string;
+  /** Phase 7: ค่าช่วงเปรียบเทียบ (undefined = ไม่เปรียบเทียบ, null = ไม่มีข้อมูล) */ prev?: number | null; prevLabel?: string; prevIncomplete?: string; prevBlocked?: string };
 export type Dashboard = {
   groups: { title: string; items: Kpi[] }[];
   charts: {
@@ -298,4 +300,27 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
       lineGrowth, monthly: monthly.length ? monthly : null, daily: daily.length ? daily : null,
     },
   };
+}
+
+/**
+ * Phase 7: คำนวณช่วงเปรียบเทียบ (ปีก่อน / ช่วงก่อนหน้า) ด้วย computeDashboard ตัวเดิมและตัวกรองเดิม แล้วจับคู่ KPI ตาม key
+ * - ต้องเลือกช่วงวันที่ก่อน (ไม่เลือก = ข้อมูลทุกช่วงเวลา เปรียบเทียบไม่ได้)
+ * - อัตราส่วน % (Lead-to-Sale) ไม่คิด % เปลี่ยนแปลงซ้อน · ยอดสะสม Lifetime ของ Facebook เทียบข้ามช่วงไม่ได้
+ */
+export function computeDashboardCompared(data: DashData, f: Filters, role: Role, mode?: CompareMode): { dash: Dashboard; prevRange: DRange | null; note?: string } {
+  const dash = computeDashboard(data, f, role);
+  if (!mode) return { dash, prevRange: null };
+  if (!f.from || !f.to) return { dash, prevRange: null, note: "เลือกวันที่ ตั้งแต่ และ ถึง ก่อน จึงจะเปรียบเทียบได้" };
+  const c = compareRange({ from: f.from, to: f.to }, mode);
+  const prev = computeDashboard(data, { ...f, from: c.range.from, to: c.range.to }, role);
+  const pk = new Map(prev.groups.flatMap((g) => g.items).map((k) => [k.key, k]));
+  const L = COMPARE_LABEL[mode];
+  const groups = dash.groups.map((g) => ({ ...g, items: g.items.map((k): Kpi => {
+    if (k.state !== "value") return k;
+    const p = pk.get(k.key);
+    if (k.fmt === "pct") return { ...k, prevLabel: L, prev: null, prevBlocked: "เป็นอัตราส่วน ดูค่าของแต่ละช่วงแทน % เปลี่ยนแปลง" };
+    if (/Lifetime/.test(`${k.note ?? ""} ${p?.note ?? ""}`)) return { ...k, prevLabel: L, prev: null, prevBlocked: "เป็นยอดสะสม (Lifetime) เทียบข้ามช่วงเวลาไม่ได้" };
+    return { ...k, prevLabel: L, prev: p && p.state === "value" ? p.value : null, prevIncomplete: p?.state === "value" ? p.incomplete : undefined };
+  }) }));
+  return { dash: { ...dash, groups }, prevRange: c.range, note: c.note };
 }

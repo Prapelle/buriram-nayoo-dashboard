@@ -10,14 +10,16 @@
 import { addDays, dmyS, fmtGaps, gapsIn, mergeSpans, num, type DashData, type Kpi, type Row, type Span } from "./dashboard";
 import { excludePages, metricDateOf, scopeOf, summarizeFb } from "./fbmetrics";
 import { actionLabels } from "./fbactions";
+import { COMPARE_LABEL, compareRange, previousRange, type CompareMode } from "./compare";
+export { previousRange };
 
-export type PerfFilters = { from?: string; to?: string; compare?: boolean; gran?: "day" | "month" };
+export type PerfFilters = { from?: string; to?: string; compare?: CompareMode; gran?: "day" | "month" };
 export type Range = { from: string; to: string };
-export type PKpi = Kpi & { prev?: number | null; source?: string };
+export type PKpi = Kpi & { prev?: number | null; prevIncomplete?: string; prevLabel?: string; source?: string };
 export type Source = { name: string; kind: "Paid" | "Organic" | "Website"; status: "ครบ" | "ไม่ครบ" | "รอข้อมูล"; detail: string; available: string };
 export type PlatformRow = { platform: string; kind: "Paid" | "Organic" | "Website"; spend: number | null; clicks: number | null; engagement: number | null; impressions: number | null; period: string; source: string; status: string };
 export type Performance = {
-  range: Range | null; prevRange: Range | null; defaulted: boolean;
+  range: Range | null; prevRange: Range | null; defaulted: boolean; compare: CompareMode | null; compareNote?: string;
   groups: { title: string; kind: "Paid" | "Organic" | "Website" | "Compare"; note?: string; items: PKpi[] }[];
   trend: { gran: "day" | "month"; google: { x: string; cost: number; clicks: number }[] | null; fb: { x: string; engagement: number }[] | null; googleNote?: string };
   platforms: PlatformRow[];
@@ -94,15 +96,9 @@ export function defaultRange(d: DashData, rows: Row[]): Range | null {
   return ds.length ? { from: ds[0], to: ds[ds.length - 1] } : null;
 }
 
-export function previousRange(g: Range): Range {
-  const n = daysOf(g).length;
-  const to = addDays(g.from, -1);
-  return { from: addDays(to, -(n - 1)), to };
-}
-
-function kp(key: string, label: string, fmt: Kpi["fmt"], value: number | null, o: { na?: boolean; note?: string; incomplete?: string; prev?: number | null; source?: string; pending?: string } = {}): PKpi {
+function kp(key: string, label: string, fmt: Kpi["fmt"], value: number | null, o: { na?: boolean; note?: string; incomplete?: string; prev?: number | null; prevIncomplete?: string; prevBlocked?: string; source?: string; pending?: string } = {}): PKpi {
   const state: Kpi["state"] = value !== null ? "value" : o.na ? "na" : "pending";
-  return { key, label, fmt, value, state, note: state === "pending" ? o.pending ?? o.note : o.note, incomplete: state === "value" ? o.incomplete : undefined, prev: o.prev, source: o.source };
+  return { key, label, fmt, value, state, note: state === "pending" ? o.pending ?? o.note : o.note, incomplete: state === "value" ? o.incomplete : undefined, prev: o.prev, prevIncomplete: o.prev !== undefined && o.prev !== null ? o.prevIncomplete : undefined, prevBlocked: o.prev !== undefined ? o.prevBlocked : undefined, source: o.source };
 }
 
 export function computePerformance(d: DashData, f: PerfFilters): Performance {
@@ -111,10 +107,11 @@ export function computePerformance(d: DashData, f: PerfFilters): Performance {
   const range: Range | null = f.from || f.to ? { from: f.from ?? auto?.from ?? f.to!, to: f.to ?? auto?.to ?? f.from! } : auto;
   const warnings: string[] = [];
   const gran = f.gran ?? "day";
-  const empty: Performance = { range: null, prevRange: null, defaulted: !f.from && !f.to, groups: [], trend: { gran, google: null, fb: null }, platforms: [], sources: [], meta: { actions: [] }, warnings, lastImport: d.lastImport };
+  const empty: Performance = { range: null, prevRange: null, defaulted: !f.from && !f.to, compare: null, groups: [], trend: { gran, google: null, fb: null }, platforms: [], sources: [], meta: { actions: [] }, warnings, lastImport: d.lastImport };
   if (!range) return empty;
   if (range.from > range.to) { warnings.push("วันที่เริ่มต้นอยู่หลังวันที่สิ้นสุด"); return { ...empty, range }; }
-  const prevRange = f.compare ? previousRange(range) : null;
+  const cmp = f.compare ? compareRange(range, f.compare) : null;
+  const prevRange = cmp?.range ?? null;
 
   const G = googleAt(d, range), Gp = prevRange ? googleAt(d, prevRange) : null;
   const M = metaAt(d, range), Mp = prevRange ? metaAt(d, prevRange) : null;
@@ -132,18 +129,18 @@ export function computePerformance(d: DashData, f: PerfFilters): Performance {
   const cpc = div(G?.spend ?? null, G?.clicks ?? null), cpcP = div(Gp?.spend ?? null, Gp?.clicks ?? null);
   const gNote = G ? `${G.source} · ${G.cover}` : undefined;
   const googleItems: PKpi[] = [
-    kp("g_spend", "Google Ads Spend", "thb", G?.spend ?? null, { note: gNote, incomplete: G?.incomplete, prev: pv(Gp?.spend), source: G?.source }),
-    kp("g_clicks", "Google Ads Clicks", "int", G?.clicks ?? null, { note: gNote, incomplete: G?.incomplete, prev: pv(Gp?.clicks), source: G?.source }),
-    kp("g_cpc", "CPC (Spend ÷ Clicks)", "thb", cpc.v, { na: cpc.na, note: cpc.na ? "Clicks = 0 หารไม่ได้" : G ? `Spend ÷ Clicks จาก ${G.source} ช่วงเดียวกัน` : undefined, incomplete: G?.incomplete, prev: pv(cpcP.v), source: G?.source }),
+    kp("g_spend", "Google Ads Spend", "thb", G?.spend ?? null, { note: gNote, incomplete: G?.incomplete, prev: pv(Gp?.spend), prevIncomplete: Gp?.incomplete, source: G?.source }),
+    kp("g_clicks", "Google Ads Clicks", "int", G?.clicks ?? null, { note: gNote, incomplete: G?.incomplete, prev: pv(Gp?.clicks), prevIncomplete: Gp?.incomplete, source: G?.source }),
+    kp("g_cpc", "CPC (Spend ÷ Clicks)", "thb", cpc.v, { na: cpc.na, note: cpc.na ? "Clicks = 0 หารไม่ได้" : G ? `Spend ÷ Clicks จาก ${G.source} ช่วงเดียวกัน` : undefined, incomplete: G?.incomplete, prev: pv(cpcP.v), prevIncomplete: Gp?.incomplete, prevBlocked: cpcP.na ? "Clicks ของช่วงเปรียบเทียบ = 0 คำนวณ CPC ไม่ได้ (N/A)" : undefined, source: G?.source }),
   ];
-  if (G?.impressions !== null && G?.impressions !== undefined) googleItems.push(kp("g_impr", "Google Ads Impressions", "int", G.impressions, { note: gNote, incomplete: G.incomplete, prev: pv(Gp?.impressions) }));
+  if (G?.impressions !== null && G?.impressions !== undefined) googleItems.push(kp("g_impr", "Google Ads Impressions", "int", G.impressions, { note: gNote, incomplete: G.incomplete, prev: pv(Gp?.impressions), prevIncomplete: Gp?.incomplete }));
 
   // ---- Meta Ads (Paid) ----
   const mNote = M ? `Meta Ads Report · ${M.cover}` : undefined;
   const metaItems: PKpi[] = [
-    kp("m_spend", "Meta Ads Spend", "thb", M?.spend ?? null, { note: mNote, incomplete: M?.incomplete, prev: pv(Mp?.spend) }),
-    kp("m_impr", "Meta Ads Impressions", "int", M?.impressions ?? null, { note: mNote, incomplete: M?.incomplete, prev: pv(Mp?.impressions) }),
-    kp("m_reach", "ผลรวม Reach ระดับโฆษณา", "int", M?.reachSum ?? null, { note: M ? "รวม Reach ของแต่ละโฆษณา (คนเดียวกันอาจถูกนับซ้ำ) ไม่ใช่ Unique Reach" : undefined, incomplete: M?.incomplete, prev: pv(Mp?.reachSum) }),
+    kp("m_spend", "Meta Ads Spend", "thb", M?.spend ?? null, { note: mNote, incomplete: M?.incomplete, prev: pv(Mp?.spend), prevIncomplete: Mp?.incomplete }),
+    kp("m_impr", "Meta Ads Impressions", "int", M?.impressions ?? null, { note: mNote, incomplete: M?.incomplete, prev: pv(Mp?.impressions), prevIncomplete: Mp?.incomplete }),
+    kp("m_reach", "ผลรวม Reach ระดับโฆษณา", "int", M?.reachSum ?? null, { note: M ? "รวม Reach ของแต่ละโฆษณา (คนเดียวกันอาจถูกนับซ้ำ) ไม่ใช่ Unique Reach" : undefined, incomplete: M?.incomplete, prev: pv(Mp?.reachSum), prevIncomplete: Mp?.incomplete }),
   ];
   const labels = actionLabels((M?.rows ?? []).map((r) => r.result_indicator));
   const byAct = new Map<string, { results: number; spend: number; rows: number }>();
@@ -157,15 +154,15 @@ export function computePerformance(d: DashData, f: PerfFilters): Performance {
   const fNote = F ? (F.basis === "daily" ? `Facebook Page รายวัน · ${F.cover}` : F.cover) : undefined;
   const reachLabel = F?.basis === "lifetime" ? "Reach (Lifetime รวมรายโพสต์)" : "ผลรวม Reach รายวัน";
   const fbItems: PKpi[] = [
-    kp("f_reach", reachLabel, "int", ft?.reach ?? null, { note: "ผลรวมของแต่ละโพสต์/วัน ไม่ใช่ Unique Reach", incomplete: F?.incomplete, prev: pv(fpt?.reach), pending: F ? "ไฟล์ Facebook Page ที่นำเข้าไม่มีคอลัมน์ Reach" : undefined }),
-    kp("f_eng", "Reactions + Comments + Shares", "int", ft?.reactions_comments_shares ?? null, { note: fNote, incomplete: F?.incomplete, prev: pv(fpt?.reactions_comments_shares) }),
-    kp("f_react", "Reactions", "int", ft?.reactions ?? null, { incomplete: F?.incomplete, prev: pv(fpt?.reactions) }),
-    kp("f_comm", "Comments", "int", ft?.comments ?? null, { incomplete: F?.incomplete, prev: pv(fpt?.comments) }),
-    kp("f_share", "Shares", "int", ft?.shares ?? null, { incomplete: F?.incomplete, prev: pv(fpt?.shares) }),
-    kp("f_sec", "Seconds viewed", "int", ft?.seconds_viewed ?? null, { note: "วินาทีที่ดูวิดีโอรวม", incomplete: F?.incomplete, prev: pv(fpt?.seconds_viewed) }),
+    kp("f_reach", reachLabel, "int", ft?.reach ?? null, { note: "ผลรวมของแต่ละโพสต์/วัน ไม่ใช่ Unique Reach", incomplete: F?.incomplete, prev: pv(fpt?.reach), prevIncomplete: Fp?.incomplete, pending: F ? "ไฟล์ Facebook Page ที่นำเข้าไม่มีคอลัมน์ Reach" : undefined }),
+    kp("f_eng", "Reactions + Comments + Shares", "int", ft?.reactions_comments_shares ?? null, { note: fNote, incomplete: F?.incomplete, prev: pv(fpt?.reactions_comments_shares), prevIncomplete: Fp?.incomplete }),
+    kp("f_react", "Reactions", "int", ft?.reactions ?? null, { incomplete: F?.incomplete, prev: pv(fpt?.reactions), prevIncomplete: Fp?.incomplete }),
+    kp("f_comm", "Comments", "int", ft?.comments ?? null, { incomplete: F?.incomplete, prev: pv(fpt?.comments), prevIncomplete: Fp?.incomplete }),
+    kp("f_share", "Shares", "int", ft?.shares ?? null, { incomplete: F?.incomplete, prev: pv(fpt?.shares), prevIncomplete: Fp?.incomplete }),
+    kp("f_sec", "Seconds viewed", "int", ft?.seconds_viewed ?? null, { note: "วินาทีที่ดูวิดีโอรวม", incomplete: F?.incomplete, prev: pv(fpt?.seconds_viewed), prevIncomplete: Fp?.incomplete }),
   ];
-  if (ft?.views !== null && ft?.views !== undefined) fbItems.push(kp("f_views", "Views", "int", ft.views, { incomplete: F?.incomplete, prev: pv(fpt?.views) }));
-  if (ft?.link_clicks !== null && ft?.link_clicks !== undefined) fbItems.push(kp("f_link", "Link Clicks", "int", ft.link_clicks, { incomplete: F?.incomplete, prev: pv(fpt?.link_clicks) }));
+  if (ft?.views !== null && ft?.views !== undefined) fbItems.push(kp("f_views", "Views", "int", ft.views, { incomplete: F?.incomplete, prev: pv(fpt?.views), prevIncomplete: Fp?.incomplete }));
+  if (ft?.link_clicks !== null && ft?.link_clicks !== undefined) fbItems.push(kp("f_link", "Link Clicks", "int", ft.link_clicks, { incomplete: F?.incomplete, prev: pv(fpt?.link_clicks), prevIncomplete: Fp?.incomplete }));
 
   // ---- Website (ยังไม่มีโมดูล Phase 5) ----
   const W = "ยังไม่มีข้อมูล Website Analytics (Phase 5 รอไฟล์ตัวอย่าง)";
@@ -205,15 +202,24 @@ export function computePerformance(d: DashData, f: PerfFilters): Performance {
   ];
 
   return {
-    range, prevRange, defaulted: !f.from && !f.to, warnings, lastImport: d.lastImport,
-    groups: [
+    range, prevRange, defaulted: !f.from && !f.to, warnings, lastImport: d.lastImport, compare: f.compare ?? null, compareNote: cmp?.note,
+    groups: labelPrev(f.compare, [
       { title: "Google Ads (Paid)", kind: "Paid", items: googleItems },
       { title: "Meta Ads (Paid)", kind: "Paid", items: metaItems },
       { title: "Facebook Page (Organic)", kind: "Organic", note: "ไม่รวมกับตัวเลขโฆษณา · ไม่รวมเพจที่ตั้งค่าให้ตัดออก", items: fbItems },
       { title: "Website", kind: "Website", items: webItems },
       { title: "Google Ads Spend เทียบ Website", kind: "Compare", note: "เป็นการเทียบค่าโฆษณา Google Ads กับยอด Website รวมทุกช่องทางในช่วงเดียวกัน ไม่ใช่ต้นทุนที่พิสูจน์ Attribution แล้ว", items: cmpItems },
-    ],
+    ]),
     trend: { gran, google, fb, googleNote: google ? undefined : d.google.length ? "แนวโน้มต้องใช้ Google Ads Time series (รายวัน) — Campaign Report เป็นยอดรวมทั้งช่วง แบ่งรายวันไม่ได้" : undefined },
     platforms, sources, meta: { actions: [...byAct].map(([label, v]) => ({ label, ...v, spend: r2(v.spend) })).sort((a, b) => b.spend - a.spend) },
   };
+}
+
+function labelPrev(mode: CompareMode | undefined, groups: Performance["groups"]): Performance["groups"] {
+  if (!mode) return groups;
+  return groups.map((g) => ({ ...g, items: g.items.map((k) => {
+    const base = { ...k, prevLabel: COMPARE_LABEL[mode], prev: k.prev === undefined ? null : k.prev };
+    // ยอดสะสม Lifetime เทียบข้ามช่วงไม่ได้ (ไม่ใช่ยอดของช่วงนั้น)
+    return /Lifetime/.test(`${k.incomplete ?? ""} ${k.prevIncomplete ?? ""}`) ? { ...base, prev: null, prevIncomplete: undefined, prevBlocked: "เป็นยอดสะสม (Lifetime) เทียบข้ามช่วงเวลาไม่ได้" } : base;
+  }) }));
 }

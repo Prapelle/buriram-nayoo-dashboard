@@ -21,7 +21,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
   const role = (await auth())?.user?.role;
   if (role !== "admin" && role !== "marketing") redirect("/");
   const sp = await searchParams;
-  const f = { from: iso(one(sp.from)), to: iso(one(sp.to)), compare: one(sp.compare) === "1", gran: (one(sp.gran) === "month" ? "month" : "day") as "day" | "month" };
+  const f = { from: iso(one(sp.from)), to: iso(one(sp.to)), compare: (one(sp.compare) === "yoy" ? "yoy" : one(sp.compare) === "prev" || one(sp.compare) === "1" ? "prev" : undefined) as "yoy" | "prev" | undefined, gran: (one(sp.gran) === "month" ? "month" : "day") as "day" | "month" };
 
   let p: Performance;
   try { p = computePerformance(await fetchDashboardData(role), f); }
@@ -37,7 +37,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
         <h1 className="text-2xl font-bold">Marketing Performance</h1>
         <p className="text-sm text-slate-500">
           {p.range ? <>ช่วงที่คำนวณ: <b>{dmyS(p.range.from)} – {dmyS(p.range.to)}</b>{p.defaulted && " (ช่วงของข้อมูลทั้งหมดที่มี)"}</> : "ยังไม่มีข้อมูล"}
-          {p.prevRange && <> · เทียบกับ {dmyS(p.prevRange.from)} – {dmyS(p.prevRange.to)}</>}
+          {p.prevRange && <> · เทียบกับ{p.compare === "yoy" ? "ช่วงเดียวกันของปีก่อน" : "ช่วงก่อนหน้า"} {dmyS(p.prevRange.from)} – {dmyS(p.prevRange.to)}</>}
         </p>
       </div>
 
@@ -46,11 +46,14 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
         <label><span className="mb-1 block text-xs text-slate-500">ถึง</span><input type="date" name="to" defaultValue={f.to} className={inp} /></label>
         <label><span className="mb-1 block text-xs text-slate-500">กราฟแนวโน้ม</span>
           <select name="gran" defaultValue={f.gran} className={inp}><option value="day">รายวัน</option><option value="month">รายเดือน</option></select></label>
-        <label className="flex items-center gap-2 py-1.5"><input type="checkbox" name="compare" value="1" defaultChecked={f.compare} /> เทียบกับช่วงก่อนหน้า (ยาวเท่ากัน)</label>
+        <label><span className="mb-1 block text-xs text-slate-500">เปรียบเทียบ</span>
+          <select name="compare" defaultValue={f.compare ?? ""} className={inp}><option value="">ไม่เปรียบเทียบ</option><option value="yoy">ปีก่อน (YoY) ช่วงวันที่เดียวกัน</option><option value="prev">ช่วงก่อนหน้า (ยาวเท่ากัน)</option></select></label>
         <button className="rounded-md bg-slate-900 px-4 py-1.5 font-medium text-white hover:bg-slate-700">ใช้ตัวกรอง</button>
         {(f.from || f.to || f.compare || f.gran === "month") && <Link href="/performance" className="py-1.5 underline">ล้าง</Link>}
       </form>
 
+      {p.compareNote && <p role="status" className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">⚠ {p.compareNote}</p>}
+      {p.compare === "yoy" && <p className="text-xs text-slate-500">YoY Change (%) = (ช่วงปัจจุบัน − ช่วงเดียวกันของปีก่อน) ÷ ปีก่อน × 100 · ปีก่อน = 0 → N/A · ไม่มีข้อมูลปีก่อน → Missing Data · ค่าปีก่อนคำนวณจากข้อมูลที่นำเข้าจริงด้วยกฎเดียวกัน</p>}
       {p.warnings.map((w, i) => <p key={i} role="alert" className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">⚠ {w}</p>)}
       {!p.range && <p className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-slate-600">ยังไม่มีข้อมูลโฆษณาหรือ Facebook Page — เริ่มจาก <Link href="/import" className="underline">นำเข้า CSV</Link></p>}
 

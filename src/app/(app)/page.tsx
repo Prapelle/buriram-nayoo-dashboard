@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { auth } from "@/auth";
 import { fetchDashboardData } from "@/lib/dashboard-data";
-import { CHANNELS, SERVICES, computeDashboard, type Dashboard, type Filters } from "@/lib/dashboard";
+import { CHANNELS, SERVICES, computeDashboardCompared, dmyS, type Dashboard, type Filters } from "@/lib/dashboard";
+import type { CompareMode, DRange } from "@/lib/compare";
 import { KpiCard } from "@/components/KpiCard";
 import { BarList, LineChart, Pending, StackedMonths, dm, my } from "@/components/charts";
 
@@ -25,10 +26,11 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
     campaign: one(sp.campaign) || undefined, area: one(sp.area) || undefined, service: one(sp.service) || undefined,
   };
 
-  let dash: Dashboard, campaigns: string[] = [];
+  const mode = (["yoy", "prev"].includes(one(sp.compare)) ? one(sp.compare) : undefined) as CompareMode | undefined;
+  let dash: Dashboard, campaigns: string[] = [], prevRange: DRange | null = null, cmpNote: string | undefined;
   try {
     const data = await fetchDashboardData(role);
-    dash = computeDashboard(data, f, role);
+    ({ dash, prevRange, note: cmpNote } = computeDashboardCompared(data, f, role, mode));
     campaigns = [...new Set([...data.google.map((r) => r.campaign_name), ...data.meta.map((r) => r.ad_set_name), ...data.leads.map((r) => r.campaign_name)].filter(Boolean))].sort();
   } catch (e) {
     return (
@@ -41,7 +43,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
       </section>
     );
   }
-  const filtered = Object.values(f).some(Boolean);
+  const filtered = Object.values(f).some(Boolean) || !!mode;
   const inp = "rounded-md border border-slate-300 px-2 py-1.5 text-sm";
   const c = dash.charts;
 
@@ -66,6 +68,8 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
           <select name="area" defaultValue={f.area ?? ""} className={inp}><option value="">ทั้งหมด</option>{AREAS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
         <label><span className="mb-1 block text-xs text-slate-500">Service</span>
           <select name="service" defaultValue={f.service ?? ""} className={inp}><option value="">ทั้งหมด</option>{SERVICES.map((x) => <option key={x}>{x}</option>)}</select></label>
+        <label><span className="mb-1 block text-xs text-slate-500">เปรียบเทียบ</span>
+          <select name="compare" defaultValue={mode ?? ""} className={inp}><option value="">ไม่เปรียบเทียบ</option><option value="yoy">ปีก่อน (YoY)</option><option value="prev">ช่วงก่อนหน้า</option></select></label>
         <button className="rounded-md bg-slate-900 px-4 py-1.5 font-medium text-white hover:bg-slate-700">ใช้ตัวกรอง</button>
         {filtered && <Link href="/" className="py-1.5 underline">ล้างตัวกรอง</Link>}
       </form>
@@ -75,6 +79,8 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
           ยังไม่มีข้อมูลในระบบ — {role === "sales" ? "รอทีมการตลาดนำเข้าข้อมูล" : <>เริ่มจาก <Link href="/import" className="underline">นำเข้า CSV</Link></>}
         </div>
       )}
+      {mode && cmpNote && <p role="status" className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">⚠ {cmpNote}</p>}
+      {prevRange && <p className="text-sm text-slate-600">เทียบกับ{mode === "yoy" ? "ช่วงเดียวกันของปีก่อน" : "ช่วงก่อนหน้า"}: <b>{dmyS(prevRange.from)} – {dmyS(prevRange.to)}</b> (ตัวกรองอื่นเหมือนกัน) · % เปลี่ยนแปลง = (ปัจจุบัน − ค่าเปรียบเทียบ) ÷ ค่าเปรียบเทียบ × 100 · ค่าเปรียบเทียบ = 0 → N/A</p>}
       {dash.warnings.map((w, i) => <p key={i} role="alert" className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">⚠ {w}</p>)}
       {dash.unknownAreaRows > 0 && !f.area && <p className="rounded-md bg-slate-100 p-3 text-sm text-slate-600">ข้อมูลโฆษณา {dash.unknownAreaRows} แถวยังไม่ระบุ Area — กำหนดได้ที่แท็บ AREA_MAPPINGS ใน Google Sheet แล้วนำเข้าไฟล์ใหม่</p>}
 
