@@ -1,6 +1,6 @@
 # DEVELOPMENT_STATUS — Buriram NAYOO Marketing Dashboard
 
-อัปเดตล่าสุด: Phase 9 (27/10/2026) · Phase ปัจจุบันเสร็จแล้ว รอคำสั่ง "ทำขั้นต่อไป" สำหรับ Phase 10
+อัปเดตล่าสุด: Phase 10 (27/10/2026) · **ครบทุก Phase ตาม Master Prompt** (Phase 5 ข้ามตามที่ผู้ใช้ตัดสินใจ) · เอกสารส่งมอบ: `HANDOVER.md`
 
 ## สถานะรวม
 | Phase | งาน | สถานะ |
@@ -14,8 +14,8 @@
 | 6 | Marketing Performance Dashboard (+ กราฟ Lead ตาม Buy/Sell Status) | เสร็จ · ผู้ใช้ยืนยันบนเว็บจริงแล้ว (27/10/2026) |
 | 7 | YoY Comparison | เสร็จ · ผู้ใช้ยืนยันบนเว็บจริงแล้ว (27/10/2026) |
 | 8 | Export (Looker Studio ถูกตัดออกจากขอบเขต) | เสร็จ (ทดสอบอัตโนมัติ + HTTP Integration ผ่าน · ผู้ใช้ยังไม่ได้รายงานผลบนเว็บจริง) |
-| 9 | Integration Testing | **เสร็จ (310/310 ผ่าน) — รอคำสั่ง** |
-| 10 | Final Audit & Handover | ยังไม่เริ่ม |
+| 9 | Integration Testing | เสร็จ (310/310 ผ่าน) |
+| 10 | Final Audit & Handover | **เสร็จ** — ดู `HANDOVER.md` |
 
 ## ข้อจำกัดของ Audit รอบนี้ (ต้องอ่านก่อน)
 - ตรวจจาก **Source Code, ตัวสร้างโครงสร้าง Sheet (schema.ts) และไฟล์ตัวอย่าง CSV/Excel** เท่านั้น
@@ -704,3 +704,30 @@
 
 ### Next Phase
 **Phase 10 — Final Audit & Handover** เริ่มเมื่อผู้ใช้สั่ง "ทำขั้นต่อไป"
+
+## 21) รายงาน Phase 10 — Final Audit & Handover
+
+### สิ่งที่ทำแล้ว
+- **ตรวจ Regression:** ล้าง build แล้ว build ใหม่ทั้งหมด (`opennextjs-cloudflare build`) + TypeScript + ชุดทดสอบครบ 310/310 · ตรวจสำเนา repo ตามที่ push จริง: TypeScript และ `next build` ผ่าน
+- **ตรวจความปลอดภัย:** ไม่มี Secret/คีย์ใน repo (มีเฉพาะตัวอย่างใน `.env.example`) · ไม่มีตัวแปร `NEXT_PUBLIC_` ที่เป็นความลับ · `.gitignore` กันไฟล์ลับ · npm audit: 9 รายการ (3 moderate, 6 high) อยู่ในเครื่องมือ build/dev (wrangler/miniflare/undici, glob CLI, postcss ระหว่าง build) ไม่ได้อัปเกรดในเฟสนี้ (เสี่ยงทำให้ deploy พัง) — ระบุวิธีในคู่มือ
+- **เอกสารส่งมอบ `HANDOVER.md`:** Definition of Done แบบตรงไปตรงมา, Schema ปัจจุบัน (สร้างจากโค้ด), ไฟล์ที่แก้ไขรายเฟส, วิธี Import / Leads / Dashboard / Export, ข้อจำกัด, สิ่งที่ยังไม่ได้ทดสอบจริง, การสำรองข้อมูลและดูแลระบบ (รวมโควตา Cloudflare และ Google Sheets API)
+- `OPERATIONS.md`: ขั้นตอนประจำเดือนไม่อ้าง Looker แล้ว + เพิ่มขั้นสำรอง Sheet
+- **ชุดทดสอบทั้งหมดอยู่ใน repo แล้ว** (`tests/` + `tests/integration/`) — ไม่รวมไฟล์ข้อมูลจริง (มีตัวเลขธุรกิจ) ดู `tests/fixtures/README.md`
+- ลบไฟล์ทดสอบเก่า 2 ไฟล์ที่ถูกอัปโหลดผิดโฟลเดอร์ (`tests/fixtures/import.test.ts`, `tests/fixtures/e2e.test.mts` — สำเนาเก่าจากช่วงแรก เวอร์ชันปัจจุบันอยู่ใน `tests/`) เพราะทำให้ตรวจ TypeScript ทั้งโปรเจกต์ไม่ผ่าน
+
+### Definition of Done (สรุป — รายละเอียดใน HANDOVER.md หัวข้อ 1)
+- ✅ 16 ข้อ · ⚠️ 1 ข้อ (Export: ผู้ใช้ยังไม่ได้ยืนยันบนเว็บจริงหลัง Phase 8) · ⛔ 2 ข้อตามการตัดสินใจของผู้ใช้ (Website Analytics — Phase 5 ข้าม, Looker Studio — ตัดออก)
+
+### Data / Schema Impact
+- ไม่มีการเปลี่ยนแปลงในเฟสนี้
+
+### Test Results
+**Passed (รันจริงหลัง build ใหม่):** 310/310 · TypeScript ผ่าน · Production build (Cloudflare) ผ่าน
+**Failed:** 0
+**Not Tested:** ดู HANDOVER.md หัวข้อ 6 (Export หลัง Phase 8 บนเว็บจริง, Workers runtime ในการทดสอบอัตโนมัติ, มือถือ/เบราว์เซอร์จริง, ข้อมูลปริมาณมาก, ข้อมูลปีก่อนจริง, รายงานยอดขายจริง, Website, Looker)
+
+### งานถัดไปที่แนะนำ (ถ้าต้องการ)
+1. ยืนยัน Export บนเว็บจริง
+2. ส่งไฟล์ตัวอย่าง Website Analytics เพื่อทำ Phase 5
+3. นำเข้าข้อมูลปี 2025 เพื่อใช้ YoY
+4. อัปเดต dependency ตามขั้นตอนใน HANDOVER.md หัวข้อ 7

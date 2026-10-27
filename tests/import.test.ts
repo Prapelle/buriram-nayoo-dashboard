@@ -7,7 +7,7 @@ import { TABS } from "../src/lib/schema";
 
 const DIR = process.env.FIXTURE_DIR ?? "tests/fixtures";
 const EXPECT: Record<string, string | null> = {
-  "Page.csv": "fb_page", "Facebookads.csv": "fb_ads",
+  "Page.csv": "fb_page", "Sep-01-2026_Sep-30-2026_": "fb_page", "Facebookads.csv": "fb_ads",
   "Campaigns_": "gads_campaigns", "Searches_Search_": "gads_search_terms", "Searches_Word_": "gads_search_words",
   "Search_keywords_": "gads_keywords", "Networks_": "gads_network", "Demographics_Age_": "gads_age",
   "Demographics_Gender_2": "gads_gender", "Demographics_Gender_Age_": "gads_gender_age",
@@ -43,7 +43,7 @@ for (const file of readdirSync(DIR).filter((f) => f.endsWith(".csv")).sort()) {
   if (!d.spec) { ok(`${file}: ไม่รองรับ (ตามคาด)`); continue; }
   const { spec, plan } = run(file);
   assert.equal(plan.errors.length, 0, `${file} errors: ${JSON.stringify(plan.errors.slice(0, 3))}`);
-  assert.equal(plan.counts.insert + plan.counts.invalid, plan.counts.total);
+  assert.equal(plan.counts.insert + plan.counts.invalid + plan.counts.skip, plan.counts.total); // skip = แถวว่างก่อนวันเผยแพร่ (Facebook รายวัน)
   const tab = TABS.find((t) => t.name === spec.tab)!;
   for (const x of plan.planned) {
     if (!x.rec) continue;
@@ -53,7 +53,7 @@ for (const file of readdirSync(DIR).filter((f) => f.endsWith(".csv")).sort()) {
   }
   const again = run(file, store(spec, plan)).plan;
   assert.equal(again.counts.insert + again.counts.update, 0, `${file}: นำเข้าซ้ำต้องไม่เพิ่ม/แก้`);
-  assert.equal(again.counts.skip, plan.counts.insert, `${file}: skip ต้องเท่ากับที่เคยเพิ่ม`);
+  assert.equal(again.counts.skip, plan.counts.insert + plan.counts.skip, `${file}: นำเข้าซ้ำต้องข้ามทุกแถว`);
   ok(`${file.slice(0, 44).padEnd(44)} → ${spec.id} | ${plan.counts.insert} แถว, นำเข้าซ้ำ skip ${again.counts.skip}${plan.warnings.length ? " | warn " + plan.warnings.length : ""}`);
 }
 
