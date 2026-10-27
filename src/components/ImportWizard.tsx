@@ -8,6 +8,7 @@ type Counts = { total: number; insert: number; update: number; skip: number; inv
 type Plan = {
   spec: { id: string; label: string; tab: string; source: string; period: "file" | "user" | "snapshot"; comparison: boolean };
   detected: boolean;
+  info?: { metric?: { daily: number; lifetime: number; posts: number; from: string; to: string; order: "MDY" | "DMY"; ambiguous: boolean; prePublishZero: number } };
   periodError?: string;
   ctx: { reportStart?: string; reportEnd?: string; comparisonStart?: string; comparisonEnd?: string; area: string; snapshotDate?: string };
   period: { start: string; end: string };
@@ -152,10 +153,20 @@ export function ImportWizard() {
               </div>
             )}
             {plan.spec.period === "file" && <p className="text-sm text-slate-600">ช่วงรายงานจากไฟล์: <b>{dmy(plan.period.start)} – {dmy(plan.period.end)}</b></p>}
-            {plan.spec.period === "snapshot" && (
-              <div className="text-sm">
-                <label><span className="mb-1 block font-medium">วันที่ส่งออกข้อมูล (snapshot)</span><input type="date" className={dateInput} value={period.snapshotDate} disabled={locked} onChange={(e) => setP("snapshotDate", e.target.value)} /></label>
-                <p className="mt-2 rounded-md bg-amber-50 p-2 text-amber-800">ข้อมูลโพสต์เป็นยอด <b>สะสม (Lifetime) ณ วันส่งออก</b> ไม่ใช่ยอดของเดือนที่เผยแพร่โพสต์</p>
+            {plan.spec.period === "snapshot" && plan.info?.metric && (
+              <div className="space-y-2 text-sm">
+                <p className="rounded-md bg-slate-50 p-2 text-slate-700">
+                  ข้อมูลระดับ <b>โพสต์ × วันที่ของสถิติ</b>: รายวัน {plan.info.metric.daily} แถว · Lifetime {plan.info.metric.lifetime} แถว · {plan.info.metric.posts} โพสต์
+                  {plan.info.metric.from && <> · วันที่ของสถิติ <b>{dmy(plan.info.metric.from)} – {dmy(plan.info.metric.to)}</b></>}
+                  {plan.info.metric.daily > 0 && <> · อ่านคอลัมน์ Date เป็น {plan.info.metric.order === "MDY" ? "เดือน/วัน/ปี" : "วัน/เดือน/ปี"}</>}
+                </p>
+                {plan.info.metric.lifetime > 0 && (
+                  <div>
+                    <label><span className="mb-1 block font-medium">วันที่ส่งออกข้อมูล (ใช้เป็นวันที่ของแถว Lifetime)</span><input type="date" className={dateInput} value={period.snapshotDate} disabled={locked} onChange={(e) => setP("snapshotDate", e.target.value)} /></label>
+                    <p className="mt-2 rounded-md bg-amber-50 p-2 text-amber-800">แถว Lifetime เป็นยอด <b>สะสม ณ วันส่งออก</b> ไม่ใช่ยอดของวันใดวันหนึ่ง และจะไม่ถูกรวมกับยอดรายวัน</p>
+                  </div>
+                )}
+                <p className="text-xs text-slate-500">คีย์กันซ้ำ: Page ID + Post ID + วันที่ของสถิติ · วันเดิมที่ค่าเปลี่ยนจะ "อัปเดต" เป็นค่าล่าสุด ค่าเหมือนเดิมจะ "ข้าม" · วันใหม่ของโพสต์เดิมจะ "เพิ่มใหม่"</p>
               </div>
             )}
 

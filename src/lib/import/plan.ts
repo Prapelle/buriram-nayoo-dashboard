@@ -1,5 +1,5 @@
 import { CsvError, parseTable, type Table } from "../csv";
-import { convert, isIsoDate } from "./normalize";
+import { convert, detectSlashOrder, isIsoDate, parseMetricDate } from "./normalize";
 import { SPECS, type Rec, type Spec } from "./specs";
 
 export type Ctx = {
@@ -19,7 +19,12 @@ export type Plan = {
   errors: ImportErr[];
   warnings: string[];
   period: { start: string; end: string };
+  /** สรุปของไฟล์ Facebook Page (ระดับ โพสต์ × วันที่ของสถิติ) */
+  info?: { metric?: { daily: number; lifetime: number; posts: number; from: string; to: string; order: "MDY" | "DMY"; ambiguous: boolean; prePublishZero: number } };
 };
+
+/** คอลัมน์สถิติของ Facebook Page ที่ใช้ตัดสินว่าแถวนั้น "ไม่มีสถิติ" (ทุกค่าเป็น 0 หรือว่าง) */
+export const FB_METRIC_COLS = ["reactions_comments_shares", "reactions", "comments", "shares", "seconds_viewed", "average_seconds_viewed", "estimated_earnings_usd", "ad_cpm_usd", "ad_impressions", "views", "reach", "total_clicks", "other_clicks", "link_clicks"];
 
 export class PlanError extends Error {
   constructor(public code: string, message: string) { super(message); }
@@ -94,9 +99,23 @@ export function buildPlan(a: { spec: Spec; table: Table; ctx: Ctx; existing: Exi
   const notInFile = spec.fields.filter((f) => !idx.has(norm(f.src)));
   if (notInFile.length) warnings.push(`ไม่พบคอลัมน์ในไฟล์ (เว้นว่างไว้): ${notInFile.map((f) => f.src).join(", ")}`);
 
+  // ลำดับ วัน/เดือน ของคอลัมน์ Date ตรวจจากค่าทั้งไฟล์ (ไม่เดาทีละแถว)
+  let dateOrder: "MDY" | "DMY" = "MDY";
+  let dateAmbiguous = false;
+  const labelField = spec.metricDate ? spec.fields.find((x) => x.key === spec.metricDate!.labelKey) : undefined;
+  if (spec.metricDate && labelField) {
+    const li = idx.get(norm(labelField.src));
+    const vals = li === undefined ? [] : table.records.map((r) => (r.cells[li] ?? "").trim());
+    const o = detectSlashOrder(vals);
+    if (o.conflict) throw new PlanError("DATE_FORMAT_CONFLICT", "คอลัมน์ Date มีทั้งรูปแบบ วัน/เดือน และ เดือน/วัน ในไฟล์เดียวกัน ตีความไม่ได้ กรุณาส่งออกไฟล์ใหม่");
+    dateOrder = o.order; dateAmbiguous = o.ambiguous && vals.some((v) => /^\d{1,2}\/\d{1,2}\/\d{4}/.test(v));
+    if (dateAmbiguous) warnings.push("วันที่ในคอลัมน์ Date ทุกค่ามีวันไม่เกิน 12 จึงแยก วัน/เดือน ไม่ได้ ระบบใช้รูปแบบ เดือน/วัน/ปี ตามไฟล์ของ Facebook — ตรวจช่วงวันที่ในพรีวิวก่อนยืนยัน");
+  }
+
   const errors: ImportErr[] = [];
   const planned: Planned[] = [];
   const recs: { n: number; rec: Rec; baseKey: string }[] = [];
+  let prePublishZero = 0;
 
   for (const r of table.records) {
     const before = errors.length;
@@ -112,7 +131,23 @@ export function buildPlan(a: { spec: Spec; table: Table; ctx: Ctx; existing: Exi
       if (f.required && c.v === "") { errors.push({ row: r.n, column: f.src, raw: raw.slice(0, 200), code: "REQUIRED_BLANK", message: "ค่าที่จำเป็นเป็นค่าว่าง" }); continue; }
       rec[f.key] = c.v;
     }
+    if (spec.metricDate && labelField && errors.length === before) {
+      const label = String(rec[spec.metricDate.labelKey] ?? "");
+      if (label === "") errors.push({ row: r.n, column: labelField.src, raw: "", code: "REQUIRED_BLANK", message: "ไม่มีวันที่ของสถิติ (Date)" });
+      else if (/^lifetime$/i.test(label)) { rec.metric_date = ctx.snapshotDate!; rec.metric_scope = "lifetime"; }
+      else {
+        const d = parseMetricDate(label, dateOrder);
+        if (!d) errors.push({ row: r.n, column: labelField.src, raw: label.slice(0, 200), code: "INVALID_DATE", message: `วันที่ของสถิติไม่ถูกต้อง: "${label}"` });
+        else { rec.metric_date = d; rec.metric_scope = "daily"; }
+      }
+    }
     if (errors.length > before) { planned.push({ n: r.n, status: "invalid" }); continue; }
+    // Facebook ใส่แถวของทุกวันในช่วงที่ส่งออก แม้วันก่อนโพสต์ถูกเผยแพร่: ข้ามเฉพาะแถวที่ "ก่อนวันเผยแพร่ และไม่มีสถิติเลย" (มีค่าใดค่าหนึ่งจะเก็บไว้)
+    if (spec.metricDate && rec.metric_scope === "daily" && String(rec.metric_date) < String(rec.publish_time).slice(0, 10)
+      && FB_METRIC_COLS.every((c) => rec[c] === undefined || rec[c] === "" || rec[c] === 0)) {
+      planned.push({ n: r.n, status: "skip" }); prePublishZero++;
+      continue;
+    }
 
     if (spec.period === "user") { rec.report_start = ctx.reportStart!; rec.report_end = ctx.reportEnd!; }
     if (spec.comparison) { rec.comparison_start = ctx.comparisonStart!; rec.comparison_end = ctx.comparisonEnd!; }
@@ -142,7 +177,7 @@ export function buildPlan(a: { spec: Spec; table: Table; ctx: Ctx; existing: Exi
     warnings.push(`พบชื่อโฆษณาซ้ำในชุดโฆษณาเดียวกัน ${ambiguousGroups} กลุ่ม (ไม่มี Ad ID) ระบบแยกแยะด้วยลำดับในไฟล์ หากส่งออกใหม่แล้วลำดับเปลี่ยน แถวกลุ่มนี้อาจถูกจับคู่สลับกัน`);
 
   const cmpKeys = compareKeys(spec);
-  const counts = { total: table.records.length, insert: 0, update: 0, skip: 0, invalid: planned.length };
+  const counts = { total: table.records.length, insert: 0, update: 0, skip: prePublishZero, invalid: planned.filter((x) => x.status === "invalid").length };
   for (const { n, rec, baseKey } of recs) {
     const occ = (seen.get(baseKey) ?? 0) + 1;
     seen.set(baseKey, occ);
@@ -160,10 +195,23 @@ export function buildPlan(a: { spec: Spec; table: Table; ctx: Ctx; existing: Exi
   }
   planned.sort((x, y) => x.n - y.n);
 
+  const mdates = spec.metricDate ? recs.map((x) => String(x.rec.metric_date ?? "")).filter(Boolean).sort() : [];
+  let info: Plan["info"];
+  if (spec.metricDate) {
+    const ok = recs.map((x) => x.rec);
+    const daily = ok.filter((r) => r.metric_scope === "daily").length, lifetime = ok.filter((r) => r.metric_scope === "lifetime").length;
+    info = { metric: { daily, lifetime, posts: new Set(ok.map((r) => `${r.page_id}|${r.post_id}`)).size, from: mdates[0] ?? "", to: mdates[mdates.length - 1] ?? "", order: dateOrder, ambiguous: dateAmbiguous, prePublishZero } };
+    if (prePublishZero) warnings.push(`ข้าม ${prePublishZero} แถวที่เป็นวันก่อนเผยแพร่โพสต์และไม่มีสถิติเลย (Facebook ใส่แถวว่างของทุกวันมาในไฟล์) — แถวก่อนวันเผยแพร่ที่มีสถิติจะถูกเก็บไว้`);
+    const early = ok.filter((r) => r.metric_scope === "daily" && String(r.metric_date) < String(r.publish_time).slice(0, 10)).length;
+    if (early) warnings.push(`${early} แถวมีสถิติก่อนวันเผยแพร่โพสต์ (เช่น โพสต์ตั้งเวลาหรือแก้ไขวันเผยแพร่) เก็บไว้ตามต้นฉบับ`);
+    if (lifetime) warnings.push(`${lifetime} แถวมี Date = Lifetime: ใช้วันที่ส่งออก ${ctx.snapshotDate} เป็น metric_date และเป็นยอดสะสม ระบบจะไม่นำไปรวมกับยอดรายวัน`);
+    if (daily && lifetime) warnings.push("ไฟล์นี้มีทั้งข้อมูลรายวันและ Lifetime ปนกัน ตรวจว่าเป็นไฟล์ที่ต้องการ");
+  }
   const starts = recs.map((x) => String(x.rec.report_start ?? "")).filter(Boolean).sort();
   const ends = recs.map((x) => String(x.rec.report_end ?? "")).filter(Boolean).sort();
   return {
     planned, counts, errors, warnings,
-    period: { start: starts[0] ?? ctx.reportStart ?? "", end: ends[ends.length - 1] ?? ctx.reportEnd ?? "" },
+    period: { start: starts[0] ?? mdates[0] ?? ctx.reportStart ?? "", end: ends[ends.length - 1] ?? mdates[mdates.length - 1] ?? ctx.reportEnd ?? "" },
+    info,
   };
 }

@@ -101,7 +101,7 @@ function summarize(p: Awaited<ReturnType<typeof prepare>>) {
   const { spec, plan } = p;
   return {
     spec: { id: spec.id, label: spec.label, tab: spec.tab, source: spec.source, period: spec.period, comparison: !!spec.comparison },
-    detected: p.detected, ctx: p.ctx, sha256: p.sha256, period: plan.period, periodError: p.periodError,
+    detected: p.detected, ctx: p.ctx, sha256: p.sha256, period: plan.period, periodError: p.periodError, info: plan.info,
     counts: plan.counts, warnings: plan.warnings, errors: plan.errors.slice(0, 1000),
     fileDuplicate: p.fileDuplicate,
     previewColumns: spec.previewKeys,

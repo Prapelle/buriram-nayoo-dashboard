@@ -34,14 +34,16 @@ const GOOGLE_DETAIL = SPECS.filter((s) => s.source === "google_ads" && s.id !== 
 
 export const SUMMARY_COLUMNS = ["month", "meta_ads_spend_thb", "google_ads_campaign_spend_thb", "total_paid_media_spend_thb", "ads_reports_span_months",
   "fb_posts_published", "fb_posts_reach_sum_lifetime", "fb_link_clicks", "line_new_friends", "line_inquiries", "line_leads",
-  "leads_total", "leads_qualified", "won_deals", "deal_value_thb", "company_revenue_thb", "direct_cost_thb", "gross_profit_thb"];
+  "leads_total", "leads_qualified", "won_deals", "deal_value_thb", "company_revenue_thb", "direct_cost_thb", "gross_profit_thb",
+  // Phase 1: เพิ่มต่อท้าย (ยอดรายวันของ Facebook ตามเดือนของวันที่ของสถิติ)
+  "fb_daily_engagement", "fb_daily_seconds_viewed", "fb_daily_reach_sum", "fb_daily_link_clicks"];
 export const SUMMARY_FINANCIAL = ["deal_value_thb", "company_revenue_thb", "direct_cost_thb", "gross_profit_thb"];
 
 export const DATASETS: Dataset[] = [
-  { id: "facebook_page_posts", filename: "facebook_page_posts.csv", label: "Facebook Page — โพสต์", group: "การตลาด", tab: "FB_PAGE_POSTS", columns: tabCols("FB_PAGE_POSTS"), roles: MKT,
-    applies: { date: "วันที่เผยแพร่โพสต์", area: false, channel: false, campaign: false },
-    note: "ยอดเป็นแบบสะสม (Lifetime) ณ วันส่งออก (snapshot_date) ตัดเพจที่ตั้งไว้ใน APP_CONFIG (excluded_fb_pages) ออกโดยค่าเริ่มต้น",
-    keep: (r, f) => inDay(day(r.publish_time), f) },
+  { id: "facebook_page_posts", filename: "facebook_page_posts.csv", label: "Facebook Page — สถิติโพสต์", group: "การตลาด", tab: "FB_PAGE_POSTS", columns: tabCols("FB_PAGE_POSTS"), roles: MKT,
+    applies: { date: "วันที่ของสถิติ (metric_date)", area: false, channel: false, campaign: false },
+    note: "หนึ่งแถวต่อ โพสต์ × วันที่ของสถิติ (metric_date) · metric_scope = daily คือยอดของวันนั้น (รวมข้ามวันได้), lifetime คือยอดสะสม ณ วันส่งออก (ห้ามรวมข้ามวัน) · average_seconds_viewed และ ad_cpm_usd เป็นค่าเฉลี่ย ห้ามรวม · ตัดเพจที่ตั้งไว้ใน APP_CONFIG (excluded_fb_pages) ออกโดยค่าเริ่มต้น",
+    keep: (r, f) => inDay((r.metric_date || r.snapshot_date || "").slice(0, 10), f) },
   { ...periodDataset("facebook_ads", "META_ADS", "Facebook Ads (Meta)", "ad_set_name"), filename: "facebook_ads.csv", note: "ยอดรวมทั้งช่วงรายงาน Results แยกตาม result_indicator ห้ามรวมต่างประเภทกัน" },
   { ...periodDataset("google_ads_campaigns", "GOOGLE_ADS_CAMPAIGNS", "Google Ads — Campaign Report", "campaign_name"), note: "แหล่งยอดใช้จ่ายหลักของ Google Ads ห้ามรวมกับรายงานรายละเอียดอื่น" },
   ...GOOGLE_DETAIL,
@@ -58,7 +60,7 @@ export const DATASETS: Dataset[] = [
     applies: { date: "วันที่เอกสาร", area: false, channel: false, campaign: false }, note: "ข้อมูลการเงินและลูกค้า เฉพาะ Admin และ Sales (ตัวกรองเพิ่มเติมอยู่ที่หน้า Sales)", keep: () => true },
   { id: "marketing_monthly_summary", filename: "marketing_monthly_summary.csv", label: "สรุปการตลาดรายเดือน", group: "สรุป", tab: null, columns: SUMMARY_COLUMNS, roles: ["admin", "marketing", "sales"], special: "summary",
     applies: { date: "เดือน", area: true, channel: false, campaign: false },
-    note: "หนึ่งแถวต่อเดือน ใช้ Meta Ads + Google Ads Campaign Report เท่านั้น (ไม่รวมรายงานรายละเอียด) · ช่องว่าง = ไม่มีข้อมูล ไม่ใช่ 0 · ไม่รวมยอดขายจากรายงานบัญชี · Marketing จะไม่มีคอลัมน์การเงิน · Area ใช้กับโฆษณาและ Leads",
+    note: "หนึ่งแถวต่อเดือน · fb_posts_published = โพสต์ที่เผยแพร่ในเดือน (ไม่ซ้ำ) · fb_posts_reach_sum_lifetime/fb_link_clicks = ยอดสะสม (Lifetime) ล่าสุดของแต่ละโพสต์ ตามเดือนที่เผยแพร่ · fb_daily_* = ผลรวมรายวันตามเดือนของวันที่ของสถิติ (fb_daily_reach_sum ไม่ใช่ Unique Reach) · ใช้ Meta Ads + Google Ads Campaign Report เท่านั้น (ไม่รวมรายงานรายละเอียด) · ช่องว่าง = ไม่มีข้อมูล ไม่ใช่ 0 · ไม่รวมยอดขายจากรายงานบัญชี · Marketing จะไม่มีคอลัมน์การเงิน · Area ใช้กับโฆษณาและ Leads",
     keep: () => true },
 ];
 export const DATASET_BY_ID = Object.fromEntries(DATASETS.map((d) => [d.id, d])) as Record<string, Dataset>;

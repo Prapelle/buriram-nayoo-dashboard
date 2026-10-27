@@ -9,7 +9,7 @@ const wanted = (role: Role): Record<string, string[]> => ({
   META_ADS: ["report_start", "report_end", "ad_set_name", "amount_spent_thb", "area", "imported_at"],
   GOOGLE_ADS_CAMPAIGNS: ["report_start", "report_end", "campaign_name", "cost_thb", "area", "imported_at"],
   GOOGLE_ADS_TIME_SERIES: ["date", "cost_thb", "imported_at"],
-  FB_PAGE_POSTS: ["page_id", "page_name", "publish_time", "reach", "link_clicks", "imported_at"],
+  FB_PAGE_POSTS: ["page_id", "post_id", "page_name", "publish_time", "metric_date", "metric_scope", "snapshot_date", "reach", "link_clicks", "reactions_comments_shares", "reactions", "comments", "shares", "seconds_viewed", "imported_at"],
   LINE_OA_MONTHLY: ["report_month", "new_friends", "friends_end", "inquiries", "leads"],
   LEADS: ["received_at", "source_channel", "campaign_name", "area", "service_category", "status", "qualified_at"],
   SALES: ["closing_date", "revenue_date", "service_category", "source_channel", "campaign_name", "payment_status", ...(role === "marketing" ? [] : FIN_COLS)],

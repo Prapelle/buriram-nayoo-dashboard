@@ -22,6 +22,8 @@ export type Spec = {
   areaMap?: { platform: string; key: string };
   /** ตารางปลายทางไม่มีคอลัมน์ area (Facebook Page ตาม schema) */
   noArea?: boolean;
+  /** ข้อมูลระดับ โพสต์ × วันที่ของสถิติ: metric_date มาจากคอลัมน์ Date (Lifetime = วันที่ส่งออกที่ผู้ใช้ยืนยัน) */
+  metricDate?: { labelKey: string };
   derive?: (r: Rec) => void;
   previewKeys: string[];
 };
@@ -33,10 +35,11 @@ const withHour = (r: Rec) => { r.hour_24 = hour24(String(r.start_hour ?? "")); }
 
 export const SPECS: Spec[] = [
   {
-    id: "fb_page", source: "facebook_page", label: "Facebook Page — โพสต์", tab: "FB_PAGE_POSTS",
-    signature: ["post id", "page id", "publish time", "permalink", "post type", "views", "reach"],
-    period: "snapshot", keyFields: ["page_id", "post_id"], noArea: true,
-    previewKeys: ["page_name", "publish_time", "post_type", "views", "reach", "link_clicks"],
+    id: "fb_page", source: "facebook_page", label: "Facebook Page — สถิติโพสต์ (รายวัน / Lifetime)", tab: "FB_PAGE_POSTS",
+    // ไม่บังคับ Views/Reach เพราะไฟล์รายวันของ Facebook ไม่มีคอลัมน์เหล่านี้
+    signature: ["post id", "page id", "publish time", "permalink", "post type", "date"],
+    period: "snapshot", keyFields: ["page_id", "post_id", "metric_date"], noArea: true, metricDate: { labelKey: "metric_period_label" },
+    previewKeys: ["page_name", "metric_date", "metric_scope", "publish_time", "reactions", "comments", "shares", "seconds_viewed"],
     fields: [
       f("Post ID", "post_id", "text", true), f("Page ID", "page_id", "text", true), f("Page name", "page_name", "text"),
       f("Title", "title", "text"), f("Description", "description", "text"),
@@ -49,6 +52,9 @@ export const SPECS: Spec[] = [
       f("Estimated earnings (USD)", "estimated_earnings_usd", "num"), f("Ad CPM (USD)", "ad_cpm_usd", "num"),
       f("Ad impressions", "ad_impressions", "int"), f("Total clicks", "total_clicks", "int"),
       f("Other Clicks", "other_clicks", "int"), f("Link Clicks", "link_clicks", "int"),
+      f("Duration (sec)", "duration_sec", "num"), f("Caption type", "caption_type", "text"), f("Is crosspost", "is_crosspost", "text"),
+      f("Is share", "is_share", "text"), f("Languages", "languages", "text"), f("Custom labels", "custom_labels", "text"),
+      f("Funded content status", "funded_content_status", "text"), f("Data comment", "data_comment", "text"),
     ],
   },
   {

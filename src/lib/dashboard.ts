@@ -1,3 +1,4 @@
+import { excludePages, summarizeFb } from "./fbmetrics";
 import type { Role } from "./roles";
 
 export type Row = Record<string, string>;
@@ -81,10 +82,10 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
   const google = chOk("google") ? pickAds(googleAll, "campaign_name") : [];
   if (partial) warnings.push("รายงานโฆษณาเป็นยอดรวมทั้งช่วงของรายงาน (ไม่แบ่งรายวัน) ช่วงที่เลือกตัดผ่านช่วงของรายงาน ตัวเลขจึงเป็นยอดเต็มของรายงานที่ทับช่วงนั้น");
 
-  const exSet = new Set(data.excludedPages);
-  const postsAll = data.posts.filter((p) => !exSet.has(p.page_name) && !exSet.has(p.page_id));
-  const excludedPosts = data.posts.length - postsAll.length;
-  const posts = chOk("posts") ? postsAll.filter((p) => (!f.from && !f.to) || inRange(day(p.publish_time), f)) : [];
+  // Facebook Page: สถิติกรองตามวันที่ของสถิติ (metric_date) ส่วนจำนวนโพสต์นับตามวันเผยแพร่ (publish_time) — ดู lib/fbmetrics.ts
+  const { kept: postsAll, excludedPosts } = excludePages(data.posts, data.excludedPages);
+  const fb = summarizeFb(chOk("posts") ? postsAll : [], { from: f.from, to: f.to });
+  const fbT = fb.basis === "lifetime" ? fb.lifetime : fb.daily;
 
   const monthOf = (d: string) => d.slice(0, 7);
   const line = chOk("line") ? data.line.filter((r) => {
@@ -106,8 +107,6 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
   const paidTotal = metaV === null && googleV === null ? null : Math.round(((metaV ?? 0) + (googleV ?? 0)) * 100) / 100;
   const paidNote = paidTotal !== null && (metaV === null || googleV === null) && chOk("meta") && chOk("google") ? "รวมเฉพาะแหล่งที่มีข้อมูล" : undefined;
 
-  const reach = sumOf(posts, "reach");
-  const clicks = sumOf(posts, "link_clicks");
   const lineNew = sumOf(line, "new_friends"), lineInq = sumOf(line, "inquiries"), lineLeads = sumOf(line, "leads");
 
   const qualified = (r: Row) => r.qualified_at !== "" && r.qualified_at !== undefined || ["Qualified", "Proposal", "Won"].includes(r.status);
@@ -140,9 +139,11 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
       kpi("paid", "Total Paid Media Spend", "thb", paidTotal, undefined, paidNote),
     ] },
     { title: "Facebook Page", items: [
-      ex("posts", "จำนวน Facebook Posts", "int", "posts", posts.length ? posts.length : null, excludedPosts ? `ไม่รวม ${excludedPosts} โพสต์จากเพจที่ตัดออก` : undefined),
-      ex("reach", "ผลรวม Reach ของโพสต์", "int", "posts", reach.n ? reach.sum : null, "ยอดสะสม (Lifetime) ณ วันส่งออก ไม่ใช่ Unique Page Reach"),
-      ex("clicks", "Facebook Link Clicks", "int", "posts", clicks.n ? clicks.sum : null, clicks.n ? `มีข้อมูล ${clicks.n} จาก ${posts.length} โพสต์ (ที่เหลือไม่มีข้อมูล ไม่ใช่ 0)` : undefined),
+      ex("posts", "จำนวน Facebook Posts (ที่เผยแพร่ในช่วง)", "int", "posts", fb.publishedPosts || null, `นับตามวันเผยแพร่${excludedPosts ? ` · ไม่รวม ${excludedPosts} โพสต์จากเพจที่ตัดออก` : ""}`),
+      ex("engagement", "Reactions + Comments + Shares", "int", "posts", fbT.reactions_comments_shares, fb.basis === "daily" ? `ผลรวมรายวันตามวันที่ของสถิติ ${fb.daily.from} ถึง ${fb.daily.to}` : "ยอดสะสม (Lifetime) ณ วันส่งออก ล่าสุดของแต่ละโพสต์"),
+      ex("reach", fb.basis === "daily" ? "ผลรวม Reach รายวันของโพสต์" : "ผลรวม Reach ของโพสต์", "int", "posts", fbT.reach,
+        fb.basis === "daily" ? "รวม Reach ของแต่ละวัน ไม่ใช่ Unique Reach ของช่วงเวลา" : "ยอดสะสม (Lifetime) ณ วันส่งออก ไม่ใช่ Unique Page Reach"),
+      ex("clicks", "Facebook Link Clicks", "int", "posts", fbT.link_clicks, fbT.link_clicks !== null ? `มีข้อมูล ${fbT.filledPosts.link_clicks} จาก ${fbT.posts} โพสต์ (ที่เหลือไม่มีข้อมูล ไม่ใช่ 0)` : undefined),
     ] },
     { title: "LINE OA", items: [
       ex("line_new", "LINE OA New Friends", "int", "line", lineNew.n ? lineNew.sum : null),
@@ -201,6 +202,8 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
   if (f.campaign) notes.push("ตัวกรอง Campaign ใช้กับโฆษณา (Google: ชื่อแคมเปญ, Meta: ชื่อ Ad set), Leads และ Sales เท่านั้น");
   if (f.service) notes.push("ตัวกรอง Service Category ใช้กับ Leads และ Sales เท่านั้น");
   if (f.channel) notes.push(`ตัวกรองช่องทาง "${f.channel}": ข้อมูลของช่องทางอื่นถูกซ่อนไว้`);
+  if (fb.basis === "daily" && fb.lifetimeOnlyPosts) notes.push(`Facebook: ${fb.lifetimeOnlyPosts} โพสต์มีแต่ยอดสะสม (Lifetime) จึงไม่รวมในยอดรายวัน`);
+  if (fb.basis !== "none") notes.push(fb.basis === "daily" ? "Facebook Page: ตัวเลขสถิติกรองตามวันที่ของสถิติ (metric_date) ส่วนจำนวนโพสต์กรองตามวันเผยแพร่" : "Facebook Page: ใช้ยอดสะสม (Lifetime) ล่าสุดของแต่ละโพสต์ ไม่รวมยอดของหลายวันส่งออก");
   if (excludedPosts) notes.push(`ไม่รวมเพจ Facebook ที่ตัดออก: ${data.excludedPages.join(", ")} (ตั้งค่าที่แท็บ APP_CONFIG คีย์ excluded_fb_pages)`);
   for (const w of [overlapWarning(metaAll, "Meta Ads"), overlapWarning(googleAll, "Google Ads Campaign")]) if (w) warnings.push(w);
 

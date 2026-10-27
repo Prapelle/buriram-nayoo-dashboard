@@ -77,3 +77,33 @@ export function hour24(h12: string): number | "" {
   if (!m) return "";
   return (Number(m[1]) % 12) + (m[2] === "PM" ? 12 : 0);
 }
+
+// ---------- วันที่ของสถิติ (metric_date) ของ Facebook Page ----------
+export type SlashOrder = { order: "MDY" | "DMY"; ambiguous: boolean; conflict: boolean };
+
+/** ตรวจลำดับ วัน/เดือน จากค่าทั้งไฟล์: ตัวแรก > 12 = วัน/เดือน, ตัวที่สอง > 12 = เดือน/วัน, ถ้า ≤ 12 ทุกค่า = กำกวม (ใช้ เดือน/วัน ตามรูปแบบของ Facebook) */
+export function detectSlashOrder(values: string[]): SlashOrder {
+  let first = 0, second = 0;
+  for (const v of values) {
+    const m = /^(\d{1,2})\/(\d{1,2})\/\d{4}/.exec(v.trim());
+    if (!m) continue;
+    if (+m[1] > 12) first++;
+    if (+m[2] > 12) second++;
+  }
+  if (first && second) return { order: "MDY", ambiguous: false, conflict: true };
+  if (first) return { order: "DMY", ambiguous: false, conflict: false };
+  if (second) return { order: "MDY", ambiguous: false, conflict: false };
+  return { order: "MDY", ambiguous: true, conflict: false };
+}
+
+/** แปลงวันที่ของสถิติเป็น YYYY-MM-DD (รับ YYYY-MM-DD หรือ M/D/YYYY, D/M/YYYY ตามลำดับที่ตรวจได้) คืน null ถ้าไม่ถูกต้อง */
+export function parseMetricDate(raw: string, order: "MDY" | "DMY"): string | null {
+  const s = raw.trim();
+  let m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T].*)?$/.exec(s);
+  if (m) return validIsoDate(+m[1], +m[2], +m[3]) ? `${m[1]}-${m[2]}-${m[3]}` : null;
+  m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s.*)?$/.exec(s);
+  if (!m) return null;
+  const d = order === "MDY" ? +m[2] : +m[1], mo = order === "MDY" ? +m[1] : +m[2], y = +m[3];
+  if (!validIsoDate(y, mo, d)) return null;
+  return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}

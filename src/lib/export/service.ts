@@ -1,5 +1,6 @@
 import { writeAudit } from "../audit";
 import { toCsv } from "../csv";
+import { metricDateOf, postKey, scopeOf } from "../fbmetrics";
 import { csvSafe } from "../csvsafe";
 import { DEFAULT_EXCLUDED_PAGES, num } from "../dashboard";
 import { isIsoDate } from "../import/normalize";
@@ -38,7 +39,23 @@ export function buildSummary(d: { meta: Row[]; google: Row[]; posts: Row[]; line
 
   for (const r of d.meta) if (!f.area || (r.area || "unknown") === f.area) { add(r.report_start.slice(0, 7), "meta_ads_spend_thb", num(r.amount_spent_thb)); if (r.report_start.slice(0, 7) !== r.report_end.slice(0, 7)) get(r.report_start.slice(0, 7)).ads_reports_span_months = "TRUE"; }
   for (const r of d.google) if (!f.area || (r.area || "unknown") === f.area) { add(r.report_start.slice(0, 7), "google_ads_campaign_spend_thb", num(r.cost_thb)); if (r.report_start.slice(0, 7) !== r.report_end.slice(0, 7)) get(r.report_start.slice(0, 7)).ads_reports_span_months = "TRUE"; }
-  for (const r of d.posts) if (!ex.has(r.page_name) && !ex.has(r.page_id) || f.includeExcluded) { const m = String(r.publish_time).slice(0, 7); mark(m, "fb_posts_published"); add(m, "fb_posts_reach_sum_lifetime", num(r.reach)); add(m, "fb_link_clicks", num(r.link_clicks)); }
+  // Facebook Page (กฎเดียวกับ lib/fbmetrics.ts): โพสต์นับไม่ซ้ำตามเดือนที่เผยแพร่, Lifetime ใช้ snapshot ล่าสุดต่อโพสต์, รายวันรวมตามเดือนของ metric_date
+  const fbRows = d.posts.filter((r) => f.includeExcluded || (!ex.has(r.page_name) && !ex.has(r.page_id)));
+  const pubMonth = new Map<string, string>();
+  for (const r of fbRows) if (r.publish_time) pubMonth.set(postKey(r), String(r.publish_time).slice(0, 7));
+  pubMonth.forEach((m) => mark(m, "fb_posts_published"));
+  const latestLife = new Map<string, Row>();
+  for (const r of fbRows) {
+    if (scopeOf(r) !== "lifetime") continue;
+    const k = postKey(r), cur = latestLife.get(k);
+    if (!cur || metricDateOf(r) > metricDateOf(cur)) latestLife.set(k, r);
+  }
+  latestLife.forEach((r, k) => { const m = pubMonth.get(k) ?? ""; add(m, "fb_posts_reach_sum_lifetime", num(r.reach)); add(m, "fb_link_clicks", num(r.link_clicks)); });
+  for (const r of fbRows) if (scopeOf(r) === "daily") {
+    const m = metricDateOf(r).slice(0, 7);
+    add(m, "fb_daily_engagement", num(r.reactions_comments_shares)); add(m, "fb_daily_seconds_viewed", num(r.seconds_viewed));
+    add(m, "fb_daily_reach_sum", num(r.reach)); add(m, "fb_daily_link_clicks", num(r.link_clicks));
+  }
   for (const r of d.line) { const m = String(r.report_month).slice(0, 7); add(m, "line_new_friends", num(r.new_friends)); add(m, "line_inquiries", num(r.inquiries)); add(m, "line_leads", num(r.leads)); }
   for (const r of d.leads) if (!f.area || (r.area || "unknown") === f.area) {
     const m = String(r.received_at).slice(0, 7); mark(m, "leads_total");
@@ -79,7 +96,7 @@ export async function exportDataset(id: string, f: ExportFilters, role: Role, ac
     if (ds.special === "summary") {
       const [meta, google, posts, line, leads, sales, excluded] = await Promise.all([
         read("META_ADS", ["report_start", "report_end", "amount_spent_thb", "area"]), read("GOOGLE_ADS_CAMPAIGNS", ["report_start", "report_end", "cost_thb", "area"]),
-        read("FB_PAGE_POSTS", ["page_id", "page_name", "publish_time", "reach", "link_clicks"]), read("LINE_OA_MONTHLY", ["report_month", "new_friends", "inquiries", "leads"]),
+        read("FB_PAGE_POSTS", ["page_id", "post_id", "page_name", "publish_time", "metric_date", "metric_scope", "snapshot_date", "reach", "link_clicks", "reactions_comments_shares", "seconds_viewed"]), read("LINE_OA_MONTHLY", ["report_month", "new_friends", "inquiries", "leads"]),
         read("LEADS", ["received_at", "status", "qualified_at", "area"]),
         role === "marketing" ? read("SALES", ["closing_date", "payment_status"]) : read("SALES", ["closing_date", "revenue_date", "payment_status", "deal_value_thb", "company_revenue_thb", "direct_cost_thb"]),
         getExcludedPages(DEFAULT_EXCLUDED_PAGES),
