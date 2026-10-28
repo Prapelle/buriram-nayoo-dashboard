@@ -88,6 +88,30 @@ try {
   if (process.env.SHOT_DIR) { const box = await page.getByRole("heading", { name: "Customer Funnel" }).locator("xpath=../..").boundingBox(); const b2 = await page.getByRole("heading", { name: "ประสิทธิภาพแต่ละช่องทาง (Cost per Lead)" }).locator("xpath=../..").boundingBox(); await page.screenshot({ path: process.env.SHOT_DIR + "/perf-funnel.png", fullPage: true, clip: { x: 0, y: Math.max(0, box.y - 10), width: 1280, height: b2.y + b2.height - box.y + 20 } }); }
   const tw = await page.evaluate(() => [...document.querySelectorAll("main table")].map((t) => t.parentElement.scrollWidth - t.parentElement.clientWidth)[0]); assert.ok(tw <= 1, `ตารางช่องทางล้น ${tw}px ที่ 1280px`);
   ok("Performance: Customer Funnel Reach 500,000 → เข้าเว็บ 22,409 Sessions → Leads 23 → Qualified 7 → ขายได้ 2 · ฿/Lead: Meta ฿3,129.80 (ถูกที่สุด) · Google ฿5,762.96 · LINE OA ไม่มีค่าโฆษณา");
+  // Facebook ระดับเพจ: ไฟล์จริงจาก Meta Business Suite (UTF-16) ผ่านหน้า นำเข้า CSV
+  const FB = `${process.env.FIXTURE_DIR ?? "tests/fixtures"}/fbpage/`;
+  for (const [f, label] of [["Viewers.csv", "Facebook Page — Viewers รายวัน (ระดับเพจ)"], ["Link_clicks.csv", "Facebook Page — Link clicks รายวัน (ระดับเพจ)"]]) {
+    await page.goto(BASE + "/import"); await page.getByRole("cell", { name: "ga4_pages.csv" }).waitFor(); // ประวัติโหลดแล้ว = หน้าพร้อมรับไฟล์
+    await page.locator('input[type="file"]').first().setInputFiles(FB + f);
+    await page.getByText(/ช่วงรายงานจากไฟล์: 01\/09\/2026\s*–\s*30\/09\/2026/).waitFor();
+    assert.equal(await page.locator("select").first().evaluate((el) => el.options[el.selectedIndex].text), label);
+    await page.getByRole("button", { name: "ยืนยันนำเข้า (+30 / อัปเดต 0)" }).click();
+    await page.getByText("นำเข้าสำเร็จ — เพิ่ม 30 · อัปเดต 0 · ข้าม 0 · ไม่ถูกต้อง 0").waitFor();
+  }
+  assert.equal((await tab("FB_PAGE_INSIGHTS")).length - 1, 60);
+  ok("หน้า นำเข้า CSV: ไฟล์ Viewers / Link clicks จริง (UTF-16 จาก Meta Business Suite) ตรวจประเภทอัตโนมัติ ช่วง 01–30/09/2026 → นำเข้า 30 + 30 วัน");
+  await page.goto(BASE + "/facebook-page?from=2026-09-01&to=2026-09-30"); await page.getByText("Viewers (แทน Reach)").waitFor();
+  const fbT = (await page.locator("main").innerText()).replace(/\s+/g, " ");
+  assert.ok(/Viewers \(แทน Reach\) 806,272 ใช้ Viewers เทียบเคียง Reach/.test(fbT) && /Link clicks \(ระดับเพจ\) 6,443/.test(fbT), fbT.slice(0, 900));
+  if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/fb-page.png", fullPage: false });
+  assert.match(await page.getByRole("link", { name: "Viewers / Link clicks รายวัน (ระดับเพจ)" }).getAttribute("href"), /view=page/);
+  await page.goto(BASE + "/facebook-page?view=page&from=2026-09-01&to=2026-09-30"); await page.getByText("93,295").waitFor();
+  const fbD = (await page.locator("main").innerText()).replace(/\s+/g, " ");
+  assert.ok(/10\/09\/2026 93,295 375/.test(fbD), fbD.slice(fbD.indexOf("วันที่"), fbD.indexOf("วันที่") + 400));
+  await page.goto(BASE + "/performance?from=2026-09-01&to=2026-09-30"); await page.getByText("Website Users", { exact: false }).first().waitFor();
+  const pfT = (await page.locator("main").innerText()).replace(/\s+/g, " ");
+  assert.ok(/Facebook Viewers \(แทน Reach\) 806,272/.test(pfT) && /Reach \(ทุก Social\) .*1,306,272/.test(pfT), pfT.slice(pfT.indexOf("Facebook Page (Organic)"), pfT.indexOf("Facebook Page (Organic)") + 500));
+  ok("หน้า Facebook Page: การ์ด Viewers (แทน Reach) 806,272 + หมายเหตุ ใช้ Viewers เทียบเคียง Reach · Link clicks 6,443 · ตารางรายวัน · Performance/Funnel ใช้ Viewers (500,000 + 806,272)");
   await page.goto(BASE + "/website"); await page.getByText("GA4 Snapshot — Sessions ตามแหล่งที่มา").waitFor({ timeout: 5000 }).catch(() => {});
   await page.setViewportSize({ width: 390, height: 844 }); await page.goto(BASE + "/website");
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
@@ -96,4 +120,4 @@ try {
   assert.deepEqual(errors.filter((e) => !/favicon/.test(e)), []); ok("ไม่มี JavaScript error ในเบราว์เซอร์");
   await browser.close();
   console.log(`\nผ่านทั้งหมด ${pass} รายการ`);
-} catch (e) { console.error("\n✗ FAIL:", e?.message ?? e); console.error(log.split("\n").slice(-20).join("\n")); process.exitCode = 1; } finally { try { await browser?.close(); } catch { /* */ } stop(); process.exit(process.exitCode ?? 0); }
+} catch (e) { if (process.env.SHOT_DIR) try { await browser?.contexts()[0]?.pages()[0]?.screenshot({ path: process.env.SHOT_DIR + "/fail.png", fullPage: true }); } catch { /* */ } console.error("\n✗ FAIL:", e?.message ?? e); console.error(log.split("\n").slice(-20).join("\n")); process.exitCode = 1; } finally { try { await browser?.close(); } catch { /* */ } stop(); process.exit(process.exitCode ?? 0); }

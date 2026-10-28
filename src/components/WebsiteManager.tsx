@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { assembleBatches, KIND_LABEL, parseWebsiteFile, WebParseError, type ParsedFile, type UploadBatch } from "@/lib/website/parse";
+import { readTextFile } from "@/lib/csv";
 
 type Row = Record<string, string>;
 type Plan = { kind: string; label: string; filename: string; period: { start: string; end: string }; counts: { insert: number; update: number; skip: number }; fileDuplicate: { uploadedAt: string; uploadedBy: string } | null };
@@ -57,7 +58,7 @@ export function WebsiteManager({ isAdmin }: { isAdmin: boolean }) {
     for (const f of [...list]) {
       try {
         if (f.size > 20 * 1024 * 1024) throw new WebParseError("TOO_LARGE", "ไฟล์ใหญ่เกิน 20 MB");
-        const text = await f.text();
+        const text = await readTextFile(f);
         ok.push({ ...parseWebsiteFile(f.name, text), sha256: await sha256(text) });
       } catch (e) { errs.push(`${f.name}: ${e instanceof Error ? e.message : "อ่านไม่ได้"}`); }
     }

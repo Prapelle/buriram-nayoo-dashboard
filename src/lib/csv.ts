@@ -45,3 +45,10 @@ export function toCsv(rows: (string | number)[][]): string {
   };
   return "\ufeff" + rows.map((r) => r.map(esc).join(",")).join("\r\n") + "\r\n";
 }
+
+/** ถอดรหัสไฟล์ข้อความตาม BOM: UTF-16 LE/BE (ไฟล์ส่งออกของ Meta Business Suite) หรือ UTF-8 (ค่าเริ่มต้น) */
+export function decodeText(bytes: Uint8Array): string {
+  const enc = bytes[0] === 0xff && bytes[1] === 0xfe ? "utf-16le" : bytes[0] === 0xfe && bytes[1] === 0xff ? "utf-16be" : "utf-8";
+  return new TextDecoder(enc).decode(bytes); // TextDecoder ตัด BOM ออกให้
+}
+export async function readTextFile(f: Blob): Promise<string> { return decodeText(new Uint8Array(await f.arrayBuffer())); }

@@ -48,7 +48,9 @@ export const SUMMARY_COLUMNS = ["month", "meta_ads_spend_thb", "google_ads_campa
   // Phase 1: เพิ่มต่อท้าย (ยอดรายวันของ Facebook ตามเดือนของวันที่ของสถิติ)
   "fb_daily_engagement", "fb_daily_seconds_viewed", "fb_daily_reach_sum", "fb_daily_link_clicks",
   // Phase 8: เพิ่มต่อท้าย (คอลัมน์เดิมไม่เปลี่ยนชื่อ/ลำดับ)
-  "google_ads_campaign_clicks", "leads_from_ads", "leads_need_buy_rent_build", "leads_need_sell"];
+  "google_ads_campaign_clicks", "leads_from_ads", "leads_need_buy_rent_build", "leads_need_sell",
+  // 28/10/2026: Facebook ระดับเพจรายวัน (Viewers ใช้เทียบเคียง Reach)
+  "fb_page_viewers_sum", "fb_page_link_clicks"];
 export const PERFORMANCE_COLUMNS = ["period_from", "period_to", "group", "kind", "kpi_key", "kpi_label", "unit", "value", "state", "incomplete_reason", "source_note",
   "yoy_period_from", "yoy_period_to", "yoy_value", "yoy_change_pct", "yoy_status"];
 export const DICTIONARY_COLUMNS = ["dataset_id", "filename", "grain", "column_position", "column_name", "column_type", "type_format"];
@@ -60,6 +62,11 @@ export const DATASETS: Dataset[] = [
     applies: { date: "วันที่ของสถิติ (metric_date)", area: false, channel: false, campaign: false },
     note: "หนึ่งแถวต่อ โพสต์ × วันที่ของสถิติ (metric_date) · metric_scope = daily คือยอดของวันนั้น (รวมข้ามวันได้), lifetime คือยอดสะสม ณ วันส่งออก (ห้ามรวมข้ามวัน) · average_seconds_viewed และ ad_cpm_usd เป็นค่าเฉลี่ย ห้ามรวม · ตัดเพจที่ตั้งไว้ใน APP_CONFIG (excluded_fb_pages) ออกโดยค่าเริ่มต้น",
     keep: (r, f) => inDay((r.metric_date || r.snapshot_date || "").slice(0, 10), f) },
+  { id: "facebook_page_insights", filename: "facebook_page_insights.csv", label: "Facebook Page — Viewers / Link clicks รายวัน (ระดับเพจ)", group: "การตลาด", tab: "FB_PAGE_INSIGHTS", columns: tabCols("FB_PAGE_INSIGHTS"), roles: MKT,
+    grain: "หนึ่งแถวต่อ ตัวชี้วัด (metric) × วัน (metric_date)",
+    applies: { date: "วันที่ของสถิติ (metric_date)", area: false, channel: false, campaign: false },
+    note: "metric = viewers หรือ link_clicks · ค่ารายวันระดับเพจจาก Meta Business Suite · viewers ใช้เทียบเคียง Reach (Facebook เปลี่ยน Reach ของเพจเป็น Viewers) ผลรวมหลายวันนับคนซ้ำ ไม่ใช่ Unique · ไม่ได้แยกตามเพจ",
+    keep: (r, f) => inDay(String(r.metric_date ?? "").slice(0, 10), f) },
   { ...periodDataset("facebook_ads", "META_ADS", "Facebook Ads (Meta)", "ad_set_name"), filename: "facebook_ads.csv",
     note: "ยอดรวมทั้งช่วงรายงาน Results แยกตาม result_indicator ห้ามรวมต่างประเภทกัน · result_indicator แสดงชื่อ Action ที่ตัด prefix actions:/Action: แล้ว ค่าต้นฉบับอยู่ในคอลัมน์ result_indicator_raw (ท้ายไฟล์)",
     derive: { columns: ["result_indicator_raw", "results_initial_indicator_raw"], apply: normalizeActionRows } },
@@ -87,7 +94,7 @@ export const DATASETS: Dataset[] = [
   { id: "marketing_monthly_summary", filename: "marketing_monthly_summary.csv", label: "สรุปการตลาดรายเดือน", group: "สรุป", tab: null, columns: SUMMARY_COLUMNS, roles: ["admin", "marketing", "sales"], special: "summary",
     grain: "หนึ่งแถวต่อเดือน (ตัวเลขสรุปจากไฟล์ต้นฉบับ — ห้ามนำไปรวมกับไฟล์ต้นฉบับ จะนับซ้ำ)",
     applies: { date: "เดือน", area: true, channel: false, campaign: false },
-    note: "หนึ่งแถวต่อเดือน · fb_posts_published = โพสต์ที่เผยแพร่ในเดือน (ไม่ซ้ำ) · fb_posts_reach_sum_lifetime/fb_link_clicks = ยอดสะสม (Lifetime) ล่าสุดของแต่ละโพสต์ ตามเดือนที่เผยแพร่ · fb_daily_* = ผลรวมรายวันตามเดือนของวันที่ของสถิติ (fb_daily_reach_sum ไม่ใช่ Unique Reach) · ใช้ Meta Ads + Google Ads Campaign Report เท่านั้น (ไม่รวมรายงานรายละเอียด) · ช่องว่าง = ไม่มีข้อมูล ไม่ใช่ 0 · ไม่รวมยอดขายจากรายงานบัญชี · Marketing จะไม่มีคอลัมน์การเงิน · Area ใช้กับโฆษณาและ Leads · leads_total นับ lead_id ไม่ซ้ำ · leads_qualified = Lead ที่ Call Status = ติดต่อได้แล้ว / เข้าชมโครงการแล้ว / ซื้อสำเร็จ · google_ads_campaign_clicks มาจาก Campaign Report (ชุดเดียวกับ Spend) · leads_from_ads = ช่องทาง Facebook Ads / Google Ads",
+    note: "หนึ่งแถวต่อเดือน · fb_posts_published = โพสต์ที่เผยแพร่ในเดือน (ไม่ซ้ำ) · fb_posts_reach_sum_lifetime/fb_link_clicks = ยอดสะสม (Lifetime) ล่าสุดของแต่ละโพสต์ ตามเดือนที่เผยแพร่ · fb_daily_* = ผลรวมรายวันตามเดือนของวันที่ของสถิติ (fb_daily_reach_sum ไม่ใช่ Unique Reach) · fb_page_viewers_sum = ผลรวม Viewers รายวันระดับเพจ (ใช้ Viewers เทียบเคียง Reach, ไม่ใช่ Unique) · fb_page_link_clicks = Link clicks รายวันระดับเพจ · ใช้ Meta Ads + Google Ads Campaign Report เท่านั้น (ไม่รวมรายงานรายละเอียด) · ช่องว่าง = ไม่มีข้อมูล ไม่ใช่ 0 · ไม่รวมยอดขายจากรายงานบัญชี · Marketing จะไม่มีคอลัมน์การเงิน · Area ใช้กับโฆษณาและ Leads · leads_total นับ lead_id ไม่ซ้ำ · leads_qualified = Lead ที่ Call Status = ติดต่อได้แล้ว / เข้าชมโครงการแล้ว / ซื้อสำเร็จ · google_ads_campaign_clicks มาจาก Campaign Report (ชุดเดียวกับ Spend) · leads_from_ads = ช่องทาง Facebook Ads / Google Ads",
     keep: () => true },
   { id: "marketing_performance_kpis", filename: "marketing_performance_kpis.csv", label: "Marketing Performance — KPI ของช่วงที่เลือก", group: "สรุป", tab: null, columns: PERFORMANCE_COLUMNS, roles: MKT, special: "performance",
     grain: "หนึ่งแถวต่อ KPI ของช่วงวันที่ที่เลือก พร้อมค่าปีก่อน (YoY) — ตัวเลขสรุป ห้ามนำไปรวมกับไฟล์ต้นฉบับ",

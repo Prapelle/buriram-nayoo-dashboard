@@ -25,6 +25,10 @@ export type Spec = {
   /** ข้อมูลระดับ โพสต์ × วันที่ของสถิติ: metric_date มาจากคอลัมน์ Date (Lifetime = วันที่ส่งออกที่ผู้ใช้ยืนยัน) */
   metricDate?: { labelKey: string };
   derive?: (r: Rec) => void;
+  /** ค่าคงที่ที่ใส่ทุกแถว (เช่น ชื่อตัวชี้วัดของไฟล์สถิติระดับเพจ) — ใช้ใน keyFields ได้ */
+  constants?: Record<string, string>;
+  /** ช่วงวันที่ของไฟล์ = วันแรก–วันสุดท้ายของ field นี้ (ข้อมูลรายวัน) */
+  dayKey?: string;
   previewKeys: string[];
 };
 
@@ -169,6 +173,19 @@ export const SPECS: Spec[] = [
       f("Clicks", "clicks", "int"), f("Clicks (Comparison)", "clicks_comparison", "int"),
       f("Interactions", "interactions", "int"), f("Interactions (Comparison)", "interactions_comparison", "int"),
     ],
+  },
+  // ---- Facebook Page ระดับเพจ (Meta Business Suite → Insights → ส่งออกกราฟ): ไฟล์ "sep=," + ชื่อตัวชี้วัด + Date, Primary ----
+  {
+    id: "fb_page_viewers", source: "facebook_page", label: "Facebook Page — Viewers รายวัน (ระดับเพจ)", tab: "FB_PAGE_INSIGHTS",
+    signature: ["date", "viewers"], period: "file", noArea: true, keyFields: ["metric", "metric_date"], constants: { metric: "viewers" }, dayKey: "metric_date",
+    previewKeys: ["metric_date", "metric", "value"],
+    fields: [f("Date", "metric_date", "isoDay", true), f("Viewers", "value", "int", true)],
+  },
+  {
+    id: "fb_page_link_clicks", source: "facebook_page", label: "Facebook Page — Link clicks รายวัน (ระดับเพจ)", tab: "FB_PAGE_INSIGHTS",
+    signature: ["date", "facebook link clicks"], period: "file", noArea: true, keyFields: ["metric", "metric_date"], constants: { metric: "link_clicks" }, dayKey: "metric_date",
+    previewKeys: ["metric_date", "metric", "value"],
+    fields: [f("Date", "metric_date", "isoDay", true), f("Facebook link clicks", "value", "int", true)],
   },
   // ---- ประเภทเพิ่มเติม (ไม่อยู่ใน 13 ประเภทของ spec แต่มีในไฟล์ที่ส่งมา) ----
   {

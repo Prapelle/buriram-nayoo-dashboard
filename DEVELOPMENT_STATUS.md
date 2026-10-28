@@ -848,3 +848,34 @@ Users 17,443 · Page Views 42,450 · PV/User 2.43 · Duration 1 นาที 0 �
 **Failed:** 0
 **Not Tested:** บนเว็บที่ deploy จริง/Google Sheet จริง · ข้อมูล Lead จริง (ข้อมูลในระบบยังเป็นม็อกอัป)
 
+## 28) Facebook Page: Viewers / Link clicks ระดับเพจ + ใช้ Viewers เทียบเคียง Reach (28/10/2026)
+
+### ข้อมูลที่ผู้ใช้ส่งมา (ตรวจแล้ว)
+- `Viewers.csv`, `Link_clicks.csv` จาก Meta Business Suite: **UTF-16 LE**, บรรทัดแรก `sep=,`, บรรทัดที่สองเป็นชื่อตัวชี้วัด, แล้ว `Date, Primary` · รายวัน 01–30/09/2026 (30 วัน ครบ ไม่ซ้ำ) · ไม่ระบุชื่อเพจ
+- Viewers รวม ก.ย. **806,272** (สูงสุด 10/09 = 93,295) · Link clicks รวม **6,443**
+
+### การออกแบบ
+- **อ่านไฟล์:** ถอดรหัสตาม BOM (UTF-16/UTF-8) ทั้งหน้า นำเข้า CSV และหน้า Website · ตัดบรรทัด `sep=` · ใช้ชื่อตัวชี้วัดเป็นหัวคอลัมน์ → ตรวจประเภทอัตโนมัติ
+- **ประเภทไฟล์ใหม่ 2 ประเภท** (fb_page_viewers, fb_page_link_clicks) → **แท็บใหม่ FB_PAGE_INSIGHTS** แบบยาว (metric × วัน) · คีย์กันซ้ำ = ตัวชี้วัด + วันที่ · ช่วงวันที่อ่านจากไฟล์ · ไฟล์เดิมซ้ำถูกบล็อก (Admin ยืนยันได้ และไม่บวกซ้ำ)
+- **ใช้ Viewers เทียบเคียง Reach** ทุกจุดที่เป็น Reach ของ Facebook Page เมื่อมีข้อมูล Viewers ในช่วง: ภาพรวมการตลาด (การ์ด Facebook Viewers (แทน Reach)), Marketing Performance (f_reach), Customer Funnel (Meta Ads Reach + Viewers), Export marketing_performance_kpis — ทุกจุดมีหมายเหตุ **"ใช้ Viewers เทียบเคียง Reach"** · ถ้าช่วงนั้นไม่มี Viewers ใช้ Reach รายโพสต์แบบเดิม
+- **Link clicks ระดับเพจ** ใช้แทน Link clicks รายโพสต์ (ไฟล์รายโพสต์รายวันไม่มีคอลัมน์นี้)
+- ช่วงที่เลือกมีวันที่ไม่มีข้อมูล → แสดงค่าพร้อม **ข้อมูลไม่ครบ** ระบุวันที่ขาด · ไม่มีข้อมูลเลย = รอข้อมูล (ไม่ใช่ 0) · วันเดียวกันนำเข้าซ้ำใช้ค่าล่าสุด
+- **หน้า Facebook Page:** การ์ด Viewers (แทน Reach) / Link clicks (ระดับเพจ) + แท็บ "Viewers / Link clicks รายวัน (ระดับเพจ)"
+- **Export:** ไฟล์ใหม่ facebook_page_insights.csv · สรุปรายเดือนเพิ่มคอลัมน์ต่อท้าย fb_page_viewers_sum, fb_page_link_clicks
+
+### ข้อควรรู้
+- Viewers ≠ Reach เดิมพอดี (Meta เปลี่ยนนิยาม) จึงใช้ "เทียบเคียง" · ผลรวมรายวันนับคนเดียวกันซ้ำข้ามวัน ไม่ใช่ Unique Viewers ของเดือน
+- ไฟล์ไม่ระบุเพจ จึงใช้การตั้งค่า "ตัดเพจ" ไม่ได้ — ให้ส่งออกเฉพาะเพจ บุรีรัมย์น่าอยู่
+- เลขแถวในข้อความแจ้งเตือนนับแบบที่ Excel แสดง (Excel ซ่อนบรรทัด sep=)
+
+### ไฟล์ที่เปลี่ยน
+`src/lib/csv.ts` (decodeText/readTextFile), `src/lib/import/{normalize,specs,plan}.ts`, `src/lib/schema.ts`, `src/lib/fbmetrics.ts` (pageMetric), `src/lib/dashboard.ts`, `src/lib/dashboard-data.ts`, `src/lib/performance.ts`, `src/lib/export/{datasets,service,dictionary}.ts`, `src/components/{ImportWizard,WebsiteManager}.tsx`, `src/app/(app)/facebook-page/page.tsx` · tests: fbpage, e2e, browser-website
+
+### Data / Schema Impact
+- **แท็บใหม่ FB_PAGE_INSIGHTS → ต้องกด ตั้งค่า → เตรียม Google Sheet** (ก่อนกด หน้าอื่นยังทำงานได้ตามเดิม) · ไม่แตะแท็บ/คอลัมน์เดิม · สรุปรายเดือนเพิ่มคอลัมน์ต่อท้าย 2 คอลัมน์
+
+### Test Results
+**Passed:** 388/388 (รันทั้งชุด 2 รอบติดกัน) — fbpage +4 (ไฟล์จริง UTF-16: 30 วัน, ยอดรวมตรงกับไฟล์, นำเข้าซ้ำ/อัปเดต, วันที่/ตัวเลขผิด, รวมตามช่วง/ข้อมูลไม่ครบ), e2e +5 (นำเข้าผ่าน service โดย Marketing → Performance/Funnel/ภาพรวม/Export ใช้ Viewers 806,272 + หมายเหตุ, ช่วงข้ามเดือนแจ้งไม่ครบ 5 วัน), เบราว์เซอร์จริง +2 (อัปโหลดไฟล์ UTF-16 ที่หน้า นำเข้า CSV, หน้า Facebook Page แสดง 806,272 / 6,443 + ตารางรายวัน) · TypeScript + Cloudflare build ผ่าน
+**Failed:** 0
+**Not Tested:** บนเว็บที่ deploy จริง/Google Sheet จริง · ไฟล์ Insights ตัวชี้วัดอื่นของ Meta Business Suite (รองรับเฉพาะ Viewers และ Facebook link clicks)
+

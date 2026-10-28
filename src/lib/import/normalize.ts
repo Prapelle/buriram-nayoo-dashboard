@@ -1,6 +1,6 @@
 export type Kind =
   | "text" | "int" | "num" | "numLoose" | "money" | "pct"
-  | "date" | "isoLoose" | "mdyDateTime" | "longDate" | "hour12";
+  | "date" | "isoLoose" | "mdyDateTime" | "longDate" | "hour12" | "isoDay";
 
 export type Conv = { v: string | number } | { err: string; code: string };
 
@@ -48,6 +48,11 @@ export function convert(kind: Kind, raw: string): Conv {
     case "date": {
       if (!isIsoDate(s)) return { err: `วันที่ไม่ถูกต้อง (ต้องเป็น YYYY-MM-DD): "${s}"`, code: "INVALID_DATE" };
       return { v: s };
+    }
+    case "isoDay": { // 2026-09-01T00:00:00 หรือ 2026-09-01 → 2026-09-01 (ไฟล์สถิติระดับเพจของ Meta Business Suite)
+      const m = /^(\d{4}-\d{2}-\d{2})(?:T00:00(?::00)?(?:\.0+)?Z?)?$/.exec(s);
+      if (!m || !isIsoDate(m[1])) return { err: `วันที่ไม่ถูกต้อง (ต้องเป็น YYYY-MM-DD): "${s}"`, code: "INVALID_DATE" };
+      return { v: m[1] };
     }
     case "isoLoose":
       return { v: /^\d{4}-\d{2}-\d{2}T/.test(s) ? s : "" };

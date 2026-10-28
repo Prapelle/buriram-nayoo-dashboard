@@ -305,7 +305,7 @@ const readBack = (csv: string) => { const t = parseCsv(csv); return { headers: t
 const exp = async (id: string, f: Record<string, string> = {}, role: "admin" | "marketing" | "sales" = "admin") => { const r = await exportDataset(id, parseFilters(new URLSearchParams(f)), role, "u@x.com"); return { ...r, ...readBack(r.csv!) }; };
 
 const need = ["facebook_page_posts", "facebook_ads", "google_ads_campaigns", "google_ads_search_terms", "google_ads_search_words", "google_ads_keywords", "google_ads_network", "google_ads_age", "google_ads_gender", "google_ads_gender_age", "google_ads_schedule_day", "google_ads_schedule_hour", "google_ads_schedule_day_hour", "google_ads_opt_score", "google_ads_campaign_changes", "line_oa_monthly", "leads", "sales", "marketing_monthly_summary"];
-assert.deepEqual(need.filter((i) => !DATASET_BY_ID[i]), []); assert.ok(need.every((i) => DATASET_BY_ID[i].filename === `${i}.csv`)); assert.equal(DATASETS.length, 19 + 3 + 1 + 2 + 2); // Phase 8: + marketing_performance_kpis, data_dictionary · Phase 5: + website_analytics, website_dimensions
+assert.deepEqual(need.filter((i) => !DATASET_BY_ID[i]), []); assert.ok(need.every((i) => DATASET_BY_ID[i].filename === `${i}.csv`)); assert.equal(DATASETS.length, 19 + 3 + 1 + 2 + 2 + 1); // Phase 8: + marketing_performance_kpis, data_dictionary · Phase 5: + website_analytics, website_dimensions · + facebook_page_insights
 ok("ชุดข้อมูลครบตาม spec: Facebook Page/Ads, Google Campaign + รายละเอียด 12 ประเภท, LINE OA, Leads, Sales, สรุปรายเดือน (+Devices/Time series/Auction และ sales_transactions)");
 const fp = await exp("facebook_page_posts", {}, "marketing");
 assert.ok(fp.csv!.startsWith("\ufeff")); assert.equal(fp.rows.length, 54); assert.ok(!fp.headers.includes("raw_json") && !fp.headers.includes("row_key"));
@@ -599,6 +599,35 @@ const dc16 = computeDashboard(pd, {}, "marketing").charts;
 assert.deepEqual(dc16.buyStatus!.filter((x) => x.value).map((x) => [x.label, x.value]), [["Warm", 1], ["Close", 1], ["(ยังไม่ระบุสถานะ)", 4]] /* +1 จาก Lead "ไม่สนใจ" ในส่วนที่ 15b, +2 จาก Lead เข้าชม/ซื้อสำเร็จ */);
 assert.equal(dc16.sellStatus!.find((x) => x.label === "ขายแล้ว")!.value, 1); assert.equal(dc16.sellStatus!.find((x) => x.label === "บ้านไม่พร้อมขาย")!.value, 1);
 ok("Dashboard กราฟ Buy Status / Sell Status จาก Lead ใน Sheet (ข้อมูล Marketing ไม่มีชื่อ/เบอร์)");
+console.log("16b) Facebook Page ระดับเพจ: Viewers / Link clicks → ใช้ Viewers เทียบเคียง Reach");
+{
+  const { decodeText } = await import("../src/lib/csv");
+  const fbFile = (f: string) => ({ filename: f, text: decodeText(readFileSync(`${DIR}/fbpage/${f}`)) });
+  const before = pk.f_reach; assert.doesNotMatch(before.label, /Viewers/);
+  for (const f of ["Viewers.csv", "Link_clicks.csv"]) { const c = await runCommit(fbFile(f), "m@x.com", "marketing"); assert.equal(c.counts.insert, 30, f); assert.equal(c.counts.invalid, 0, f); }
+  assert.equal(rowsOf("FB_PAGE_INSIGHTS"), 60);
+  await assert.rejects(runCommit(fbFile("Viewers.csv"), "m@x.com", "marketing"), (e: unknown) => e instanceof HttpError && e.code === "DUPLICATE_FILE");
+  ok(`นำเข้าผ่านหน้า นำเข้า CSV (Marketing): Viewers 30 วัน + Link clicks 30 วัน → แท็บ FB_PAGE_INSIGHTS 60 แถว · ไฟล์เดิมซ้ำถูกบล็อก`);
+  const pd2 = await fetchDashboardData("marketing"); const p2 = computePerformance(pd2, { from: "2026-09-01", to: "2026-09-30" });
+  const k2 = Object.fromEntries(p2.groups.flatMap((g) => g.items).map((x) => [x.key, x]));
+  assert.equal(k2.f_reach.value, 806272); assert.match(k2.f_reach.label, /Viewers/); assert.match(k2.f_reach.note!, /ใช้ Viewers เทียบเคียง Reach/); assert.equal(k2.f_reach.incomplete, undefined);
+  assert.equal(k2.f_link.value, 6443); assert.match(k2.f_link.note!, /ระดับเพจ/);
+  const fr = p2.funnel!.find((x) => x.key === "reach")!; assert.equal(fr.value, k2.m_reach.value! + 806272); assert.match(fr.note, /ใช้ Viewers เทียบเคียง Reach/);
+  assert.equal(p2.platforms.find((x) => x.platform === "Facebook Page")!.clicks, 6443);
+  assert.equal(p2.sources.find((x) => x.name.startsWith("Facebook Page ระดับเพจ"))!.status, "ครบ");
+  ok(`Marketing Performance ก.ย.: Facebook Viewers (แทน Reach) 806,272 · Link Clicks 6,443 (ระดับเพจ) · Funnel Reach = Meta ${k2.m_reach.value!.toLocaleString()} + Viewers 806,272 · ทุกจุดมีหมายเหตุ "ใช้ Viewers เทียบเคียง Reach"`);
+  const p3 = computePerformance(pd2, { from: "2026-09-25", to: "2026-10-05" }); const k3 = Object.fromEntries(p3.groups.flatMap((g) => g.items).map((x) => [x.key, x]));
+  assert.equal(k3.f_reach.value, 22824 + 14223 + 12255 + 12530 + 11754 + 15694); assert.match(k3.f_reach.incomplete!, /5 วัน/);
+  ok("เลือก 25/09–05/10: Viewers รวมเฉพาะวันที่มี (89,280) และแจ้ง ข้อมูลไม่ครบ 5 วัน (ต.ค. ยังไม่ได้นำเข้า)");
+  const ov = computeDashboard(pd2, { from: "2026-09-01", to: "2026-09-30" }, "marketing"); const ko = Object.fromEntries(ov.groups.flatMap((g) => g.items).map((x) => [x.key, x]));
+  assert.equal(ko.reach.value, 806272); assert.match(ko.reach.note!, /ใช้ Viewers เทียบเคียง Reach/); assert.equal(ko.clicks.value, 6443);
+  ok("ภาพรวมการตลาด: การ์ด Reach ของ Facebook เปลี่ยนเป็น Facebook Viewers (แทน Reach) 806,272 + หมายเหตุ · Link Clicks 6,443");
+  const sm = await exp("marketing_monthly_summary", {}, "marketing"); const sep = sm.rows.find((r) => r.month === "2026-09")!;
+  assert.equal(sep.fb_page_viewers_sum, "806272"); assert.equal(sep.fb_page_link_clicks, "6443"); assert.equal(sm.headers.slice(-2).join(), "fb_page_viewers_sum,fb_page_link_clicks");
+  const pi = await exp("facebook_page_insights", { from: "2026-09-10", to: "2026-09-12" }, "marketing"); assert.equal(pi.rows.length, 6);
+  await assert.rejects(exp("facebook_page_insights", {}, "sales"));
+  ok("Export: สรุปรายเดือน ก.ย. fb_page_viewers_sum 806,272 / fb_page_link_clicks 6,443 (คอลัมน์ต่อท้าย) · facebook_page_insights.csv กรองวันที่ได้ · Sales ไม่มีสิทธิ์");
+}
 console.log("17) Phase 8 — Export: โครงสร้าง ชนิดข้อมูล และการไม่นับซ้ำ");
 const { columnType, valueMatches, normalizeExportValue } = await import("../src/lib/export/dictionary");
 const OLD_SUMMARY = ["month", "meta_ads_spend_thb", "google_ads_campaign_spend_thb", "total_paid_media_spend_thb", "ads_reports_span_months", "fb_posts_published", "fb_posts_reach_sum_lifetime", "fb_link_clicks", "line_new_friends", "line_inquiries", "line_leads", "leads_total", "leads_qualified", "won_deals", "deal_value_thb", "company_revenue_thb", "direct_cost_thb", "gross_profit_thb", "fb_daily_engagement", "fb_daily_seconds_viewed", "fb_daily_reach_sum", "fb_daily_link_clicks"];
@@ -620,8 +649,8 @@ const ds_ = await exp("data_dictionary", {}, "sales"); assert.ok(!ds_.rows.some(
 
 for (const t of ["FB_PAGE_POSTS", "META_ADS", "GOOGLE_ADS_CAMPAIGNS", "LEADS"]) { const d = DATASETS.find((x) => x.tab === t)!; const old = TABS10.find((x) => x.name === t)!.headers.filter((h) => !["record_id", "row_key", "raw_json", "source_batch_id"].includes(h)); assert.deepEqual(d.columns, old); }
 const sm17 = await exp("marketing_monthly_summary", {}, "admin"); assert.deepEqual(sm17.headers.slice(0, OLD_SUMMARY.length), OLD_SUMMARY);
-assert.deepEqual(sm17.headers.slice(OLD_SUMMARY.length), ["google_ads_campaign_clicks", "leads_from_ads", "leads_need_buy_rent_build", "leads_need_sell"]);
-ok("คอลัมน์เดิมทุกไฟล์ไม่เปลี่ยนชื่อ/ลำดับ · สรุปรายเดือน 22 คอลัมน์เดิมคงที่ เพิ่ม 4 คอลัมน์ต่อท้าย");
+assert.deepEqual(sm17.headers.slice(OLD_SUMMARY.length), ["google_ads_campaign_clicks", "leads_from_ads", "leads_need_buy_rent_build", "leads_need_sell", "fb_page_viewers_sum", "fb_page_link_clicks"]);
+ok("คอลัมน์เดิมทุกไฟล์ไม่เปลี่ยนชื่อ/ลำดับ · สรุปรายเดือน 22 คอลัมน์เดิมคงที่ เพิ่มต่อท้าย 4 (Phase 8) + 2 (Facebook Viewers / Link clicks ระดับเพจ)");
 
 const sep17 = sm17.rows.find((r) => r.month === "2026-09")!;
 assert.equal(Number(sep17.total_paid_media_spend_thb), r2c(total("META_ADS", "amount_spent_thb") + total("GOOGLE_ADS_CAMPAIGNS", "cost_thb")));

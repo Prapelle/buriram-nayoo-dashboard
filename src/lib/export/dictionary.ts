@@ -25,7 +25,7 @@ export const TYPE_DOC: Record<ColType, string> = {
 
 const KIND_TYPE: Record<Kind, ColType> = {
   text: "text", int: "integer", num: "number", numLoose: "number", money: "money_thb", pct: "percent",
-  date: "date", isoLoose: "timestamp_utc", mdyDateTime: "datetime_local", longDate: "date", hour12: "hour_label",
+  date: "date", isoLoose: "timestamp_utc", mdyDateTime: "datetime_local", longDate: "date", hour12: "hour_label", isoDay: "date",
 };
 
 const SPEC_TYPES = new Map<string, Map<string, ColType>>();

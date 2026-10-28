@@ -126,4 +126,49 @@ assert.ok(pp.every((r) => r.average_seconds_viewed === undefined || !isNaN(Numbe
 const ex = excludePages(dailyRows, ["BAAN Prompt Community - Buriram&Surin"]); const sEx = summarizeFb(ex.kept, {});
 const expEx = srcRows.filter((r) => r[di("Page name")] !== "BAAN Prompt Community - Buriram&Surin").reduce((s, r) => s + Number(r[di("Reactions, Comments and Shares")]), 0);
 assert.equal(ex.excludedPosts, 1); assert.equal(sEx.daily.reactions_comments_shares, expEx); ok(`ตัดเพจ BAAN: ตัด 1 โพสต์, Reactions+Comments+Shares เหลือ ${expEx}`);
+
+console.log("9) Facebook Page ระดับเพจ: Viewers / Link clicks รายวัน (Meta Business Suite, UTF-16)");
+{
+  const { decodeText } = await import("../src/lib/csv");
+  const { pageMetric, VIEWERS_REMARK } = await import("../src/lib/fbmetrics");
+  const raw = (f: string) => readFileSync(`${DIR}/fbpage/${f}`);
+  const vBytes = raw("Viewers.csv"), cBytes = raw("Link_clicks.csv");
+  assert.equal(vBytes[0], 0xff); assert.equal(vBytes[1], 0xfe); // UTF-16 LE BOM จากไฟล์จริง
+  const vText = decodeText(vBytes), cText = decodeText(cBytes);
+  assert.ok(vText.startsWith("sep=,")); assert.equal(decodeText(new TextEncoder().encode("﻿a,b")), "a,b");
+  // ค่าที่คาดหวังจากไฟล์ต้นฉบับโดยตรง (ไม่ผ่านโค้ดที่ทดสอบ)
+  const expect = (t: string) => t.split(/\r?\n/).map((l) => /^"(\d{4}-\d{2}-\d{2})T00:00:00","(\d+)"$/.exec(l.trim())).filter(Boolean).map((m) => [m![1], Number(m![2])] as const);
+  const ev = expect(vText), ec = expect(cText);
+  assert.equal(ev.length, 30); assert.equal(ec.length, 30);
+  const sumV = ev.reduce((a, [, v]) => a + v, 0), sumC = ec.reduce((a, [, v]) => a + v, 0);
+  const pv = plan(vText), pc = plan(cText);
+  assert.equal(pv.spec.id, "fb_page_viewers"); assert.equal(pc.spec.id, "fb_page_link_clicks"); assert.equal(pv.spec.tab, "FB_PAGE_INSIGHTS");
+  assert.deepEqual(pv.p.counts, { total: 30, insert: 30, update: 0, skip: 0, invalid: 0 }); assert.deepEqual(pv.p.errors, []); assert.deepEqual(pv.p.period, { start: "2026-09-01", end: "2026-09-30" });
+  const rv = recsOf(pv.p), rc = recsOf(pc.p);
+  assert.ok(rv.every((r) => r.metric === "viewers" && /^\d{4}-\d{2}-\d{2}$/.test(r.metric_date))); assert.equal(rv[8].metric_date, "2026-09-09"); assert.equal(rv[8].value, "72580");
+  assert.equal(rv.reduce((a, r) => a + Number(r.value), 0), sumV); assert.equal(rc.reduce((a, r) => a + Number(r.value), 0), sumC);
+  ok(`ไฟล์จริง UTF-16 + บรรทัด sep= + ชื่อตัวชี้วัด → ตรวจเป็น Viewers / Link clicks รายวัน · 30 วัน (01–30/09/2026) · Viewers รวม ${sumV.toLocaleString()} · Link clicks รวม ${sumC.toLocaleString()} ตรงกับไฟล์`);
+  assert.ok(TABS.find((t) => t.name === "FB_PAGE_INSIGHTS")!.headers.every((h) => ["record_id", "metric", "metric_date", "value", "row_key", "raw_json", "source_batch_id", "source_filename", "imported_at"].includes(h)));
+  assert.notEqual(rv[0].row_key, rc[0].row_key); // วันเดียวกันคนละตัวชี้วัด ไม่ทับกัน
+  const exV = store(pv.p); const again = plan(vText, exV);
+  assert.deepEqual(again.p.counts, { total: 30, insert: 0, update: 0, skip: 30, invalid: 0 });
+  const fixed = plan(vText.replace('"2026-09-09T00:00:00","72580"', '"2026-09-09T00:00:00","72600"'), exV);
+  assert.equal(fixed.p.counts.update, 1); assert.equal(fixed.p.counts.skip, 29);
+  ok("นำเข้าซ้ำ → ข้ามทั้ง 30 วัน (ไม่นับซ้ำ) · แก้ค่าวันเดียว → อัปเดต 1 วัน · Viewers กับ Link clicks วันเดียวกันใช้คีย์ต่างกัน");
+  const bad = plan(vText.replace('"2026-09-09T00:00:00"', '"2026-02-30T00:00:00"')).p; assert.equal(bad.counts.invalid, 1); assert.equal(bad.errors[0].code, "INVALID_DATE");
+  assert.equal(plan(vText.replace('"72580"', '"7,25x"')).p.counts.invalid, 1);
+  ok("วันที่ผิด (30 ก.พ.) / ตัวเลขผิด → แถวนั้นไม่ผ่าน (ไม่เขียนลง Sheet)");
+  const rows = [...rv, ...rc].map((r) => ({ ...r, imported_at: "2026-10-28T00:00:00Z" }));
+  const all = pageMetric(rows, "viewers", { from: "2026-09-01", to: "2026-09-30" })!;
+  assert.equal(all.sum, sumV); assert.equal(all.days, 30); assert.equal(all.incomplete, undefined);
+  const part = pageMetric(rows, "viewers", { from: "2026-09-10", to: "2026-09-12" })!;
+  assert.equal(part.sum, 93295 + 46502 + 34273);
+  const over = pageMetric(rows, "viewers", { from: "2026-08-30", to: "2026-10-02" })!;
+  assert.equal(over.sum, sumV); assert.match(over.incomplete!, /4 วัน \(30\/08\/2026–31\/08\/2026, 01\/10\/2026–02\/10\/2026\)/);
+  assert.equal(pageMetric(rows, "viewers", { from: "2026-10-01", to: "2026-10-31" }), null);
+  const dupDay = [...rows, { metric: "viewers", metric_date: "2026-09-01", value: "99999", imported_at: "2026-10-29T00:00:00Z" }];
+  assert.equal(pageMetric(dupDay, "viewers", { from: "2026-09-01", to: "2026-09-01" })!.sum, 99999);
+  assert.equal(VIEWERS_REMARK, "ใช้ Viewers เทียบเคียง Reach");
+  ok("รวมตามช่วงได้ (10–12 ก.ย. = 174,070) · ช่วงเกินข้อมูล → ข้อมูลไม่ครบ ระบุวันที่ขาด · ไม่มีข้อมูล = รอข้อมูล (ไม่ใช่ 0) · วันเดียวกันนำเข้าซ้ำใช้ค่าล่าสุด");
+}
 console.log(`\nผ่านทั้งหมด ${pass} รายการ`);

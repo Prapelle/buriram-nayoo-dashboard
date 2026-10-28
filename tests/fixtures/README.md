@@ -2,3 +2,4 @@
 (ชุด security และ sales ไม่ต้องใช้ไฟล์จริง; sales ใช้ไฟล์ Excel จำลองที่สคริปต์ tests/make-sales-fixture.py สร้างให้
  ถ้ามีไฟล์รายงานยอดขายจริง วางไว้ที่นี่แล้วตั้ง REAL_SALES_FILE="ชื่อไฟล์.xlsx" เพื่อทดสอบเกณฑ์ตามสเปกกับไฟล์จริง)
 ไม่ได้ใส่ไฟล์จริงไว้ใน repo เพราะมีตัวเลขค่าโฆษณา/ยอดขายของธุรกิจ (ถ้าจะ commit ไฟล์เหล่านี้ ให้ใช้ repo แบบ Private)
+ไฟล์ Facebook ระดับเพจ (Viewers.csv, Link_clicks.csv จาก Meta Business Suite) วางที่ tests/fixtures/fbpage/ · ไฟล์ Website วางที่ tests/fixtures/website/

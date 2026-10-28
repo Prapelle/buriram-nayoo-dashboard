@@ -1,4 +1,4 @@
-import { excludePages, summarizeFb } from "./fbmetrics";
+import { excludePages, pageMetric, summarizeFb, VIEWERS_REMARK } from "./fbmetrics";
 import type { Role } from "./roles";
 import { isQualifiedCall, CALL_VISIT, BUY_NEEDS, BUY_STATUS, SELL_NEEDS, SELL_STATUS } from "./lead-options";
 import { COMPARE_LABEL, compareRange, type CompareMode, type DRange } from "./compare";
@@ -9,6 +9,8 @@ export type DashData = {
   excludedPages: string[]; lastImport: string;
   /** Phase 5: แท็บ WEBSITE_ANALYTICS (ว่าง/undefined ถ้ายังไม่ได้เตรียม Sheet) */
   web?: Row[]; webTabMissing?: boolean;
+  /** แท็บ FB_PAGE_INSIGHTS: Viewers / Link clicks รายวันระดับเพจ (metric, metric_date, value) */
+  fbPage?: Row[];
 };
 export type Filters = { from?: string; to?: string; channel?: string; campaign?: string; area?: string; service?: string };
 
@@ -132,6 +134,9 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
   const { kept: postsAll, excludedPosts } = excludePages(data.posts, data.excludedPages);
   const fb = summarizeFb(chOk("posts") ? postsAll : [], { from: f.from, to: f.to });
   const fbT = fb.basis === "lifetime" ? fb.lifetime : fb.daily;
+  // Viewers / Link clicks ระดับเพจรายวัน (ถ้านำเข้าไว้) ใช้แทนผลรวมรายโพสต์ — Facebook เปลี่ยน Reach ของเพจเป็น Viewers
+  const pgViewers = chOk("posts") ? pageMetric(data.fbPage ?? [], "viewers", { from: f.from, to: f.to }) : null;
+  const pgClicks = chOk("posts") ? pageMetric(data.fbPage ?? [], "link_clicks", { from: f.from, to: f.to }) : null;
 
   const monthOf = (d: string) => d.slice(0, 7);
   const line = chOk("line") ? data.line.filter((r) => {
@@ -211,9 +216,13 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
     { title: "Facebook Page", items: [
       ex("posts", "จำนวน Facebook Posts (ที่เผยแพร่ในช่วง)", "int", "posts", fb.publishedPosts || null, `นับตามวันเผยแพร่${excludedPosts ? ` · ไม่รวม ${excludedPosts} โพสต์จากเพจที่ตัดออก` : ""}`),
       ex("engagement", "Reactions + Comments + Shares", "int", "posts", fbT.reactions_comments_shares, fb.basis === "daily" ? `ผลรวมรายวันตามวันที่ของสถิติ ${fb.daily.from} ถึง ${fb.daily.to}` : "ยอดสะสม (Lifetime) ณ วันส่งออก ล่าสุดของแต่ละโพสต์"),
-      ex("reach", fb.basis === "daily" ? "ผลรวม Reach รายวันของโพสต์" : "ผลรวม Reach ของโพสต์", "int", "posts", fbT.reach,
-        fb.basis === "daily" ? "รวม Reach ของแต่ละวัน ไม่ใช่ Unique Reach ของช่วงเวลา" : "ยอดสะสม (Lifetime) ณ วันส่งออก ไม่ใช่ Unique Page Reach"),
-      ex("clicks", "Facebook Link Clicks", "int", "posts", fbT.link_clicks, fbT.link_clicks !== null ? `มีข้อมูล ${fbT.filledPosts.link_clicks} จาก ${fbT.posts} โพสต์ (ที่เหลือไม่มีข้อมูล ไม่ใช่ 0)` : undefined),
+      pgViewers && !excluded("posts")
+        ? kpi("reach", "Facebook Viewers (แทน Reach)", "int", pgViewers.sum, undefined, `${VIEWERS_REMARK} · ผลรวม Viewers รายวันระดับเพจ ${pgViewers.cover} (คนเดียวกันต่างวันนับซ้ำ ไม่ใช่ Unique)`, pgViewers.incomplete)
+        : ex("reach", fb.basis === "daily" ? "ผลรวม Reach รายวันของโพสต์" : "ผลรวม Reach ของโพสต์", "int", "posts", fbT.reach,
+          fb.basis === "daily" ? "รวม Reach ของแต่ละวัน ไม่ใช่ Unique Reach ของช่วงเวลา" : "ยอดสะสม (Lifetime) ณ วันส่งออก ไม่ใช่ Unique Page Reach"),
+      pgClicks && !excluded("posts")
+        ? kpi("clicks", "Facebook Link Clicks", "int", pgClicks.sum, undefined, `Link clicks รายวันระดับเพจ ${pgClicks.cover}`, pgClicks.incomplete)
+        : ex("clicks", "Facebook Link Clicks", "int", "posts", fbT.link_clicks, fbT.link_clicks !== null ? `มีข้อมูล ${fbT.filledPosts.link_clicks} จาก ${fbT.posts} โพสต์ (ที่เหลือไม่มีข้อมูล ไม่ใช่ 0)` : undefined),
     ] },
     { title: "LINE OA", items: [
       ex("line_new", "LINE OA New Friends", "int", "line", lineNew.n ? lineNew.sum : null),

@@ -8,7 +8,7 @@
  * - ผลรวม Reach (รายวัน/ระดับโฆษณา) ไม่ใช่ Unique Reach
  */
 import { addDays, dmyS, fmtGaps, gapsIn, mergeSpans, num, type DashData, type Kpi, type Row, type Span } from "./dashboard";
-import { excludePages, metricDateOf, scopeOf, summarizeFb } from "./fbmetrics";
+import { excludePages, metricDateOf, pageMetric, scopeOf, summarizeFb, VIEWERS_REMARK } from "./fbmetrics";
 import { actionLabels } from "./fbactions";
 import { changePct, COMPARE_LABEL, compareRange, previousRange, type CompareMode } from "./compare";
 import { CALL_SOLD, isQualifiedCall } from "./lead-options";
@@ -230,8 +230,14 @@ export function computePerformance(d: DashData, f: PerfFilters): Performance {
   const ft = F?.t, fpt = Fp?.t;
   const fNote = F ? (F.basis === "daily" ? `Facebook Page รายวัน · ${F.cover}` : F.cover) : undefined;
   const reachLabel = F?.basis === "lifetime" ? "Reach (Lifetime รวมรายโพสต์)" : "ผลรวม Reach รายวัน";
+  // Viewers / Link clicks รายวันระดับเพจ (Meta Business Suite) ใช้แทน Reach / Link clicks รายโพสต์เมื่อมีข้อมูลในช่วง
+  const pg = d.fbPage ?? [];
+  const PV = pageMetric(pg, "viewers", range), PVp = prevRange ? pageMetric(pg, "viewers", prevRange) : null;
+  const PC = pageMetric(pg, "link_clicks", range), PCp = prevRange ? pageMetric(pg, "link_clicks", prevRange) : null;
+  const fbReach = PV ? PV.sum : ft?.reach ?? null, fbReachP = PV ? PVp?.sum ?? null : fpt?.reach ?? null;
   const fbItems: PKpi[] = [
-    kp("f_reach", reachLabel, "int", ft?.reach ?? null, { note: "ผลรวมของแต่ละโพสต์/วัน ไม่ใช่ Unique Reach", incomplete: F?.incomplete, prev: pv(fpt?.reach), prevIncomplete: Fp?.incomplete, pending: F ? "ไฟล์ Facebook Page ที่นำเข้าไม่มีคอลัมน์ Reach" : undefined }),
+    PV ? kp("f_reach", "Facebook Viewers (แทน Reach)", "int", PV.sum, { note: `${VIEWERS_REMARK} · ผลรวม Viewers รายวันระดับเพจ ${PV.cover} — คนเดียวกันต่างวันนับซ้ำ ไม่ใช่ Unique`, incomplete: PV.incomplete, prev: pv(PVp?.sum), prevIncomplete: PVp?.incomplete, source: "Facebook Page Viewers (ระดับเพจ)" })
+      : kp("f_reach", reachLabel, "int", ft?.reach ?? null, { note: "ผลรวมของแต่ละโพสต์/วัน ไม่ใช่ Unique Reach", incomplete: F?.incomplete, prev: pv(fpt?.reach), prevIncomplete: Fp?.incomplete, pending: F ? "ไฟล์ Facebook Page ที่นำเข้าไม่มีคอลัมน์ Reach — นำเข้าไฟล์ Viewers ระดับเพจได้ที่ นำเข้า CSV" : undefined }),
     kp("f_eng", "Reactions + Comments + Shares", "int", ft?.reactions_comments_shares ?? null, { note: fNote, incomplete: F?.incomplete, prev: pv(fpt?.reactions_comments_shares), prevIncomplete: Fp?.incomplete }),
     kp("f_react", "Reactions", "int", ft?.reactions ?? null, { incomplete: F?.incomplete, prev: pv(fpt?.reactions), prevIncomplete: Fp?.incomplete }),
     kp("f_comm", "Comments", "int", ft?.comments ?? null, { incomplete: F?.incomplete, prev: pv(fpt?.comments), prevIncomplete: Fp?.incomplete }),
@@ -239,7 +245,8 @@ export function computePerformance(d: DashData, f: PerfFilters): Performance {
     kp("f_sec", "Seconds viewed", "int", ft?.seconds_viewed ?? null, { note: "วินาทีที่ดูวิดีโอรวม", incomplete: F?.incomplete, prev: pv(fpt?.seconds_viewed), prevIncomplete: Fp?.incomplete }),
   ];
   if (ft?.views !== null && ft?.views !== undefined) fbItems.push(kp("f_views", "Views", "int", ft.views, { incomplete: F?.incomplete, prev: pv(fpt?.views), prevIncomplete: Fp?.incomplete }));
-  if (ft?.link_clicks !== null && ft?.link_clicks !== undefined) fbItems.push(kp("f_link", "Link Clicks", "int", ft.link_clicks, { incomplete: F?.incomplete, prev: pv(fpt?.link_clicks), prevIncomplete: Fp?.incomplete }));
+  if (PC) fbItems.push(kp("f_link", "Link Clicks", "int", PC.sum, { note: `Link clicks รายวันระดับเพจ ${PC.cover}`, incomplete: PC.incomplete, prev: pv(PCp?.sum), prevIncomplete: PCp?.incomplete, source: "Facebook Page Link clicks (ระดับเพจ)" }));
+  else if (ft?.link_clicks !== null && ft?.link_clicks !== undefined) fbItems.push(kp("f_link", "Link Clicks", "int", ft.link_clicks, { incomplete: F?.incomplete, prev: pv(fpt?.link_clicks), prevIncomplete: Fp?.incomplete }));
 
   // ---- Website (GA4 / กรอกเอง) และ Google Search (Search Console) ----
   const web = d.web ?? [];
@@ -277,11 +284,11 @@ export function computePerformance(d: DashData, f: PerfFilters): Performance {
   // ---- Customer Funnel + ประสิทธิภาพแต่ละช่องทาง (Lead ตามวันที่รับ ช่วงเดียวกับรายงาน) ----
   const L = leadsIn(d.leads, range), Lp = prevRange ? leadsIn(d.leads, prevRange) : null;
   const cnt = (rows: Row[] | undefined, keep: (r: Row) => boolean = () => true) => (rows && d.leads.length ? rows.filter(keep).length : null); // ยังไม่มี Lead ในระบบเลย = รอข้อมูล
-  const sumReach = (m: typeof M, fb: typeof F) => (m?.reachSum ?? null) === null && (fb?.t.reach ?? null) === null ? null : (m?.reachSum ?? 0) + (fb?.t.reach ?? 0);
+  const sumReach = (m: number | null, fb: number | null) => (m === null && fb === null ? null : (m ?? 0) + (fb ?? 0));
   const visits = (w: typeof Wb | null) => (w ? (w.sessions ?? w.users) : null);
   const visitLabel = Wb.sessions !== null ? "Sessions" : "Users";
   const steps: Omit<FunnelStep, "change" | "conv">[] = [
-    { key: "reach", label: "Reach (ทุก Social)", value: sumReach(M, F), prev: pv(Fp || Mp ? sumReach(Mp, Fp) : null), note: `Meta Ads Reach${M ? "" : " (ไม่มี)"} + Facebook Page Reach${F ? "" : " (ไม่มี)"} · เป็นผลรวม คนเดียวกันอาจถูกนับซ้ำ ไม่ใช่ Unique Reach`, incomplete: both(M?.incomplete, F?.incomplete) },
+    { key: "reach", label: "Reach (ทุก Social)", value: sumReach(M?.reachSum ?? null, fbReach), prev: pv(sumReach(Mp?.reachSum ?? null, fbReachP)), note: `Meta Ads Reach${M ? "" : " (ไม่มี)"} + ${PV ? `Facebook Page Viewers (${VIEWERS_REMARK})` : `Facebook Page Reach${fbReach === null ? " (ไม่มี)" : ""}`} · เป็นผลรวม คนเดียวกันอาจถูกนับซ้ำ ไม่ใช่ Unique Reach`, incomplete: both(M?.incomplete, PV ? PV.incomplete : F?.incomplete) },
     { key: "visits", label: "เข้าเว็บไซต์", value: visits(Wb), prev: pv(visits(Wp)), note: Wb.sessions !== null || Wb.users !== null ? `GA4 ${visitLabel} · ${Wb.cover}` : Wb.views !== null ? (Wb.usersWhy ?? noWeb) : noWeb, incomplete: Wb.incomplete },
     { key: "leads", label: "Leads", value: cnt(L.all), prev: pv(cnt(Lp?.all)), note: "นับ lead_id ไม่ซ้ำ ตามวันที่รับ Lead" },
     { key: "qualified", label: "Qualified Leads", value: cnt(L.all, (r) => isQualifiedCall(r.call_status)), prev: pv(cnt(Lp?.all, (r) => isQualifiedCall(r.call_status))), note: "Call Status = ติดต่อได้แล้ว / เข้าชมโครงการแล้ว / ซื้อสำเร็จ" },
@@ -322,7 +329,7 @@ export function computePerformance(d: DashData, f: PerfFilters): Performance {
   const platforms: PlatformRow[] = [
     { platform: "Google Ads", kind: "Paid", spend: G?.spend ?? null, clicks: G?.clicks ?? null, engagement: null, impressions: G?.impressions ?? null, period: G?.cover ?? "—", source: G?.source ?? "—", status: st(G) },
     { platform: "Meta Ads", kind: "Paid", spend: M?.spend ?? null, clicks: null, engagement: null, impressions: M?.impressions ?? null, period: M?.cover ?? "—", source: M ? "Meta Ads Report" : "—", status: st(M) },
-    { platform: "Facebook Page", kind: "Organic", spend: null, clicks: ft?.link_clicks ?? null, engagement: ft?.reactions_comments_shares ?? null, impressions: null, period: F?.cover ?? "—", source: F ? (F.basis === "daily" ? "Facebook Page รายวัน" : "Facebook Page Lifetime") : "—", status: st(F) },
+    { platform: "Facebook Page", kind: "Organic", spend: null, clicks: PC ? PC.sum : ft?.link_clicks ?? null, engagement: ft?.reactions_comments_shares ?? null, impressions: null, period: F?.cover ?? "—", source: F ? (F.basis === "daily" ? "Facebook Page รายวัน" : "Facebook Page Lifetime") : "—", status: st(F) },
     { platform: "Website (GA4)", kind: "Website", spend: null, clicks: null, engagement: null, impressions: null, pageViews: Wb.views, period: Wb.cover || "—", source: Wb.source || "—", status: Wb.views === null ? "รอข้อมูล" : Wb.incomplete ? "ไม่ครบ" : "ครบ" },
     { platform: "Google Search", kind: "Organic", spend: null, clicks: S?.clicks ?? null, engagement: null, impressions: S?.impressions ?? null, period: S?.cover ?? "—", source: S ? "Search Console รายวัน" : "—", status: st(S) },
   ];
@@ -332,6 +339,7 @@ export function computePerformance(d: DashData, f: PerfFilters): Performance {
     { name: "Google Ads Campaign Report", kind: "Paid", status: G?.source.includes("Campaign") ? st(G) : camp ? (camp.incomplete ? "ไม่ครบ" : "ครบ") : "รอข้อมูล", detail: G?.source.includes("Campaign") ? (G.incomplete ?? "ใช้คำนวณ Google Ads ช่วงนี้") : camp ? "ใช้ตรวจไขว้กับ Time series" : "ไม่มีรายงานในช่วงนี้", available: avail(d.google.flatMap((r) => [r.report_start, r.report_end])) },
     { name: "Meta Ads Report", kind: "Paid", status: st(M), detail: M?.incomplete ?? (M ? "ครอบคลุมช่วงที่เลือกพอดี" : "ไม่มีรายงานในช่วงนี้"), available: avail(d.meta.flatMap((r) => [r.report_start, r.report_end])) },
     { name: "Facebook Page", kind: "Organic", status: st(F), detail: F?.incomplete ?? (F ? "ครอบคลุมช่วงที่เลือก" : "ไม่มีข้อมูลในช่วงนี้") + (F?.lifetimeOnlyPosts ? ` · ${F.lifetimeOnlyPosts} โพสต์มีแต่ยอดสะสม (ไม่รวม)` : ""), available: avail(fbRows.filter((r) => scopeOf(r) === "daily").map(metricDateOf)) },
+    { name: "Facebook Page ระดับเพจ (Viewers / Link clicks รายวัน)", kind: "Organic", status: PV || PC ? (PV?.incomplete || PC?.incomplete ? "ไม่ครบ" : "ครบ") : "รอข้อมูล", detail: PV || PC ? [PV ? `Viewers ${PV.incomplete ?? "ครบทุกวัน"} — ${VIEWERS_REMARK}` : "ไม่มี Viewers", PC ? `Link clicks ${PC.incomplete ?? "ครบทุกวัน"}` : "ไม่มี Link clicks"].join(" · ") : "ไม่มีข้อมูลในช่วงนี้ (นำเข้าไฟล์ Viewers / Link clicks จาก Meta Business Suite ที่ นำเข้า CSV)", available: avail(pg.map((r) => r.metric_date)) },
     { name: "GA4 (Reports snapshot / หน้าและหน้าจอ / กรอกเอง)", kind: "Website", status: Wb.views === null && Wb.users === null ? "รอข้อมูล" : Wb.incomplete || Wb.users === null ? "ไม่ครบ" : "ครบ", detail: d.webTabMissing ? noWeb : Wb.views === null && Wb.users === null ? "ไม่มีรายงานในช่วงนี้" : [Wb.source && `ใช้ ${Wb.source}`, Wb.incomplete, Wb.users === null ? Wb.usersWhy : ""].filter(Boolean).join(" · "),
       available: ["ga4_snapshot", "ga4", "manual"].map((src) => { const l = web.filter((r) => r.source === src && r.granularity === "period").map((r) => span({ from: r.report_start, to: r.report_end })); return l.length ? `${src === "ga4_snapshot" ? "Snapshot" : src === "ga4" ? "รายหน้า" : "กรอกเอง"} ${l.join(", ")}` : ""; }).filter(Boolean).join(" · ") || "ไม่มี" },
     { name: "Search Console รายวัน", kind: "Organic", status: st(S), detail: S?.incomplete ?? (S ? "ครอบคลุมช่วงที่เลือก" : "ไม่มีข้อมูลในช่วงนี้"), available: avail(web.filter((r) => r.source === "search_console" && r.granularity === "day").map((r) => r.report_start)) },

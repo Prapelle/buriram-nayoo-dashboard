@@ -37,12 +37,12 @@ function overlapProblem(rows: Row[], label: string): string | null {
   return null;
 }
 
-export function buildSummary(d: { meta: Row[]; google: Row[]; posts: Row[]; line: Row[]; leads: Row[]; sales: Row[]; excluded: string[] }, f: ExportFilters, role: Role) {
+export function buildSummary(d: { meta: Row[]; google: Row[]; posts: Row[]; line: Row[]; leads: Row[]; sales: Row[]; excluded: string[]; fbPage?: Row[] }, f: ExportFilters, role: Role) {
   for (const p of [overlapProblem(d.meta, "Meta Ads"), overlapProblem(d.google, "Google Ads Campaign")]) if (p) throw new ExportError(409, p, "OVERLAPPING_REPORTS");
   const ex = new Set(d.excluded);
   const months = new Map<string, Record<string, number | string>>();
   const get = (m: string) => { if (!months.has(m)) months.set(m, {}); return months.get(m)!; };
-  const add = (m: string, k: string, v: number | null) => { if (v === null || !m) return; const o = get(m); o[k] = r2(((o[k] as number) ?? 0) + v); };
+  const add = (m: string, k: string, v: number | null) => { if (v === null || !m || !k) return; const o = get(m); o[k] = r2(((o[k] as number) ?? 0) + v); };
   const mark = (m: string, k: string) => { if (m) get(m)[k] = Number(((get(m)[k] as number) ?? 0)) + 1; };
 
   for (const r of d.meta) if (!f.area || (r.area || "unknown") === f.area) { add(r.report_start.slice(0, 7), "meta_ads_spend_thb", num(r.amount_spent_thb)); if (r.report_start.slice(0, 7) !== r.report_end.slice(0, 7)) get(r.report_start.slice(0, 7)).ads_reports_span_months = "TRUE"; }
@@ -64,6 +64,10 @@ export function buildSummary(d: { meta: Row[]; google: Row[]; posts: Row[]; line
     add(m, "fb_daily_engagement", num(r.reactions_comments_shares)); add(m, "fb_daily_seconds_viewed", num(r.seconds_viewed));
     add(m, "fb_daily_reach_sum", num(r.reach)); add(m, "fb_daily_link_clicks", num(r.link_clicks));
   }
+  // Facebook ระดับเพจรายวัน: วันเดียวกันนำเข้าซ้ำ → ใช้แถวที่นำเข้าล่าสุด
+  const pgDay = new Map<string, Row>();
+  for (const r of d.fbPage ?? []) { const k = `${r.metric}|${String(r.metric_date).slice(0, 10)}`, cur = pgDay.get(k); if (!cur || String(r.imported_at ?? "") >= String(cur.imported_at ?? "")) pgDay.set(k, r); }
+  pgDay.forEach((r) => add(String(r.metric_date).slice(0, 7), r.metric === "viewers" ? "fb_page_viewers_sum" : r.metric === "link_clicks" ? "fb_page_link_clicks" : "", num(r.value)));
   for (const r of d.line) { const m = String(r.report_month).slice(0, 7); add(m, "line_new_friends", num(r.new_friends)); add(m, "line_inquiries", num(r.inquiries)); add(m, "line_leads", num(r.leads)); }
   // Leads: นับ lead_id ไม่ซ้ำ (กฎเดียวกับ Dashboard) · แถวที่ไม่มี lead_id ไม่นับ
   const seenLead = new Set<string>();
@@ -108,14 +112,15 @@ export async function exportDataset(id: string, f: ExportFilters, role: Role, ac
   let columns: string[], body: (string | number)[][];
   try {
     if (ds.special === "summary") {
-      const [meta, google, posts, line, leads, sales, excluded] = await Promise.all([
+      const [meta, google, posts, line, leads, sales, excluded, fbPage] = await Promise.all([
         read("META_ADS", ["report_start", "report_end", "amount_spent_thb", "area"]), read("GOOGLE_ADS_CAMPAIGNS", ["report_start", "report_end", "cost_thb", "clicks", "area"]),
         read("FB_PAGE_POSTS", ["page_id", "post_id", "page_name", "publish_time", "metric_date", "metric_scope", "snapshot_date", "reach", "link_clicks", "reactions_comments_shares", "seconds_viewed"]), read("LINE_OA_MONTHLY", ["report_month", "new_friends", "inquiries", "leads"]),
         read("LEADS", ["lead_id", "received_at", "status", "qualified_at", "area", "source_channel", "need", "call_status"]),
         role === "marketing" ? read("SALES", ["closing_date", "payment_status"]) : read("SALES", ["closing_date", "revenue_date", "payment_status", "deal_value_thb", "company_revenue_thb", "direct_cost_thb"]),
         getExcludedPages(DEFAULT_EXCLUDED_PAGES),
+        read("FB_PAGE_INSIGHTS", ["metric", "metric_date", "value", "imported_at"]).catch(() => [] as Row[]), // แท็บใหม่ ยังไม่เตรียม Sheet → ข้าม
       ]);
-      ({ columns, rows: body } = buildSummary({ meta, google, posts, line, leads, sales, excluded }, f, role));
+      ({ columns, rows: body } = buildSummary({ meta, google, posts, line, leads, sales, excluded, fbPage }, f, role));
     } else if (ds.special === "performance") {
       ({ columns, rows: body } = buildPerformanceRows(computePerformance(await fetchDashboardData(role), { from: f.from, to: f.to, compare: "yoy" })));
     } else if (ds.special === "dictionary") {

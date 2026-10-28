@@ -70,8 +70,18 @@ export function compareKeys(spec: Spec): string[] {
 }
 
 export function parseInput(text: string): Table {
-  try { return parseTable(text); }
+  try { return metaInsightsLayout(parseTable(text.replace(/^\uFEFF?sep=.\r?\n/i, ""))); }
   catch (e) { if (e instanceof CsvError) throw new PlanError(e.code, e.message); throw e; }
+}
+
+/**
+ * ไฟล์สถิติระดับเพจของ Meta Business Suite: บรรทัดแรกเป็นชื่อตัวชี้วัด (เช่น "Viewers") แล้วจึงเป็น Date, Primary
+ * → ใช้ชื่อตัวชี้วัดเป็นชื่อคอลัมน์แทน "Primary" (เลขแถวในข้อความแจ้งเตือนเลื่อนไป 1 แถว)
+ */
+function metaInsightsLayout(t: Table): Table {
+  const next = t.records[0]?.cells.map((c) => c.trim().toLowerCase());
+  if (t.headers.length !== 1 || !t.headers[0] || next?.length !== 2 || next[0] !== "date" || next[1] !== "primary") return t;
+  return { headers: [t.records[0].cells[0].trim(), t.headers[0]], records: t.records.slice(1).filter((r) => r.cells.some((c) => c.trim() !== "")) };
 }
 
 export function buildPlan(a: { spec: Spec; table: Table; ctx: Ctx; existing: Existing; areaMap: Map<string, string> }): Plan {
@@ -152,6 +162,7 @@ export function buildPlan(a: { spec: Spec; table: Table; ctx: Ctx; existing: Exi
     if (spec.period === "user") { rec.report_start = ctx.reportStart!; rec.report_end = ctx.reportEnd!; }
     if (spec.comparison) { rec.comparison_start = ctx.comparisonStart!; rec.comparison_end = ctx.comparisonEnd!; }
     if (spec.period === "snapshot") rec.snapshot_date = ctx.snapshotDate!;
+    if (spec.constants) Object.assign(rec, spec.constants);
     spec.derive?.(rec);
     const mapped = spec.areaMap ? areaMap.get(`${spec.areaMap.platform}|${String(rec[spec.areaMap.key] ?? "")}`) : undefined;
     if (!spec.noArea) rec.area = mapped ?? ctx.area;
@@ -207,8 +218,9 @@ export function buildPlan(a: { spec: Spec; table: Table; ctx: Ctx; existing: Exi
     if (lifetime) warnings.push(`${lifetime} แถวมี Date = Lifetime: ใช้วันที่ส่งออก ${ctx.snapshotDate} เป็น metric_date และเป็นยอดสะสม ระบบจะไม่นำไปรวมกับยอดรายวัน`);
     if (daily && lifetime) warnings.push("ไฟล์นี้มีทั้งข้อมูลรายวันและ Lifetime ปนกัน ตรวจว่าเป็นไฟล์ที่ต้องการ");
   }
-  const starts = recs.map((x) => String(x.rec.report_start ?? "")).filter(Boolean).sort();
-  const ends = recs.map((x) => String(x.rec.report_end ?? "")).filter(Boolean).sort();
+  const days = spec.dayKey ? recs.map((x) => String(x.rec[spec.dayKey!] ?? "")).filter(Boolean).sort() : [];
+  const starts = [...recs.map((x) => String(x.rec.report_start ?? "")).filter(Boolean), ...days].sort();
+  const ends = [...recs.map((x) => String(x.rec.report_end ?? "")).filter(Boolean), ...days].sort();
   return {
     planned, counts, errors, warnings,
     period: { start: starts[0] ?? mdates[0] ?? ctx.reportStart ?? "", end: ends[ends.length - 1] ?? mdates[mdates.length - 1] ?? ctx.reportEnd ?? "" },

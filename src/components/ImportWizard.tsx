@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SPECS } from "@/lib/import/specs";
-import { toCsv } from "@/lib/csv";
+import { readTextFile, toCsv } from "@/lib/csv";
 
 type Err = { row: number; column: string; raw: string; code: string; message: string };
 type Counts = { total: number; insert: number; update: number; skip: number; invalid: number };
@@ -79,7 +79,7 @@ export function ImportWizard() {
     if (!f) return;
     if (!/\.csv$/i.test(f.name)) { setError("รองรับเฉพาะไฟล์ .csv"); setState("error"); return; }
     if (f.size > 10 * 1024 * 1024) { setError("ไฟล์ใหญ่เกิน 10 MB"); setState("error"); return; }
-    const next = { name: f.name, text: await f.text() };
+    const next = { name: f.name, text: await readTextFile(f) };
     setFile(next); setSpecId(""); setPlan(null);
     await runPlan(next, {}, true);
   }

@@ -83,3 +83,31 @@ export function perPost(rows: FbRow[], f: Range): (FbRow & { basis: string; days
   }
   return out;
 }
+
+// ---- สถิติระดับเพจรายวัน (แท็บ FB_PAGE_INSIGHTS: Viewers / Link clicks จาก Meta Business Suite) ----
+export const VIEWERS_REMARK = "ใช้ Viewers เทียบเคียง Reach";
+const nextDay = (d: string) => { const t = new Date(d + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + 1); return t.toISOString().slice(0, 10); };
+const dmy = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}`;
+export type PageMetric = { sum: number; days: number; from: string; to: string; cover: string; incomplete?: string };
+/**
+ * ผลรวมรายวันของตัวชี้วัดระดับเพจในช่วง (ค่าซ้ำวันเดียวกันใช้แถวที่นำเข้าล่าสุด) · ไม่มีข้อมูลเลย = null
+ * ช่วงที่เลือกมีวันที่ไม่มีข้อมูล → incomplete (ผลรวม Viewers รายวันไม่ใช่ Unique)
+ */
+export function pageMetric(rows: FbRow[], metric: string, f: Range): PageMetric | null {
+  const by = new Map<string, FbRow>();
+  for (const r of rows) {
+    if (r.metric !== metric) continue;
+    const d = String(r.metric_date ?? "").slice(0, 10), v = num(r.value);
+    if (!d || v === null || !inRange(d, f)) continue;
+    const cur = by.get(d); if (!cur || String(r.imported_at ?? "") >= String(cur.imported_at ?? "")) by.set(d, r);
+  }
+  if (!by.size) return null;
+  const days = [...by.keys()].sort(), from = f.from ?? days[0], to = f.to ?? days[days.length - 1];
+  const missing: string[] = [];
+  for (let d = from, i = 0; d <= to && i < 4000; d = nextDay(d), i++) if (!by.has(d)) missing.push(d);
+  const sum = [...by.values()].reduce((s, r) => s + num(r.value)!, 0);
+  const runs: string[] = []; let a = "";
+  missing.forEach((d, i) => { if (!a) a = d; if (missing[i + 1] !== nextDay(d)) { runs.push(a === d ? dmy(a) : `${dmy(a)}–${dmy(d)}`); a = ""; } });
+  return { sum, days: by.size, from: days[0], to: days[days.length - 1], cover: `${dmy(days[0])}–${dmy(days[days.length - 1])}`,
+    incomplete: missing.length ? `ไม่มีข้อมูลรายวัน ${missing.length} วัน (${runs.slice(0, 3).join(", ")}${runs.length > 3 ? " ..." : ""})` : undefined };
+}
