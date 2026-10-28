@@ -14,7 +14,7 @@ const STATUS_COLOR: Record<string, string> = {
   นัดทำสัญญา: "bg-amber-100", ทำสัญญา: "bg-indigo-100", เซ็นสัญญา: "bg-indigo-100", สัญญาเปิด: "bg-indigo-100", เป็นนายหน้า: "bg-violet-100",
   ขายแล้ว: "bg-green-100", ยกเลิก: "bg-slate-200", บ้านไม่พร้อมขาย: "bg-slate-200",
 };
-const CALL_COLOR: Record<string, string> = { ยังไม่ได้โทร: "bg-slate-100", ติดต่อไม่ได้: "bg-red-50", ติดต่อได้แล้ว: "bg-green-50", ไม่สนใจ: "bg-amber-50" };
+const CALL_COLOR: Record<string, string> = { ยังไม่ได้โทร: "bg-slate-100", ติดต่อไม่ได้: "bg-red-50", ติดต่อได้แล้ว: "bg-green-50", เข้าชมโครงการแล้ว: "bg-sky-50", ซื้อสำเร็จ: "bg-emerald-100", ไม่สนใจ: "bg-amber-50" };
 const CLOSED = ["Close", "Archive", "ขายแล้ว", "ยกเลิก", "บ้านไม่พร้อมขาย"];
 const emptyForm = (): Lead => ({ ...Object.fromEntries(EDITABLE.map((k) => [k, ""])), received_at: todayBkk(), area: "unknown", call_status: "ยังไม่ได้โทร" });
 const EMPTY_F = { q: "", from: "", to: "", channel: "", need: "", status: "", callStatus: "", staff: "", area: "", service: "" };

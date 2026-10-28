@@ -1,4 +1,5 @@
 import { writeAudit } from "./audit";
+import { isQualifiedCall } from "./lead-options";
 import { findDuplicates, LEAD_COLUMNS, leadStatusOf, nextLeadCode, normalizeEmail, normalizePhone, pipelineOf, resolveNeedStatus, stampStatus, todayBkk, validateLead, type DupMatch, type Lead } from "./leads";
 import { appendRows, batchUpdateValues, colLetter, deleteRow, listTabs, readTabs, toRow } from "./sheets";
 import { readColumns } from "./tabdata";
@@ -58,8 +59,8 @@ export async function saveLead(input: Record<string, unknown>, actor: string) {
   // ขั้น Pipeline เดิม (ใช้ใน Dashboard) คำนวณจาก Buy/Sell Status · Lead เก่าที่ยังไม่มี Need ไม่ถูกลดขั้นโดยอัตโนมัติ
   const derived = pipelineOf(recIn);
   recIn.status = prev && !prev.need && !leadStatusOf(recIn) && ["Qualified", "Proposal", "Won", "Lost"].includes(prev.status) ? prev.status : derived;
-  // ติดต่อได้แล้ว / ไม่สนใจ = คุยกับลูกค้าได้แล้ว → contactable TRUE · ติดต่อไม่ได้ → FALSE
-  if (recIn.call_status === "ติดต่อได้แล้ว" || recIn.call_status === "ไม่สนใจ") recIn.contactable = "TRUE"; else if (recIn.call_status === "ติดต่อไม่ได้") recIn.contactable = "FALSE";
+  // ติดต่อได้แล้ว / เข้าชมโครงการแล้ว / ซื้อสำเร็จ / ไม่สนใจ = คุยกับลูกค้าได้แล้ว → contactable TRUE · ติดต่อไม่ได้ → FALSE
+  if (isQualifiedCall(recIn.call_status) || recIn.call_status === "ไม่สนใจ") recIn.contactable = "TRUE"; else if (recIn.call_status === "ติดต่อไม่ได้") recIn.contactable = "FALSE";
   v.rec = recIn;
   const stamps = stampStatus(prev, v.rec, today);
   if (!prev) {

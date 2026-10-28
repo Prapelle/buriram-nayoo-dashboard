@@ -821,3 +821,30 @@ Users 17,443 · Page Views 42,450 · PV/User 2.43 · Duration 1 นาที 0 �
 **แก้ระหว่างทดสอบ:** ทดสอบเบราว์เซอร์อ่านหน้า Performance ก่อนโหลดเสร็จ (ไม่สม่ำเสมอ) → รอให้การ์ดแสดงก่อน · run-all รอพอร์ตว่างก่อนเปิดเบราว์เซอร์
 **Failed:** 0
 **Not Tested:** บนเว็บที่ deploy จริง/Google Sheet จริง · snapshot ภาษาไทย หรือที่ผู้ใช้ปรับแต่งการ์ดหน้า Reports เอง (ทดสอบเฉพาะไฟล์ภาษาอังกฤษที่ส่งมา)
+
+## 27) คำขอเพิ่มเติม: ปุ่มเลือกไฟล์, Call Status ใหม่, Customer Funnel, CPL แยกช่องทาง, Cost per Site Visit (28/10/2026)
+
+### สิ่งที่ทำ
+1. **หน้า Website:** แทนช่อง "Choose files / No file chosen" ด้วยปุ่ม **เลือกไฟล์** + พื้นที่ลากไฟล์มาวาง (หลายไฟล์ได้)
+2. **Call Status:** เพิ่ม **เข้าชมโครงการแล้ว** และ **ซื้อสำเร็จ** · **Qualified Leads = ติดต่อได้แล้ว + เข้าชมโครงการแล้ว + ซื้อสำเร็จ** (กำหนดไว้ที่เดียวใน `lead-options.ts` ใช้ทั้ง ภาพรวม, Performance, Export) · ทั้งสองค่าตั้ง contactable = TRUE
+3. **Marketing Performance → Customer Funnel:** Reach (Meta Ads Reach + Facebook Page Reach) → เข้าเว็บไซต์ (GA4 Sessions, ถ้าไม่มีใช้ Users) → Leads → Qualified Leads → ขายได้ (ซื้อสำเร็จ) · % ของขั้นก่อนหน้า · เทียบปีก่อน/ช่วงก่อนได้ · ไม่มีข้อมูล = รอข้อมูล (ไม่ใช่ 0)
+4. **Marketing Performance → ประสิทธิภาพแต่ละช่องทาง:** ค่าโฆษณา / Leads / ฿ ต่อ Lead / Qualified / ฿ ต่อ Qualified / ซื้อสำเร็จ / แนวโน้ม ฿ ต่อ Lead (เมื่อเปรียบเทียบ) · Meta Ads ↔ Lead ช่องทาง Facebook Ads, Google Ads ↔ Google Ads · ช่องทาง Organic (LINE OA, Website/SEO ฯลฯ) แสดงจำนวน Lead แต่ไม่มีค่าใช้จ่าย · ป้าย "ถูกที่สุด"
+5. **ภาพรวมการตลาด → Cost per Site Visit** = Total Paid Media Spend ÷ Lead ทุกช่องทางที่ Call Status = เข้าชมโครงการแล้ว (ช่วงเดียวกับค่าโฆษณา) · 0 ราย → N/A
+
+### ข้อควรรู้
+- Call Status เก็บได้ค่าเดียวต่อ Lead: Lead ที่เข้าชมแล้วและเปลี่ยนเป็น ซื้อสำเร็จ จะไม่ถูกนับใน Cost per Site Visit (นับตามที่ผู้ใช้กำหนด) — ถ้าต้องการนับรวม แก้ได้จุดเดียว
+- Reach รวมเป็นผลรวมจากหลายแหล่ง คนเดียวกันอาจนับซ้ำ · แต่ละขั้นของ Funnel มาจากคนละระบบ (Social / GA4 / Leads) ไม่ได้ติดตามรายคน
+- ไม่มีข้อมูลค่าใช้จ่ายของ LINE OA ในระบบ จึงคำนวณ ฿/Lead ให้ LINE OA ไม่ได้
+
+### ไฟล์ที่เปลี่ยน
+`src/lib/lead-options.ts`, `src/lib/leads.ts`, `src/lib/leads-service.ts`, `src/lib/dashboard.ts`, `src/lib/performance.ts`, `src/lib/export/{service,datasets}.ts`, `src/components/{LeadsManager,WebsiteManager}.tsx`, `src/app/(app)/page.tsx`, `src/app/(app)/performance/page.tsx` · tests: performance, overview, e2e, browser-website
+
+### Data / Schema Impact
+- **ไม่มีการเปลี่ยน Schema** (call_status เป็นข้อความเดิม เพิ่มเฉพาะตัวเลือก) · ไม่ต้องกดเตรียม Google Sheet สำหรับข้อนี้
+- Export `leads_qualified` นับตามนิยามใหม่ (ติดต่อได้แล้ว + เข้าชม + ซื้อสำเร็จ)
+
+### Test Results
+**Passed:** 377/377 — performance +4 (Funnel ครบ 5 ขั้น, ฿/Lead ต่อช่องทาง, ไม่มีข้อมูล = รอข้อมูล, เทียบปีก่อน), overview +3 (Qualified ใหม่, Cost per Site Visit, N/A), e2e +1 (บันทึก Call Status ใหม่ลง Sheet), เบราว์เซอร์จริง +2 (ปุ่มเลือกไฟล์, Funnel + ตารางช่องทางด้วยข้อมูลตัวอย่าง: Reach 500,000 → 22,409 → 23 → 7 → 2 · Meta ฿3,129.80/Lead ถูกที่สุด · ตารางไม่ล้นที่ 1280px) · TypeScript + Cloudflare build ผ่าน
+**Failed:** 0
+**Not Tested:** บนเว็บที่ deploy จริง/Google Sheet จริง · ข้อมูล Lead จริง (ข้อมูลในระบบยังเป็นม็อกอัป)
+

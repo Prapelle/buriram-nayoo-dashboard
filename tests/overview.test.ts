@@ -77,4 +77,18 @@ assert.deepEqual(gapsIn([["2026-09-01", "2026-09-10"], ["2026-09-21", "2026-09-3
 assert.deepEqual(gapsIn([["2026-09-05", "2026-09-30"]], "2026-09-01", "2026-10-02"), [["2026-09-01", "2026-09-04"], ["2026-10-01", "2026-10-02"]]);
 assert.deepEqual(gapsIn([["2026-08-01", "2026-10-31"]], "2026-09-01", "2026-09-30"), []);
 ok("รวมช่วงต่อกัน (1–15 + 16–30 = ทั้งเดือน) และหาช่วงที่ขาดได้ถูกต้อง");
+
+console.log("9) Call Status ใหม่ + Cost per Site Visit (คำขอ 28/10/2026)");
+{
+  const ls = [...leads.slice(0, 6).map((x) => ({ ...x })), L("V1", "2026-09-10", "LINE OA", { call_status: "เข้าชมโครงการแล้ว" }), L("V2", "2026-09-11", "Facebook Ads", { call_status: "เข้าชมโครงการแล้ว" }), L("S1", "2026-09-12", "Referral", { call_status: "ซื้อสำเร็จ" })];
+  const { k: k2, r: r9 } = run({ leads: ls });
+  assert.equal(k2.qualified.value, 4); // A1 ติดต่อได้แล้ว + V1 + V2 + S1
+  assert.equal(r9.charts.leadQualByChannel!.reduce((s, x) => s + x.value, 0), 4);
+  ok("Qualified Leads = ติดต่อได้แล้ว 1 + เข้าชมโครงการแล้ว 2 + ซื้อสำเร็จ 1 = 4 (กราฟแยกช่องทางรวมเท่ากัน)");
+  assert.equal(k2.cpsv.value, r2(PAID / 2)); assert.match(k2.cpsv.note!, /เข้าชมโครงการแล้ว/);
+  ok(`Cost per Site Visit = ค่าโฆษณาทั้งหมด ${PAID.toLocaleString()} ÷ 2 Lead ที่เข้าชมโครงการแล้ว = ฿${r2(PAID / 2).toLocaleString()}`);
+  const { k: k3 } = run();
+  assert.equal(k3.cpsv.state, "na"); assert.equal(k3.cpsv.value, null);
+  ok("ยังไม่มีใครเข้าชมโครงการ → Cost per Site Visit = N/A (หารด้วย 0 ไม่ได้) ไม่ใช่ 0");
+}
 console.log(`\nผ่านทั้งหมด ${pass} รายการ`);

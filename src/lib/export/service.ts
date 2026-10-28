@@ -8,7 +8,7 @@ import type { Role } from "../roles";
 import { getExcludedPages, readColumns } from "../tabdata";
 import { DATASET_BY_ID, DATASETS, SUMMARY_COLUMNS, SUMMARY_FINANCIAL, type Dataset, type ExportFilters, type Row } from "./datasets";
 import { TYPE_DOC, columnType, normalizeExportValue } from "./dictionary";
-import { NEEDS, BUY_NEEDS, SELL_NEEDS } from "../lead-options";
+import { isQualifiedCall, NEEDS, BUY_NEEDS, SELL_NEEDS } from "../lead-options";
 import { fetchDashboardData } from "../dashboard-data";
 import { computePerformance } from "../performance";
 import { changePct } from "../compare";
@@ -70,7 +70,7 @@ export function buildSummary(d: { meta: Row[]; google: Row[]; posts: Row[]; line
   for (const r of d.leads) if (!f.area || (r.area || "unknown") === f.area) {
     if (r.lead_id !== undefined) { if (!r.lead_id || seenLead.has(r.lead_id)) continue; seenLead.add(r.lead_id); }
     const m = String(r.received_at).slice(0, 7); mark(m, "leads_total");
-    if (r.call_status === "ติดต่อได้แล้ว") mark(m, "leads_qualified"); // นิยามเดียวกับ Dashboard: Call Status = ติดต่อได้แล้ว
+    if (isQualifiedCall(r.call_status)) mark(m, "leads_qualified"); // นิยามเดียวกับ Dashboard: Call Status = ติดต่อได้แล้ว / เข้าชมโครงการแล้ว / ซื้อสำเร็จ
     if (["Facebook Ads", "Google Ads"].includes(r.source_channel)) mark(m, "leads_from_ads");
     if (BUY_NEEDS.includes(r.need ?? "")) mark(m, "leads_need_buy_rent_build");
     if (SELL_NEEDS.includes(r.need ?? "")) mark(m, "leads_need_sell");

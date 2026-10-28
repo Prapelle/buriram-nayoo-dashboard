@@ -57,6 +57,8 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
       {p.warnings.map((w, i) => <p key={i} role="alert" className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">⚠ {w}</p>)}
       {!p.range && <p className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-slate-600">ยังไม่มีข้อมูลโฆษณาหรือ Facebook Page — เริ่มจาก <Link href="/import" className="underline">นำเข้า CSV</Link></p>}
 
+      {p.range && p.funnel && p.channels && <FunnelAndChannels p={p} />}
+
       {p.groups.map((g) => (
         <div key={g.title}>
           <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-700"><span className={`rounded px-1.5 py-0.5 text-xs ${KIND[g.kind]}`}>{g.kind}</span>{g.title}</h2>
@@ -97,5 +99,51 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
         <p className="mt-3 text-xs text-slate-500">• Google Ads ใช้ Time series รายวันเมื่อครบทุกวันในช่วง (ตัดช่วงได้ตรง) มิฉะนั้นใช้ Campaign Report · CPC = Spend ÷ Clicks จากแหล่งและช่วงเดียวกันเสมอ (ไม่ใช้ Total Paid Media Spend) · Clicks = 0 → N/A · การเปรียบเทียบใช้ช่วงก่อนหน้าที่ยาวเท่ากัน และกฎความครบถ้วนเดียวกัน</p>
       </Card>
     </section>
+  );
+}
+
+const FUNNEL_COLOR = ["#3b6fd8", "#3aa0e0", "#45c08f", "#f2c94c", "#f2a07b"];
+const FUNNEL_W = [100, 86, 72, 58, 44];
+function Change({ v, lowerIsBetter = false }: { v: number | null | undefined; lowerIsBetter?: boolean }) {
+  if (v === undefined) return null;
+  if (v === null) return <span className="text-xs text-slate-400">—</span>;
+  const good = lowerIsBetter ? v < 0 : v > 0;
+  return <span className={`text-xs font-medium tabular-nums ${v === 0 ? "text-slate-500" : good ? "text-emerald-700" : "text-red-700"}`}>{v > 0 ? "↑" : v < 0 ? "↓" : "→"} {Math.abs(v).toLocaleString("en-US")}%</span>;
+}
+function FunnelAndChannels({ p }: { p: Performance }) {
+  const paid = p.channels!.filter((c) => c.cpl !== null);
+  const best = paid.length > 1 ? paid.reduce((a, b) => (b.cpl! < a.cpl! ? b : a)) : null;
+  const thb = (v: number | null) => (v === null ? <span className="text-slate-400">—</span> : `฿${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+  return (
+    <div className="grid gap-4 2xl:grid-cols-5">
+      <div className="2xl:col-span-2"><Card title="Customer Funnel">
+        <ol className="space-y-1.5">{p.funnel!.map((s, i) => (
+          <li key={s.key} className="grid grid-cols-[minmax(0,30%)_1fr_auto] items-center gap-3" title={s.note}>
+            <div className="flex justify-center"><div className="h-9" style={{ width: `${FUNNEL_W[i]}%`, background: FUNNEL_COLOR[i], clipPath: "polygon(0 0, 100% 0, 93% 100%, 7% 100%)" }} /></div>
+            <div className="min-w-0"><div className="text-sm font-medium">{s.label}</div>
+              <div className="truncate text-xs text-slate-500">{s.conv !== null && s.conv !== undefined ? `${s.conv.toLocaleString("en-US")}% ของขั้นก่อนหน้า · ` : ""}{s.note}</div>
+              {s.incomplete && s.value !== null && <div className="truncate text-xs text-amber-700">⚠ ข้อมูลไม่ครบ: {s.incomplete}</div>}</div>
+            <div className="text-right"><div className="text-lg font-bold tabular-nums">{s.value === null ? <span className="text-sm font-normal text-slate-400">รอข้อมูล</span> : s.value.toLocaleString("en-US")}</div><Change v={s.change} /></div>
+          </li>))}</ol>
+        <p className="mt-3 text-xs text-slate-500">แต่ละขั้นมาจากคนละแหล่งข้อมูล (Social → GA4 → Leads) จึงไม่ใช่คนกลุ่มเดียวกันที่ติดตามได้ทีละคน · Lead นับตามวันที่รับในช่วงที่เลือก{p.compare ? " · ลูกศร = เทียบ" + (p.compare === "yoy" ? "ปีก่อน" : "ช่วงก่อน") : ""}</p>
+      </Card></div>
+      <div className="2xl:col-span-3"><Card title="ประสิทธิภาพแต่ละช่องทาง (Cost per Lead)">
+        <div className="overflow-x-auto"><table className="w-full text-left text-sm">
+          <thead><tr className="whitespace-nowrap border-b text-xs text-slate-500 [&>th]:px-1.5"><th className="py-1 !pl-0">ช่องทาง</th><th className="text-right">ค่าโฆษณา</th><th className="text-right">Leads</th><th className="text-right">฿ / Lead</th><th className="text-right">Qualified</th><th className="text-right">฿ / Qualified</th><th className="text-right">ซื้อสำเร็จ</th>{p.compare && <th className="text-right">แนวโน้ม ฿/Lead</th>}</tr></thead>
+          <tbody>{p.channels!.map((c) => (
+            <tr key={c.channel} className="whitespace-nowrap border-b border-slate-100 [&>td]:px-1.5">
+              <td className="py-1.5 !pl-0"><span className="font-medium">{c.channel}</span> <span className={`rounded px-1 text-[10px] ${KIND[c.kind]}`}>{c.kind}</span>{best === c && <span className="ml-1 rounded bg-emerald-600 px-1 text-[10px] text-white">ถูกที่สุด</span>}{c.incomplete && <span className="ml-1 text-xs text-amber-700" title={c.incomplete}>⚠</span>}</td>
+              <td className="text-right tabular-nums">{c.kind === "Organic" ? <span className="text-xs text-slate-400">ไม่มีค่าโฆษณา</span> : thb(c.spend)}</td>
+              <td className="text-right tabular-nums">{c.leads.toLocaleString("en-US")}</td>
+              <td className="text-right font-semibold tabular-nums">{c.kind === "Organic" ? <span className="text-slate-400">—</span> : c.spend !== null && !c.leads ? <span className="text-xs font-normal text-slate-400">N/A (0 Lead)</span> : thb(c.cpl)}</td>
+              <td className="text-right tabular-nums">{c.qualified.toLocaleString("en-US")}</td>
+              <td className="text-right tabular-nums">{c.kind === "Organic" ? <span className="text-slate-400">—</span> : thb(c.cpql)}</td>
+              <td className="text-right tabular-nums">{c.sold.toLocaleString("en-US")}</td>
+              {p.compare && <td className="text-right"><Change v={c.change} lowerIsBetter /></td>}
+            </tr>))}</tbody>
+        </table></div>
+        <p className="mt-2 text-xs text-slate-500">฿ / Lead = ค่าโฆษณาของแพลตฟอร์ม ÷ Lead ที่ช่องทางตรงกัน (Meta Ads ↔ Lead ช่องทาง Facebook Ads) ในช่วงเดียวกัน · ยิ่งต่ำยิ่งคุ้ม แต่ควรดู ฿ / Qualified และ ซื้อสำเร็จ ประกอบ (ช่องทางที่ Lead ถูกแต่ไม่มีใครซื้อ อาจไม่คุ้มจริง) · ช่องทาง Organic ไม่มีข้อมูลค่าใช้จ่ายในระบบ · ⚠ = รายงานโฆษณาไม่ครอบคลุมช่วงพอดี</p>
+      </Card></div>
+    </div>
   );
 }

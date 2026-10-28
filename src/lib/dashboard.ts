@@ -1,6 +1,6 @@
 import { excludePages, summarizeFb } from "./fbmetrics";
 import type { Role } from "./roles";
-import { BUY_NEEDS, BUY_STATUS, SELL_NEEDS, SELL_STATUS } from "./lead-options";
+import { isQualifiedCall, CALL_VISIT, BUY_NEEDS, BUY_STATUS, SELL_NEEDS, SELL_STATUS } from "./lead-options";
 import { COMPARE_LABEL, compareRange, type CompareMode, type DRange } from "./compare";
 
 export type Row = Record<string, string>;
@@ -28,7 +28,7 @@ export type Dashboard = {
     spendByChannel: { label: string; value: number }[] | null;
     leadsByChannel: { label: string; value: number }[] | null;
     pipeline: { label: string; value: number }[] | null;
-    /** Qualified Leads (Call Status = ติดต่อได้แล้ว) แยกตามช่องทางของ Lead */
+    /** Qualified Leads (Call Status = ติดต่อได้แล้ว / เข้าชมโครงการแล้ว / ซื้อสำเร็จ) แยกตามช่องทางของ Lead */
     leadQualByChannel: { label: string; value: number }[] | null;
     /** Phase 6: Lead แยกตาม Buy Status (ซื้อ/เช่า/สร้าง) และ Sell Status (ขาย) */
     buyStatus: { label: string; value: number }[] | null;
@@ -173,8 +173,8 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
 
   const lineNew = sumOf(line, "new_friends"), lineInq = sumOf(line, "inquiries"), lineLeads = sumOf(line, "leads");
 
-  // Qualified Lead = Lead ที่ Call Status = ติดต่อได้แล้ว (ตามที่ผู้ใช้กำหนด 28/10/2026)
-  const qualified = (r: Row) => r.call_status === "ติดต่อได้แล้ว";
+  // Qualified Lead = Call Status ติดต่อได้แล้ว / เข้าชมโครงการแล้ว / ซื้อสำเร็จ (ผู้ใช้กำหนด 28/10/2026)
+  const qualified = (r: Row) => isQualifiedCall(r.call_status);
   const leadsTotal = leads.length;
   // ช่วงเวลาของ CPL: ใช้ช่วงที่เลือก หรือถ้าไม่ได้เลือก ใช้ช่วงของรายงานโฆษณาที่นำมาคิด เพื่อให้ค่าโฆษณาและ Lead เป็นช่วงเดียวกัน
   const adSpan = mergeSpans([...meta, ...google]);
@@ -222,12 +222,13 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
     ] },
     { title: "Leads", items: [
       kpi("leads", "Total Leads", "int", leadsAll.length ? leadsTotal : null, undefined, "นับ lead_id ไม่ซ้ำ ตามวันที่รับ Lead ในช่วงที่เลือก"),
-      kpi("qualified", "Qualified Leads", "int", leadsAll.length ? leadsQ : null, undefined, `จำนวน Lead ที่ Call Status = ติดต่อได้แล้ว จาก ${leadsTotal} Lead ในช่วงที่เลือก (แยกตามช่องทางดูที่กราฟ)`),
+      kpi("qualified", "Qualified Leads", "int", leadsAll.length ? leadsQ : null, undefined, `จำนวน Lead ที่ Call Status = ติดต่อได้แล้ว, เข้าชมโครงการแล้ว หรือ ซื้อสำเร็จ จาก ${leadsTotal} Lead ในช่วงที่เลือก (แยกตามช่องทางดูที่กราฟ)`),
     ] },
     { title: "ประสิทธิภาพ (ไม่ใช่ ROI เชิงสาเหตุ)", items: [
       cplKpi("cpl", "CPL (Lead จากโฆษณา)", cplAdsBase, "Lead จาก Facebook Ads + Google Ads"),
       cplKpi("cpl_all", "CPL (Lead ทั้งหมด)", cplLeads, "Total Leads ทุกช่องทาง"),
-      cplKpi("cplq", "Cost per Qualified Lead", cplAdsBase.filter(qualified), "Qualified Lead จากโฆษณา (Call Status = ติดต่อได้แล้ว)"),
+      cplKpi("cplq", "Cost per Qualified Lead", cplAdsBase.filter(qualified), "Qualified Lead จากโฆษณา (Call Status ติดต่อได้แล้ว / เข้าชมโครงการแล้ว / ซื้อสำเร็จ)"),
+      cplKpi("cpsv", "Cost per Site Visit", cplLeads.filter((r) => r.call_status === CALL_VISIT), "Lead ทุกช่องทางที่ Call Status = เข้าชมโครงการแล้ว (Lead ที่เปลี่ยนเป็น ซื้อสำเร็จ แล้วจะไม่ถูกนับ)"),
     ] },
   ];
 

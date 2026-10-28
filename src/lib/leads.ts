@@ -2,7 +2,7 @@ import { CHANNELS, SERVICES } from "./dashboard";
 import { isIsoDate } from "./import/normalize";
 
 export const AREA_OPTIONS: [string, string][] = [["unknown", "ไม่ทราบ (Unknown)"], ["buriram", "บุรีรัมย์"], ["surin", "สุรินทร์"], ["multi_province", "หลายจังหวัด"]];
-import { NEEDS, BUY_NEEDS, SELL_NEEDS, BUY_STATUS, SELL_STATUS, CALL_STATUS, PROPERTY_TYPES, CONDITIONS, PRICE_RANGES } from "./lead-options";
+import { isQualifiedCall, NEEDS, BUY_NEEDS, SELL_NEEDS, BUY_STATUS, SELL_STATUS, CALL_STATUS, PROPERTY_TYPES, CONDITIONS, PRICE_RANGES } from "./lead-options";
 export { NEEDS, BUY_NEEDS, SELL_NEEDS, BUY_STATUS, SELL_STATUS, CALL_STATUS, PROPERTY_TYPES, CONDITIONS, PRICE_RANGES };
 
 /** ช่องสถานะที่ใช้กับ Need นั้น */
@@ -20,7 +20,7 @@ export function pipelineOf(r: Lead): "Won" | "Lost" | "Qualified" | "Contacted" 
   if (WON.includes(st)) return "Won";
   if (LOST.includes(st)) return "Lost";
   if (QUALIFIED.includes(st)) return "Qualified";
-  return r.call_status === "ติดต่อได้แล้ว" ? "Contacted" : "New";
+  return isQualifiedCall(r.call_status) ? "Contacted" : "New";
 }
 export const PIPELINE_MAP = { Qualified: [...QUALIFIED, ...WON], Won: WON, Lost: LOST };
 

@@ -508,6 +508,15 @@ const contactedNow = (await listLeads()).rows.filter((r) => r.call_status === "�
 assert.equal(kq.qualified.value, contactedNow.length); assert.equal(dq.charts.leadQualByChannel!.reduce((t, x) => t + x.value, 0), contactedNow.length);
 assert.ok(!("won" in kq) && !("gp" in kq) && !("rate" in kq) && !("lead_qual" in kq));
 ok(`Call Status "ไม่สนใจ" บันทึกได้ (contactable TRUE) และกรองได้ · Qualified Leads = ${contactedNow.length} (เฉพาะ ติดต่อได้แล้ว) รวมทุกช่องทางในกราฟเท่ากัน · ไม่มีการ์ด Won/Gross Profit/Lead-to-Sale`);
+{
+  const vs = (await saveLead({ ...base, customer_name: "เข้าชมแล้ว", phone: "0868888881", need: "ซื้อ", call_status: "เข้าชมโครงการแล้ว" }, "s@x.com")).lead;
+  const sold = (await saveLead({ ...base, customer_name: "ซื้อแล้ว", phone: "0868888882", need: "ซื้อ", call_status: "ซื้อสำเร็จ" }, "s@x.com")).lead;
+  assert.equal(vs.call_status, "เข้าชมโครงการแล้ว"); assert.equal(sold.call_status, "ซื้อสำเร็จ"); assert.equal(vs.contactable, "TRUE"); assert.equal(sold.contactable, "TRUE");
+  const rowsNow = (await listLeads()).rows; const qNow = rowsNow.filter((r) => ["ติดต่อได้แล้ว", "เข้าชมโครงการแล้ว", "ซื้อสำเร็จ"].includes(r.call_status)).length;
+  const d2 = computeDashboard(await fetchDashboardData("marketing"), {}, "marketing"); const k2 = Object.fromEntries(d2.groups.flatMap((g) => g.items).map((x) => [x.key, x]));
+  assert.equal(k2.qualified.value, qNow); assert.ok(qNow >= contactedNow.length + 2); assert.ok("cpsv" in k2);
+  ok(`Call Status ใหม่ "เข้าชมโครงการแล้ว" / "ซื้อสำเร็จ" บันทึกลง Sheet ได้ (contactable TRUE) · Qualified Leads = ${qNow} (ติดต่อได้แล้ว + เข้าชม + ซื้อสำเร็จ) · มีการ์ด Cost per Site Visit`);
+}
 console.log("15c) จัดการผู้ใช้ (หน้า ตั้งค่า)");
 const { listUsers, saveUser, UserError } = await import("../src/lib/users-service");
 const isU = (code: string) => (x: unknown) => x instanceof UserError && x.code === code;
@@ -587,7 +596,7 @@ assert.equal(pk.g_spend.value, 28814.82); assert.equal(pk.g_clicks.value, 31513)
 assert.equal(perf.warnings.length, 1); assert.ok(perf.warnings[0].includes("28,870.19")); // ส่วนที่ 3 แก้ Cost แคมเปญ +55.37 ไว้ → Time series กับ Campaign ไม่ตรงกันจริง
 ok("อ่านจาก Sheet (จำลอง): Google Spend 28,814.82 / Clicks 31,513 จาก Time series, Meta 37,557.54, Facebook Engagement 319 · เตือนเพราะ Campaign Report ถูกแก้ไว้ในส่วนที่ 3 (28,870.19) ยอดไม่ตรงกัน");
 const dc16 = computeDashboard(pd, {}, "marketing").charts;
-assert.deepEqual(dc16.buyStatus!.filter((x) => x.value).map((x) => [x.label, x.value]), [["Warm", 1], ["Close", 1], ["(ยังไม่ระบุสถานะ)", 2]] /* +1 จาก Lead "ไม่สนใจ" ในส่วนที่ 15b */);
+assert.deepEqual(dc16.buyStatus!.filter((x) => x.value).map((x) => [x.label, x.value]), [["Warm", 1], ["Close", 1], ["(ยังไม่ระบุสถานะ)", 4]] /* +1 จาก Lead "ไม่สนใจ" ในส่วนที่ 15b, +2 จาก Lead เข้าชม/ซื้อสำเร็จ */);
 assert.equal(dc16.sellStatus!.find((x) => x.label === "ขายแล้ว")!.value, 1); assert.equal(dc16.sellStatus!.find((x) => x.label === "บ้านไม่พร้อมขาย")!.value, 1);
 ok("Dashboard กราฟ Buy Status / Sell Status จาก Lead ใน Sheet (ข้อมูล Marketing ไม่มีชื่อ/เบอร์)");
 console.log("17) Phase 8 — Export: โครงสร้าง ชนิดข้อมูล และการไม่นับซ้ำ");

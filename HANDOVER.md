@@ -8,7 +8,7 @@
 ## 1. สรุปสถานะ (Definition of Done)
 
 สถานะ: ✅ ผ่าน · ⚠️ ผ่านบางส่วน/มีเงื่อนไข · ⛔ ไม่ได้ทำ (ระบุเหตุผล)
-"เว็บจริง" = ผู้ใช้ตรวจบนเว็บที่ deploy แล้ว · "อัตโนมัติ" = ชุดทดสอบ 367 รายการ (รวม HTTP Integration กับ production build)
+"เว็บจริง" = ผู้ใช้ตรวจบนเว็บที่ deploy แล้ว · "อัตโนมัติ" = ชุดทดสอบ 377 รายการ (รวม HTTP Integration กับ production build)
 
 | ข้อกำหนด | สถานะ | หลักฐาน |
 |---|---|---|
@@ -135,20 +135,23 @@
 4. รายงานยอดขาย Excel: เมนู Sales → นำเข้ารายงานยอดขาย · LINE OA: เมนู LINE OA (เดือนละแถว)
 
 ### 4.2 Leads (Admin / Sales)
-- **+ เพิ่ม Lead:** Date, Channel, Name, Phone, **Need** → Status ตาม Need (ซื้อ/เช่า/สร้าง = Buy Status: Hot/Warm/Cold/Archive/Close · ขาย = Sell Status), Type, Condition, Price, Call Status (ยังไม่ได้โทร / ติดต่อไม่ได้ / ติดต่อได้แล้ว / ไม่สนใจ), Staff, Remark, Note
+- **+ เพิ่ม Lead:** Date, Channel, Name, Phone, **Need** → Status ตาม Need (ซื้อ/เช่า/สร้าง = Buy Status: Hot/Warm/Cold/Archive/Close · ขาย = Sell Status), Type, Condition, Price, Call Status (ยังไม่ได้โทร / ติดต่อไม่ได้ / ติดต่อได้แล้ว / เข้าชมโครงการแล้ว / ซื้อสำเร็จ / ไม่สนใจ), Staff, Remark, Note
 - เปลี่ยน Status / Call Status จากตารางได้ทันที · **ดู** = รายละเอียด · **แก้ไข** · ลบ (ยืนยัน 2 ขั้น)
 - เปลี่ยน Need ข้ามกลุ่ม (เช่น ขาย → ซื้อ) ระบบถามยืนยันก่อนล้างสถานะเดิม และบันทึกค่าเดิมใน Audit Log
 - ระบบคำนวณขั้น Pipeline ให้เอง: Qualified = Hot, Warm, Close, นัดทำสัญญา, ทำสัญญา, เซ็นสัญญา, สัญญาเปิด, เป็นนายหน้า, ขายแล้ว · Won = Close, ขายแล้ว · Lost = Archive, ยกเลิก, บ้านไม่พร้อมขาย
 
 ### 4.3 Dashboard
-- **ภาพรวมการตลาด:** Total Paid Media Spend, Total Leads (lead_id ไม่ซ้ำ), **Qualified Leads** (จำนวน Lead ที่ Call Status = ติดต่อได้แล้ว + กราฟแยกตามช่องทาง), CPL จาก Ads / ทั้งหมด, Cost per Qualified Lead, Facebook, LINE OA, กราฟ Lead ตาม Buy/Sell Status (ไม่มีการ์ดยอดขาย/การเงินแล้ว — ดูที่หน้า Sales) · ตัวกรอง วันที่/ช่องทาง/Campaign/พื้นที่/Service · **เปรียบเทียบ ปีก่อน/ช่วงก่อน** (ต้องเลือกวันที่ก่อน)
+- **ภาพรวมการตลาด:** Total Paid Media Spend, Total Leads (lead_id ไม่ซ้ำ), **Qualified Leads** (Call Status = ติดต่อได้แล้ว / เข้าชมโครงการแล้ว / ซื้อสำเร็จ + กราฟแยกตามช่องทาง), CPL จาก Ads / ทั้งหมด, Cost per Qualified Lead, **Cost per Site Visit** (ค่าโฆษณาทั้งหมด ÷ Lead ที่ Call Status = เข้าชมโครงการแล้ว), Facebook, LINE OA, กราฟ Lead ตาม Buy/Sell Status (ไม่มีการ์ดยอดขาย/การเงินแล้ว — ดูที่หน้า Sales) · ตัวกรอง วันที่/ช่องทาง/Campaign/พื้นที่/Service · **เปรียบเทียบ ปีก่อน/ช่วงก่อน** (ต้องเลือกวันที่ก่อน)
 - **Marketing Performance:** Google Ads Spend/Clicks/CPC, Meta Ads, Facebook Page (Organic), Website (รอข้อมูล) แยก Paid/Organic/Website · กราฟรายวัน/รายเดือน · ตารางตามแพลตฟอร์ม · สถานะความครบของข้อมูล · เปรียบเทียบ YoY
 - อ่านสถานะ: **รอข้อมูล** = ไม่มีข้อมูล (ไม่ใช่ 0) · **N/A** = หารด้วย 0 · **ข้อมูลไม่ครบ** = มีค่าแต่ช่วงข้อมูลไม่ครบ (อ่านเหตุผลบนการ์ด) · **Missing Data** = ไม่มีข้อมูลช่วงเปรียบเทียบ
+
+- **Marketing Performance → Customer Funnel:** Reach (Meta Ads Reach + Facebook Page Reach — ผลรวม ไม่ใช่ Unique) → เข้าเว็บไซต์ (GA4 Sessions หรือ Users) → Leads → Qualified Leads → ขายได้ (Call Status = ซื้อสำเร็จ) พร้อม % ของขั้นก่อนหน้า และลูกศรเทียบช่วงเมื่อเลือกเปรียบเทียบ
+- **Marketing Performance → ประสิทธิภาพแต่ละช่องทาง:** ค่าโฆษณา, Leads, ฿/Lead, Qualified, ฿/Qualified, ซื้อสำเร็จ — Meta Ads จับคู่กับ Lead ช่องทาง Facebook Ads, Google Ads กับ Google Ads · ช่องทาง Organic แสดงจำนวน Lead แต่ไม่มีค่าใช้จ่าย · ป้าย "ถูกที่สุด" = ฿/Lead ต่ำสุดในช่องทางที่มีค่าโฆษณา
 
 ### 4.5 Website (เมนู Website — Admin / Marketing)
 1. **GA4:** Reports → Engagement → **Pages and screens** → ตั้งช่วงวันที่ → Share → Download CSV (ไม่ต้องแก้ไฟล์ — ระบบอ่านช่วงวันที่จากหัวไฟล์)
 2. **Search Console:** Performance → Search results → ตั้งช่วงวันที่ → Export → CSV แล้วแตกไฟล์ zip
-3. หน้า Website → เลือก **ทุกไฟล์พร้อมกัน** (รวม Filters.csv ที่บอกช่วงวันที่) → **ตรวจสอบก่อนนำเข้า** → **ยืนยันนำเข้า**
+3. หน้า Website → กดปุ่ม **เลือกไฟล์** (หรือลากไฟล์มาวาง) เลือก**ทุกไฟล์พร้อมกัน** (รวม Filters.csv ที่บอกช่วงวันที่) → **ตรวจสอบก่อนนำเข้า** → **ยืนยันนำเข้า**
 4. **Users:** แนะนำนำเข้า **GA4 Reports snapshot** (หน้าแรกของ Reports → Share → Download CSV) ของช่วงเดียวกัน — มี Active users, New users, เวลามีส่วนร่วมเฉลี่ย, Sessions, Page views ในไฟล์เดียว จึงไม่ต้องกรอกเอง · ถ้าไม่มี snapshot ให้กรอก Users ที่ช่วงนั้น (กดชื่อช่วงเพื่อเติมวันที่)
    - ช่วงเดียวกันมีหลายแหล่ง → ใช้ snapshot ก่อน แล้วจึงไฟล์รายหน้า แล้วจึงที่กรอกเอง (ไม่บวกซ้ำ)
 5. ดูตัวเลขที่หน้า **Marketing Performance** โดยเลือกช่วงวันที่ให้ตรงกับรายงาน GA4 (ไม่ตรง = ข้อมูลไม่ครบ) · Search Console เป็นรายวัน เลือกช่วงไหนก็ได้
@@ -200,7 +203,7 @@
 - **ก่อน deploy ทุกครั้ง:** `npx opennextjs-cloudflare build` แล้ว `bash tests/run-all.sh` (วางไฟล์ตัวอย่างใน `tests/fixtures` ตาม README ในโฟลเดอร์นั้น)
 
 ## 8. ชุดทดสอบ
-`bash tests/run-all.sh` — 367 รายการ (security, sales, import, dashboard, overview, fbactions, performance, yoy, kpicard, website, fbpage, e2e, http-integration, browser-website)
+`bash tests/run-all.sh` — 377 รายการ (security, sales, import, dashboard, overview, fbactions, performance, yoy, kpicard, website, fbpage, e2e, http-integration, browser-website)
 - `tests/e2e.test.mts`: ทุกโมดูลผ่าน service + Google Sheets จำลอง
 - `tests/integration/run.mjs`: เปิด production build จริง ล็อกอินด้วยคุกกี้เซสชันจริงตาม Role แล้วเรียกหน้าเว็บ/API (ต้อง build ก่อน)
 - `tests/integration/browser-website.mjs`: เปิดหน้า Website ใน Chromium จริง อัปโหลดไฟล์จริง 9 ไฟล์ (รวม Reports snapshot) นำเข้า กรอกยอดผู้ใช้ แล้วตรวจหน้า Performance ต.ค. และ ก.ย. (ต้องมี Playwright)

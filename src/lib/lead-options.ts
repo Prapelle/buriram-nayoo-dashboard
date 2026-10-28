@@ -4,7 +4,12 @@ export const BUY_NEEDS = ["ซื้อ", "เช่า", "สร้าง"]; //
 export const SELL_NEEDS = ["ขาย"]; // ใช้ Sell Status
 export const BUY_STATUS = ["Hot", "Warm", "Cold", "Archive", "Close"];
 export const SELL_STATUS = ["นัดทำสัญญา", "ทำสัญญา", "เซ็นสัญญา", "ยกเลิก", "เป็นนายหน้า", "บ้านไม่พร้อมขาย", "ขายแล้ว", "สัญญาเปิด"];
-export const CALL_STATUS = ["ยังไม่ได้โทร", "ติดต่อไม่ได้", "ติดต่อได้แล้ว", "ไม่สนใจ"];
+export const CALL_STATUS = ["ยังไม่ได้โทร", "ติดต่อไม่ได้", "ติดต่อได้แล้ว", "เข้าชมโครงการแล้ว", "ซื้อสำเร็จ", "ไม่สนใจ"];
+/** Call Status ที่นับเป็น Qualified Lead (ผู้ใช้กำหนด 28/10/2026) */
+export const QUALIFIED_CALL = ["ติดต่อได้แล้ว", "เข้าชมโครงการแล้ว", "ซื้อสำเร็จ"];
+export const CALL_SOLD = "ซื้อสำเร็จ";
+export const CALL_VISIT = "เข้าชมโครงการแล้ว";
+export const isQualifiedCall = (s: unknown) => QUALIFIED_CALL.includes(String(s ?? ""));
 export const PROPERTY_TYPES = ["บ้านเดี่ยว", "อาคารพาณิชย์", "ที่ดิน", "ทาวโฮม", "ทรัพย์ลงทุน", "คอนโด"];
 export const CONDITIONS = ["มือ 1", "มือ 2", "1 และ 2"];
 export const PRICE_RANGES = ["ต่ำกว่าล้าน", "1–1.5 m", "1.5–2.5 m", "2.5–3.5 m", "3.5–5 m", "5 up"];

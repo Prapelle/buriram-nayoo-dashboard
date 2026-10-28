@@ -32,6 +32,9 @@ try {
   const page = await ctx.newPage();
   const errors = []; page.on("pageerror", (e) => errors.push(String(e))); page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   await page.goto(BASE + "/website"); await page.getByText("1. นำเข้าไฟล์ GA4 / Search Console").waitFor();
+  assert.ok(await page.getByRole("button", { name: "เลือกไฟล์" }).isVisible()); assert.ok(!(await page.locator('input[type="file"]').isVisible()));
+  if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/website-upload.png", clip: { x: 0, y: 0, width: 1280, height: 520 } });
+  ok("หน้า Website: มีปุ่ม \"เลือกไฟล์\" + พื้นที่ลากไฟล์มาวาง (ซ่อนช่อง Choose files เดิม)");
   const t0 = Date.now();
   await page.locator('input[type="file"]').setInputFiles(FILES);
   await page.getByRole("button", { name: "ตรวจสอบก่อนนำเข้า" }).waitFor({ timeout: 60000 });
@@ -69,11 +72,22 @@ try {
   assert.ok(/Website Users 21,000/.test(perf), perf.slice(perf.indexOf("Website (GA4)"), perf.indexOf("Website (GA4)") + 900)); assert.ok(/Website Page Views 35,820/.test(perf)); assert.ok(/Page Views per User 1\.71/.test(perf)); assert.ok(perf.includes("47 วินาที") || perf.includes("47.3 วินาที"), "duration");
   assert.ok(/Search Clicks 4,744/.test(perf) && /Search CTR 2\.33%/.test(perf));
   ok("Marketing Performance (เบราว์เซอร์): Users 21,000 · Page Views 35,820 · PV/User 1.71 · Duration 47 วินาที · Search Clicks 4,744 · CTR 2.33%");
+  // ข้อมูลตัวอย่างสำหรับ Funnel / ช่องทาง: โฆษณา ก.ย. + Lead 23 ราย
+  const setRows = async (name, objs) => { const head = (await tab(name))[0]; const r = await fetch(`http://127.0.0.1:${CTRL}/set`, { method: "POST", body: JSON.stringify({ name, rows: [head, ...objs.map((o) => head.map((h) => o[h] ?? ""))] }) }); assert.equal(r.status, 200); };
+  await setRows("META_ADS", [{ row_key: "m1", report_start: "2026-09-01", report_end: "2026-09-30", campaign_name: "Demo", ad_name: "Demo", amount_spent_thb: 37557.54, impressions: 900000, reach: 500000 }]);
+  await setRows("GOOGLE_ADS_CAMPAIGNS", [{ row_key: "g1", report_start: "2026-09-01", report_end: "2026-09-30", campaign_name: "Demo", cost_thb: 28814.82, clicks: 31513 }]);
+  const LD = []; const add = (n, ch, calls) => { for (let i = 0; i < n; i++) LD.push({ lead_id: `${ch}-${i}`, lead_code: `L${LD.length}`, received_at: `2026-09-${String(1 + (LD.length % 28)).padStart(2, "0")}`, source_channel: ch, call_status: calls[i] ?? "ยังไม่ได้โทร", need: "ซื้อ", status: "New" }); };
+  add(12, "Facebook Ads", ["ซื้อสำเร็จ", "เข้าชมโครงการแล้ว", "ติดต่อได้แล้ว", "ติดต่อไม่ได้"]); add(5, "Google Ads", ["เข้าชมโครงการแล้ว", "ติดต่อได้แล้ว"]); add(4, "LINE OA", ["ซื้อสำเร็จ", "ติดต่อได้แล้ว"]); add(2, "Website/SEO", ["ไม่สนใจ"]);
+  await setRows("LEADS", LD);
   await page.goto(BASE + "/performance?from=2026-09-01&to=2026-09-30");
   await page.getByText("Website Users", { exact: false }).first().waitFor();
   const sepT = (await page.locator("main").innerText()).replace(/\s+/g, " ");
   assert.ok(/Website Users 17,443/.test(sepT) && /Website Page Views 42,450/.test(sepT) && /Page Views per User 2\.43/.test(sepT) && sepT.includes("1 นาที 0 วินาที") && /Sessions 22,409/.test(sepT), sepT.slice(sepT.indexOf("Website (GA4)"), sepT.indexOf("Website (GA4)") + 700));
   ok("Performance ก.ย. 2026 (เบราว์เซอร์): Users 17,443 จาก Snapshot · Page Views 42,450 · PV/User 2.43 · Duration 1 นาที · Sessions 22,409");
+  assert.ok(/Customer Funnel/.test(sepT) && /เข้าเว็บไซต์ .*22,409/.test(sepT) && /ขายได้ \(ซื้อสำเร็จ\)/.test(sepT) && /ประสิทธิภาพแต่ละช่องทาง/.test(sepT) && /Reach \(ทุก Social\).* 500,000/.test(sepT) && /Leads .* 23 /.test(sepT) && /Qualified Leads .* 7 /.test(sepT) && /ขายได้ \(ซื้อสำเร็จ\) 28\.57% ของขั้นก่อนหน้า · Call Status = ซื้อสำเร็จ 2 /.test(sepT) && /Meta Ads Paid ?ถูกที่สุด ฿37,557\.54 12 ฿3,129\.80 3 ฿12,519\.18 1/.test(sepT) && /Google Ads Paid ฿28,814\.82 5 ฿5,762\.96 2/.test(sepT) && /LINE OA Organic ไม่มีค่าโฆษณา 4 — 2 — 1/.test(sepT), sepT.slice(sepT.indexOf("ประสิทธิภาพแต่ละช่องทาง"), sepT.indexOf("ประสิทธิภาพแต่ละช่องทาง") + 500));
+  if (process.env.SHOT_DIR) { const box = await page.getByRole("heading", { name: "Customer Funnel" }).locator("xpath=../..").boundingBox(); const b2 = await page.getByRole("heading", { name: "ประสิทธิภาพแต่ละช่องทาง (Cost per Lead)" }).locator("xpath=../..").boundingBox(); await page.screenshot({ path: process.env.SHOT_DIR + "/perf-funnel.png", fullPage: true, clip: { x: 0, y: Math.max(0, box.y - 10), width: 1280, height: b2.y + b2.height - box.y + 20 } }); }
+  const tw = await page.evaluate(() => [...document.querySelectorAll("main table")].map((t) => t.parentElement.scrollWidth - t.parentElement.clientWidth)[0]); assert.ok(tw <= 1, `ตารางช่องทางล้น ${tw}px ที่ 1280px`);
+  ok("Performance: Customer Funnel Reach 500,000 → เข้าเว็บ 22,409 Sessions → Leads 23 → Qualified 7 → ขายได้ 2 · ฿/Lead: Meta ฿3,129.80 (ถูกที่สุด) · Google ฿5,762.96 · LINE OA ไม่มีค่าโฆษณา");
   await page.goto(BASE + "/website"); await page.getByText("GA4 Snapshot — Sessions ตามแหล่งที่มา").waitFor({ timeout: 5000 }).catch(() => {});
   await page.setViewportSize({ width: 390, height: 844 }); await page.goto(BASE + "/website");
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);

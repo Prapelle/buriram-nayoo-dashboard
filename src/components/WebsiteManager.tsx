@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { assembleBatches, KIND_LABEL, parseWebsiteFile, WebParseError, type ParsedFile, type UploadBatch } from "@/lib/website/parse";
 
 type Row = Record<string, string>;
@@ -25,6 +25,8 @@ const DIM_TITLE: Record<string, string> = { ga4_page_title: "GA4 Snapshot — �
 
 export function WebsiteManager({ isAdmin }: { isAdmin: boolean }) {
   const [files, setFiles] = useState<(ParsedFile & { sha256: string })[]>([]);
+  const [drag, setDrag] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
   const [fileErrors, setFileErrors] = useState<string[]>([]);
   const [reading, setReading] = useState(false);
   const [period, setPeriod] = useState({ start: "", end: "" });
@@ -101,7 +103,14 @@ export function WebsiteManager({ isAdmin }: { isAdmin: boolean }) {
       <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-5">
         <h2 className="font-semibold">1. นำเข้าไฟล์ GA4 / Search Console</h2>
         <p className="text-sm text-slate-600">เลือกได้หลายไฟล์พร้อมกัน (CSV): GA4 → <b>Reports snapshot</b> (มียอดผู้ใช้จริง — แนะนำ) และ/หรือ หน้าและหน้าจอ (Pages and screens) · Search Console → ส่งออก Performance แล้วเลือกไฟล์ทั้งหมดในโฟลเดอร์ (Chart, Pages, Queries, Countries, Devices, Search appearance และ <b>Filters</b> ที่ใช้บอกช่วงวันที่) · ระบบอ่านไฟล์ในเครื่องของคุณก่อน แล้วส่งเฉพาะยอดสรุปขึ้นระบบ</p>
-        <input type="file" accept=".csv,text/csv" multiple disabled={reading || busy} onChange={(e) => { pick(e.target.files); e.target.value = ""; }} className="text-sm" />
+        <div onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)}
+          onDrop={(e) => { e.preventDefault(); setDrag(false); if (!reading && !busy) pick(e.dataTransfer.files); }}
+          className={`rounded-lg border-2 border-dashed p-6 text-center ${drag ? "border-slate-900 bg-slate-100" : "border-slate-300 bg-slate-50"}`}>
+          <p className="mb-3 text-sm text-slate-600">ลากไฟล์ CSV มาวางที่นี่ (หลายไฟล์พร้อมกันได้) หรือ</p>
+          <button type="button" onClick={() => fileInput.current?.click()} disabled={reading || busy} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50">เลือกไฟล์</button>
+          <input ref={fileInput} type="file" accept=".csv,text/csv" multiple disabled={reading || busy} onChange={(e) => { pick(e.target.files); e.target.value = ""; }} className="hidden" />
+          {files.length > 0 && <p className="mt-2 text-xs text-slate-500">เลือกแล้ว {files.length} ไฟล์</p>}
+        </div>
         {reading && <p className="text-sm text-slate-500">กำลังอ่านไฟล์...</p>}
         {fileErrors.map((e, i) => <p key={i} role="alert" className="rounded-md bg-red-50 p-2 text-sm text-red-700">{e}</p>)}
         {files.length > 0 && (

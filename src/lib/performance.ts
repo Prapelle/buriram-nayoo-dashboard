@@ -10,7 +10,8 @@
 import { addDays, dmyS, fmtGaps, gapsIn, mergeSpans, num, type DashData, type Kpi, type Row, type Span } from "./dashboard";
 import { excludePages, metricDateOf, scopeOf, summarizeFb } from "./fbmetrics";
 import { actionLabels } from "./fbactions";
-import { COMPARE_LABEL, compareRange, previousRange, type CompareMode } from "./compare";
+import { changePct, COMPARE_LABEL, compareRange, previousRange, type CompareMode } from "./compare";
+import { CALL_SOLD, isQualifiedCall } from "./lead-options";
 export { previousRange };
 
 export type PerfFilters = { from?: string; to?: string; compare?: CompareMode; gran?: "day" | "month" };
@@ -18,6 +19,8 @@ export type Range = { from: string; to: string };
 export type PKpi = Kpi & { prev?: number | null; prevIncomplete?: string; prevLabel?: string; source?: string };
 export type Source = { name: string; kind: "Paid" | "Organic" | "Website"; status: "ครบ" | "ไม่ครบ" | "รอข้อมูล"; detail: string; available: string };
 export type PlatformRow = { platform: string; kind: "Paid" | "Organic" | "Website"; spend: number | null; clicks: number | null; engagement: number | null; impressions: number | null; pageViews?: number | null; period: string; source: string; status: string };
+export type FunnelStep = { key: string; label: string; value: number | null; prev?: number | null; change?: number | null; conv?: number | null; note: string; incomplete?: string };
+export type ChannelRow = { channel: string; kind: "Paid" | "Organic"; spend: number | null; leads: number; qualified: number; sold: number; cpl: number | null; cpql: number | null; prevCpl?: number | null; change?: number | null; incomplete?: string };
 export type Performance = {
   range: Range | null; prevRange: Range | null; defaulted: boolean; compare: CompareMode | null; compareNote?: string;
   groups: { title: string; kind: "Paid" | "Organic" | "Website" | "Compare"; note?: string; items: PKpi[] }[];
@@ -25,6 +28,8 @@ export type Performance = {
   platforms: PlatformRow[];
   sources: Source[];
   meta: { actions: { label: string; results: number; spend: number; rows: number }[] };
+  funnel?: FunnelStep[];
+  channels?: ChannelRow[];
   warnings: string[];
   lastImport: string;
 };
@@ -269,6 +274,37 @@ export function computePerformance(d: DashData, f: PerfFilters): Performance {
     kp("x_spu", "Ads Spend per Website User", "thb", spu.v, { na: spu.na, note: spu.na ? "Users = 0" : "Google Ads Spend ÷ Website Users ช่วงเดียวกัน", incomplete: both(G?.incomplete, Wb.incomplete), pending: why(Wb.usersWhy ?? noWeb, Wb.users !== null) }),
   ];
 
+  // ---- Customer Funnel + ประสิทธิภาพแต่ละช่องทาง (Lead ตามวันที่รับ ช่วงเดียวกับรายงาน) ----
+  const L = leadsIn(d.leads, range), Lp = prevRange ? leadsIn(d.leads, prevRange) : null;
+  const cnt = (rows: Row[] | undefined, keep: (r: Row) => boolean = () => true) => (rows && d.leads.length ? rows.filter(keep).length : null); // ยังไม่มี Lead ในระบบเลย = รอข้อมูล
+  const sumReach = (m: typeof M, fb: typeof F) => (m?.reachSum ?? null) === null && (fb?.t.reach ?? null) === null ? null : (m?.reachSum ?? 0) + (fb?.t.reach ?? 0);
+  const visits = (w: typeof Wb | null) => (w ? (w.sessions ?? w.users) : null);
+  const visitLabel = Wb.sessions !== null ? "Sessions" : "Users";
+  const steps: Omit<FunnelStep, "change" | "conv">[] = [
+    { key: "reach", label: "Reach (ทุก Social)", value: sumReach(M, F), prev: pv(Fp || Mp ? sumReach(Mp, Fp) : null), note: `Meta Ads Reach${M ? "" : " (ไม่มี)"} + Facebook Page Reach${F ? "" : " (ไม่มี)"} · เป็นผลรวม คนเดียวกันอาจถูกนับซ้ำ ไม่ใช่ Unique Reach`, incomplete: both(M?.incomplete, F?.incomplete) },
+    { key: "visits", label: "เข้าเว็บไซต์", value: visits(Wb), prev: pv(visits(Wp)), note: Wb.sessions !== null || Wb.users !== null ? `GA4 ${visitLabel} · ${Wb.cover}` : Wb.views !== null ? (Wb.usersWhy ?? noWeb) : noWeb, incomplete: Wb.incomplete },
+    { key: "leads", label: "Leads", value: cnt(L.all), prev: pv(cnt(Lp?.all)), note: "นับ lead_id ไม่ซ้ำ ตามวันที่รับ Lead" },
+    { key: "qualified", label: "Qualified Leads", value: cnt(L.all, (r) => isQualifiedCall(r.call_status)), prev: pv(cnt(Lp?.all, (r) => isQualifiedCall(r.call_status))), note: "Call Status = ติดต่อได้แล้ว / เข้าชมโครงการแล้ว / ซื้อสำเร็จ" },
+    { key: "sold", label: "ขายได้ (ซื้อสำเร็จ)", value: cnt(L.all, (r) => r.call_status === CALL_SOLD), prev: pv(cnt(Lp?.all, (r) => r.call_status === CALL_SOLD)), note: "Call Status = ซื้อสำเร็จ" },
+  ];
+  const funnel: FunnelStep[] = steps.map((x, i) => {
+    const before = steps[i - 1]?.value ?? null;
+    return { ...x, change: x.prev === undefined ? undefined : changePct(x.value, x.prev ?? null).pct, conv: i && before && x.value !== null ? r2((x.value / before) * 100) : null };
+  });
+  const chRow = (channel: string, kind: ChannelRow["kind"], leadCh: string, spend: number | null, prevSpend: number | null | undefined, incomplete?: string): ChannelRow => {
+    const mine = L.all.filter((r) => r.source_channel === leadCh), q = mine.filter((r) => isQualifiedCall(r.call_status)).length;
+    const cpl = spend !== null && mine.length ? r2(spend / mine.length) : null;
+    const pm = Lp?.all.filter((r) => r.source_channel === leadCh).length ?? 0;
+    const prevCpl = prevSpend === undefined ? undefined : prevSpend !== null && pm ? r2(prevSpend / pm) : null;
+    return { channel, kind, spend, leads: mine.length, qualified: q, sold: mine.filter((r) => r.call_status === CALL_SOLD).length, cpl, cpql: spend !== null && q ? r2(spend / q) : null, prevCpl, change: prevCpl === undefined ? undefined : changePct(cpl, prevCpl).pct, incomplete };
+  };
+  const channels: ChannelRow[] = [
+    chRow("Meta Ads", "Paid", "Facebook Ads", M?.spend ?? null, pv(Mp?.spend), M?.incomplete),
+    chRow("Google Ads", "Paid", "Google Ads", G?.spend ?? null, pv(Gp?.spend), G?.incomplete),
+    ...[...new Set(L.all.map((r) => r.source_channel || "Unknown"))].filter((c) => c !== "Facebook Ads" && c !== "Google Ads").sort((a, b) => L.all.filter((r) => r.source_channel === b).length - L.all.filter((r) => r.source_channel === a).length)
+      .map((c) => chRow(c, "Organic", c, null, undefined)),
+  ];
+
   // ---- แนวโน้ม (เฉพาะข้อมูลรายวันจริง) ----
   const bucket = (x: string) => (gran === "month" ? x.slice(0, 7) : x);
   const gMap = new Map<string, { cost: number; clicks: number }>();
@@ -312,7 +348,7 @@ export function computePerformance(d: DashData, f: PerfFilters): Performance {
       { title: "Google Ads Spend เทียบ Website", kind: "Compare", note: "เป็นการเทียบค่าโฆษณา Google Ads กับยอด Website รวมทุกช่องทางในช่วงเดียวกัน ไม่ใช่ต้นทุนที่พิสูจน์ Attribution แล้ว", items: cmpItems },
     ]),
     trend: { gran, google, fb, search, googleNote: google ? undefined : d.google.length ? "แนวโน้มต้องใช้ Google Ads Time series (รายวัน) — Campaign Report เป็นยอดรวมทั้งช่วง แบ่งรายวันไม่ได้" : undefined },
-    platforms, sources, meta: { actions: [...byAct].map(([label, v]) => ({ label, ...v, spend: r2(v.spend) })).sort((a, b) => b.spend - a.spend) },
+    funnel, channels, platforms, sources, meta: { actions: [...byAct].map(([label, v]) => ({ label, ...v, spend: r2(v.spend) })).sort((a, b) => b.spend - a.spend) },
   };
 }
 
@@ -323,4 +359,15 @@ function labelPrev(mode: CompareMode | undefined, groups: Performance["groups"])
     // ยอดสะสม Lifetime เทียบข้ามช่วงไม่ได้ (ไม่ใช่ยอดของช่วงนั้น)
     return /Lifetime/.test(`${k.incomplete ?? ""} ${k.prevIncomplete ?? ""}`) ? { ...base, prev: null, prevIncomplete: undefined, prevBlocked: "เป็นยอดสะสม (Lifetime) เทียบข้ามช่วงเวลาไม่ได้" } : base;
   }) }));
+}
+
+/** Lead ไม่ซ้ำ (lead_id) ที่รับในช่วงวันที่ — กฎเดียวกับหน้า ภาพรวม */
+export function leadsIn(rows: Row[], g: Range) {
+  const seen = new Set<string>(), all: Row[] = [];
+  for (const r of rows) {
+    if (!r.lead_id || seen.has(r.lead_id)) continue; seen.add(r.lead_id);
+    const x = String(r.received_at ?? "").slice(0, 10);
+    if (x >= g.from && x <= g.to) all.push(r);
+  }
+  return { all };
 }
