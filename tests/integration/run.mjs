@@ -157,8 +157,24 @@ try {
   ok("Leads", "รายการ Lead 4 ราย · รายชื่อ Staff สำหรับเลือก");
 
   console.log("6) Website Analytics");
+  r = await call("/website", { as: MKT }); assert.equal(r.status, 200); assert.ok(r.html.includes("นำเข้าไฟล์ GA4 / Search Console"));
+  r = await call("/website", { as: SALES }); assert.ok(redirectedTo(r, "/")); assert.equal((await call("/api/website", { as: SALES })).status, 403);
+  const day = (d, c, i, p) => ({ source: "search_console", property: "Page: +buriram", granularity: "day", report_start: d, report_end: d, search_clicks: c, search_impressions: i, search_ctr_pct: Math.round(c / i * 10000) / 100, search_position: p });
+  const chart = { kind: "gsc_chart", filename: "Chart.csv", sha256: "a".repeat(64), period: { start: "2026-10-01", end: "2026-10-02" }, property: "Page: +buriram", summary: [day("2026-10-01", 163, 7379, 6.8), day("2026-10-02", 169, 7529, 6.9)], dims: [] };
+  const ga = { kind: "ga4_pages", filename: "pages.csv", sha256: "b".repeat(64), period: { start: "2026-10-01", end: "2026-10-02" }, property: "buriram",
+    summary: [{ source: "ga4", property: "buriram", granularity: "period", report_start: "2026-10-01", report_end: "2026-10-02", website_users: "", page_views: 3000, user_engagement_sec: 90000, event_count: 0, key_events: 0, total_revenue: 0, pages_count: 2 }],
+    dims: [{ source: "ga4", property: "buriram", report_start: "2026-10-01", report_end: "2026-10-02", dimension_type: "ga4_page", dimension_value: "/buriram", views: 2000, user_engagement_sec: 50000 }, { source: "ga4", property: "buriram", report_start: "2026-10-01", report_end: "2026-10-02", dimension_type: "ga4_page", dimension_value: "/blogs/buriram/x", views: 1000, user_engagement_sec: 40000 }] };
+  r = await call("/api/website", { as: MKT, method: "POST", body: { action: "plan", batches: [chart, ga] } }); assert.equal(r.status, 200, r.text); assert.deepEqual(r.json.plans.map((p) => p.counts.insert), [2, 3]);
+  r = await call("/api/website", { as: MKT, method: "POST", body: { action: "commit", batches: [chart, ga] } }); assert.equal(r.status, 200, r.text);
+  r = await call("/api/website", { as: MKT, method: "POST", body: { action: "commit", batches: [chart] } }); assert.equal(r.status, 409); assert.equal(r.json.code, "DUPLICATE_FILE");
+  r = await call("/api/website", { as: MKT, method: "POST", body: { action: "commit", batches: [{ ...ga, sha256: "c".repeat(64), summary: [{ ...ga.summary[0], page_views: 9999 }] }] } }); assert.equal(r.status, 422);
+  r = await call("/api/website", { as: MKT, method: "POST", body: { action: "manual", manual: { report_start: "2026-10-01", report_end: "2026-10-02", website_users: "1500" } } }); assert.equal(r.status, 200, r.text);
+  r = await call("/performance?from=2026-10-01&to=2026-10-02", { as: MKT });
+  assert.ok(/Website Users<\/div>[\s\S]{0,80}>1,500</.test(r.html), "users"); assert.ok(/Website Page Views<\/div>[\s\S]{0,80}>3,000</.test(r.html), "pv"); assert.ok(r.html.includes("1 นาที 0 วินาที"), "duration 60s"); assert.ok(/Search Clicks<\/div>[\s\S]{0,80}>332</.test(r.html), "clicks");
+  r = await call("/api/export/website_analytics", { as: MKT }); assert.equal(r.status, 200); assert.ok(r.text.includes("ga4") && r.text.includes("manual"));
+  ok("Website", "นำเข้าผ่าน API: พรีวิว → บันทึก · ไฟล์ซ้ำ 409 · ยอดรวมไม่ตรงรายหน้า 422 · กรอก Users 1,500 → หน้า Performance แสดง Users 1,500 / Page Views 3,000 / Duration 1 นาที (90,000 ÷ 1,500) / Search Clicks 332 · Export ได้ · Sales เข้าไม่ได้");
   r = await call("/performance?from=2026-09-01&to=2026-09-30", { as: MKT }); assert.ok(/Website Users[\s\S]{0,200}รอข้อมูล/.test(r.html));
-  ok("Website", "ยังไม่มีโมดูล (Phase 5 ข้ามไว้) → Website Users/Page Views แสดง รอข้อมูล ไม่ใช่ 0");
+  ok("Website", "ช่วง ก.ย. ไม่มีรายงานเว็บไซต์ → Website Users/Page Views แสดง รอข้อมูล ไม่ใช่ 0");
 
   console.log("7) Marketing Performance + 8) YoY");
   assert.ok(r.html.includes("28,814.82") && r.html.includes("31,513") && r.html.includes("0.91") && r.html.includes("37,557.54"));

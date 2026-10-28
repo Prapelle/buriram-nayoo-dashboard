@@ -141,7 +141,7 @@ export async function exportDataset(id: string, f: ExportFilters, role: Role, ac
 /** Phase 8: KPI ของหน้า Marketing Performance + ปีก่อน (หนึ่งแถวต่อ KPI) */
 export function buildPerformanceRows(p: ReturnType<typeof computePerformance>) {
   const columns = DATASET_BY_ID.marketing_performance_kpis.columns;
-  const unit = { thb: "THB", int: "count", pct: "percent" } as const;
+  const unit = { thb: "THB", int: "count", pct: "percent", sec: "seconds" } as const;
   const rows = p.groups.flatMap((g) => g.items.map((k) => {
     const c = changePct(k.value, k.prev ?? null);
     const status = k.state !== "value" ? "current_unavailable" : k.prevBlocked ? "not_comparable" : k.prev === null || k.prev === undefined ? "missing" : c.reason === "zero" ? "zero_base" : k.prevIncomplete ? "previous_incomplete" : "ok";

@@ -70,6 +70,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
           <Card title={`Google Ads Spend ${p.trend.gran === "month" ? "รายเดือน" : "รายวัน"} (฿)`}>{p.trend.google ? <LineChart label="Google Ads Spend" unit="฿" points={p.trend.google.map((x) => ({ x: lbl(x.x), y: x.cost }))} /> : <Pending text={p.trend.googleNote ?? "รอข้อมูล (นำเข้า Google Ads Time series)"} />}</Card>
           <Card title={`Google Ads Clicks ${p.trend.gran === "month" ? "รายเดือน" : "รายวัน"}`}>{p.trend.google ? <LineChart label="Google Ads Clicks" points={p.trend.google.map((x) => ({ x: lbl(x.x), y: x.clicks }))} /> : <Pending text={p.trend.googleNote ?? "รอข้อมูล"} />}</Card>
           <Card title={`Facebook Page: Reactions + Comments + Shares ${p.trend.gran === "month" ? "รายเดือน" : "รายวัน"} (Organic)`}>{p.trend.fb ? <LineChart label="Facebook Engagement" points={p.trend.fb.map((x) => ({ x: lbl(x.x), y: x.engagement }))} /> : <Pending text="รอข้อมูล (นำเข้า Facebook Page แบบรายวัน)" />}</Card>
+          <Card title={`Google Search Clicks ${p.trend.gran === "month" ? "รายเดือน" : "รายวัน"} (Organic · Search Console)`}>{p.trend.search ? <LineChart label="Search Clicks" points={p.trend.search.map((x) => ({ x: lbl(x.x), y: x.clicks }))} /> : <Pending text="รอข้อมูล (นำเข้า Search Console Chart ที่หน้า Website)" />}</Card>
           <Card title="Meta Ads: Results แยกตาม Action (ไม่รวมต่างประเภท)">
             {p.meta.actions.length ? <table className="w-full text-sm"><tbody>{p.meta.actions.map((a) => (
               <tr key={a.label} className="border-b border-slate-100"><td className="py-1 pr-2">{a.label}</td><td className="text-right tabular-nums">{a.label === "(ไม่มีผลลัพธ์)" ? "—" : a.results.toLocaleString("en-US")}</td><td className="text-right tabular-nums text-slate-500">฿{a.spend.toLocaleString("en-US", { maximumFractionDigits: 2 })}</td></tr>))}</tbody></table> : <Pending />}
@@ -80,13 +81,13 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
       {p.range && (
         <Card title="สรุปตามแพลตฟอร์ม">
           <div className="overflow-x-auto"><table className="w-full text-left text-sm">
-            <thead><tr className="border-b text-xs text-slate-500"><th className="py-1">แพลตฟอร์ม</th><th>ประเภท</th><th className="text-right">Spend</th><th className="text-right">Clicks</th><th className="text-right">Engagement</th><th className="text-right">Impressions</th><th className="pl-3">ช่วงข้อมูล</th><th>แหล่งข้อมูล</th><th>สถานะ</th></tr></thead>
+            <thead><tr className="border-b text-xs text-slate-500"><th className="py-1">แพลตฟอร์ม</th><th>ประเภท</th><th className="text-right">Spend</th><th className="text-right">Clicks</th><th className="text-right">Engagement</th><th className="text-right">Impressions</th><th className="text-right">Page Views</th><th className="pl-3">ช่วงข้อมูล</th><th>แหล่งข้อมูล</th><th>สถานะ</th></tr></thead>
             <tbody>{p.platforms.map((r) => (
               <tr key={r.platform} className="border-b border-slate-100"><td className="py-1.5 font-medium">{r.platform}</td><td><span className={`rounded px-1.5 py-0.5 text-xs ${KIND[r.kind]}`}>{r.kind}</span></td>
-                <td className="text-right tabular-nums">{n2(r.spend, true)}</td><td className="text-right tabular-nums">{n2(r.clicks)}</td><td className="text-right tabular-nums">{n2(r.engagement)}</td><td className="text-right tabular-nums">{n2(r.impressions)}</td>
+                <td className="text-right tabular-nums">{n2(r.spend, true)}</td><td className="text-right tabular-nums">{n2(r.clicks)}</td><td className="text-right tabular-nums">{n2(r.engagement)}</td><td className="text-right tabular-nums">{n2(r.impressions)}</td><td className="text-right tabular-nums">{n2(r.pageViews ?? null)}</td>
                 <td className="whitespace-nowrap pl-3">{r.period}</td><td>{r.source}</td><td className={STATUS[r.status]}>{r.status}</td></tr>))}</tbody>
           </table></div>
-          <p className="mt-2 text-xs text-slate-500">ไม่รวม Spend ของ Paid กับตัวเลข Organic · Engagement = Reactions + Comments + Shares · ช่องว่าง (—) คือไม่มีข้อมูลหรือแพลตฟอร์มนั้นไม่มีตัวชี้วัดนี้ ไม่ใช่ 0</p>
+          <p className="mt-2 text-xs text-slate-500">ไม่รวม Spend ของ Paid กับตัวเลข Organic · Engagement = Reactions + Comments + Shares · ช่องว่าง (—) คือไม่มีข้อมูลหรือแพลตฟอร์มนั้นไม่มีตัวชี้วัดนี้ ไม่ใช่ 0 · Clicks ของ Google Search คือคลิกจากผลการค้นหา ไม่ใช่ผู้ใช้เว็บไซต์</p>
         </Card>
       )}
 

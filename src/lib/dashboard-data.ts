@@ -14,12 +14,19 @@ const wanted = (role: Role): Record<string, string[]> => ({
   LEADS: ["lead_id", "received_at", "source_channel", "campaign_name", "area", "service_category", "status", "qualified_at", "need", "buy_status", "sell_status", "call_status"],
   SALES: ["closing_date", "revenue_date", "service_category", "source_channel", "campaign_name", "payment_status", ...(role === "marketing" ? [] : FIN_COLS)],
   APP_CONFIG: ["config_key", "config_value"],
+  WEBSITE_ANALYTICS: ["source", "property", "granularity", "report_start", "report_end", "website_users", "page_views", "user_engagement_sec", "avg_engagement_sec_per_user", "search_clicks", "search_impressions", "search_position", "imported_at"],
 });
 
 export async function fetchDashboardData(role: Role): Promise<DashData> {
   const spec = wanted(role);
-  const tabs = Object.keys(spec);
-  const headerRows = await batchGet(tabs.map((t) => `'${t}'!1:1`));
+  let tabs = Object.keys(spec);
+  let headerRows: string[][][], webTabMissing = false;
+  try { headerRows = await batchGet(tabs.map((t) => `'${t}'!1:1`)); }
+  catch {
+    // แท็บ Website ยังไม่ถูกสร้าง (ยังไม่ได้กด เตรียม Google Sheet หลังอัปเดต) → Dashboard ส่วนอื่นยังใช้งานได้
+    tabs = tabs.filter((t) => t !== "WEBSITE_ANALYTICS"); webTabMissing = true;
+    headerRows = await batchGet(tabs.map((t) => `'${t}'!1:1`));
+  }
   const ranges: { tab: string; col: string; range: string }[] = [];
   const colLetter = (i: number) => { let n = i + 1, s = ""; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
   tabs.forEach((t, i) => {
@@ -45,5 +52,6 @@ export async function fetchDashboardData(role: Role): Promise<DashData> {
   return {
     meta: byTab.META_ADS, google: byTab.GOOGLE_ADS_CAMPAIGNS, gtime: byTab.GOOGLE_ADS_TIME_SERIES, posts: byTab.FB_PAGE_POSTS,
     line: byTab.LINE_OA_MONTHLY, leads: byTab.LEADS, sales: byTab.SALES, excludedPages, lastImport,
+    web: byTab.WEBSITE_ANALYTICS ?? [], webTabMissing,
   };
 }

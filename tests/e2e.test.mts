@@ -305,7 +305,7 @@ const readBack = (csv: string) => { const t = parseCsv(csv); return { headers: t
 const exp = async (id: string, f: Record<string, string> = {}, role: "admin" | "marketing" | "sales" = "admin") => { const r = await exportDataset(id, parseFilters(new URLSearchParams(f)), role, "u@x.com"); return { ...r, ...readBack(r.csv!) }; };
 
 const need = ["facebook_page_posts", "facebook_ads", "google_ads_campaigns", "google_ads_search_terms", "google_ads_search_words", "google_ads_keywords", "google_ads_network", "google_ads_age", "google_ads_gender", "google_ads_gender_age", "google_ads_schedule_day", "google_ads_schedule_hour", "google_ads_schedule_day_hour", "google_ads_opt_score", "google_ads_campaign_changes", "line_oa_monthly", "leads", "sales", "marketing_monthly_summary"];
-assert.deepEqual(need.filter((i) => !DATASET_BY_ID[i]), []); assert.ok(need.every((i) => DATASET_BY_ID[i].filename === `${i}.csv`)); assert.equal(DATASETS.length, 19 + 3 + 1 + 2); // Phase 8: + marketing_performance_kpis, data_dictionary
+assert.deepEqual(need.filter((i) => !DATASET_BY_ID[i]), []); assert.ok(need.every((i) => DATASET_BY_ID[i].filename === `${i}.csv`)); assert.equal(DATASETS.length, 19 + 3 + 1 + 2 + 2); // Phase 8: + marketing_performance_kpis, data_dictionary · Phase 5: + website_analytics, website_dimensions
 ok("ชุดข้อมูลครบตาม spec: Facebook Page/Ads, Google Campaign + รายละเอียด 12 ประเภท, LINE OA, Leads, Sales, สรุปรายเดือน (+Devices/Time series/Auction และ sales_transactions)");
 const fp = await exp("facebook_page_posts", {}, "marketing");
 assert.ok(fp.csv!.startsWith("\ufeff")); assert.equal(fp.rows.length, 54); assert.ok(!fp.headers.includes("raw_json") && !fp.headers.includes("row_key"));
@@ -532,6 +532,46 @@ await assert.rejects(saveUser({ ...b2, active: false, updated_at_seen: b2.update
 await saveUser({ ...ad3, role: "admin", updated_at_seen: ad3.updated_at }, "boss2@example.com");
 const audU = tabs.get("AUDIT_LOG")!.rows.map((r) => r.join("|")); assert.ok(audU.some((r) => r.includes("user_create")) && audU.some((r) => r.includes("role admin → marketing")));
 ok("แก้/ระงับตัวเองไม่ได้ · ต้องเหลือ Admin ใช้งานได้ ≥ 1 คน · Admin เริ่มต้น (INITIAL_ADMIN_EMAIL) ถูกระบุ · Audit Log บันทึกการเพิ่ม/เปลี่ยน Role");
+console.log("15d) Phase 5 — Website Analytics ผ่าน service + Sheets จำลอง");
+{
+  const { parseWebsiteFile, assembleBatches } = await import("../src/lib/website/parse");
+  const ws = await import("../src/lib/website/service");
+  const { createHash } = await import("node:crypto");
+  const WD = `${DIR}/website/`;
+  const names = ["ga4_pages.csv", "gsc_Chart.csv", "gsc_Pages.csv", "gsc_Queries.csv", "gsc_Countries.csv", "gsc_Devices.csv", "gsc_Search_appearance.csv", "gsc_Filters.csv"];
+  const parsedW = names.map((n) => { const t = readFileSync(WD + n, "utf8"); return { ...parseWebsiteFile(n, t), sha256: createHash("sha256").update(t).digest("hex") }; });
+  const { batches } = assembleBatches(parsedW);
+  const tabsBefore = tabs.has("WEBSITE_ANALYTICS");
+  assert.ok(tabsBefore); // ถูกสร้างตอน initializer (ส่วนที่ 1)
+  const plans = await ws.planWebsite(batches);
+  const pga = plans.find((p) => p.kind === "ga4_pages")!; assert.deepEqual(pga.counts, { insert: 302, update: 0, skip: 0 }); assert.equal(pga.fileDuplicate, null);
+  assert.equal(rowsOf("WEBSITE_ANALYTICS"), 0);
+  ok("พรีวิว: GA4 เพิ่ม 302 แถว (สรุป 1 + หน้า 300 + อื่น ๆ 1) · ยังไม่เขียนข้อมูล");
+  const res = await ws.commitWebsite(batches, "m@x.com", "marketing");
+  assert.equal(res.results.length, 7); assert.equal(rowsOf("WEBSITE_ANALYTICS"), 1 + 27); assert.equal(rowsOf("WEBSITE_DIMENSIONS"), 301 + 301 + 301 + 91 + 3 + 1);
+  assert.equal(total("WEBSITE_ANALYTICS", "page_views"), 35820); assert.equal(total("WEBSITE_ANALYTICS", "search_clicks"), 4744);
+  ok("นำเข้าทั้งชุด 7 ไฟล์: สรุป 28 แถว (GA4 1 + รายวัน 27) · รายละเอียด 998 แถว · Page Views 35,820 · Search Clicks 4,744 ใน Sheet");
+  await assert.rejects(ws.commitWebsite(batches, "m@x.com", "marketing"), (x: unknown) => x instanceof ws.WebError && x.code === "DUPLICATE_FILE");
+  const again = await ws.commitWebsite(batches, "admin@example.com", "admin", true);
+  assert.ok(again.results.every((r) => r.inserted === 0 && r.updated === 0)); assert.equal(rowsOf("WEBSITE_ANALYTICS"), 28); assert.equal(total("WEBSITE_ANALYTICS", "page_views"), 35820);
+  ok("นำเข้าซ้ำ: Marketing ถูกบล็อก · Admin ยืนยัน → ข้ามทุกแถว (เพิ่ม 0) ยอดไม่ซ้ำ");
+  const ch = JSON.parse(JSON.stringify(batches.find((b) => b.kind === "gsc_chart")!)); ch.sha256 = "f".repeat(64); ch.summary[0].search_clicks = 170; ch.summary[0].search_ctr_pct = 2.3;
+  const up = await ws.commitWebsite([ch], "m@x.com", "marketing"); assert.equal(up.results[0].updated, 1); assert.equal(rowsOf("WEBSITE_ANALYTICS"), 28); assert.equal(total("WEBSITE_ANALYTICS", "search_clicks"), 4751);
+  ok("ไฟล์ใหม่ที่ค่าวันเดิมเปลี่ยน (1 ต.ค. 163 → 170) → อัปเดต 1 แถว ไม่เพิ่มแถว");
+  await ws.saveManualWebsite({ report_start: "2026-10-01", report_end: "2026-10-27", website_users: "20000", notes: "จาก GA4 Reports snapshot" }, "m@x.com");
+  await ws.saveManualWebsite({ report_start: "2026-10-01", report_end: "2026-10-27", website_users: "21000" }, "m@x.com");
+  assert.equal(rowsOf("WEBSITE_ANALYTICS"), 29);
+  await assert.rejects(ws.saveManualWebsite({ report_start: "2026-10-01", report_end: "2026-10-27", website_users: "" }, "m@x.com"), (x: unknown) => x instanceof ws.WebError && x.code === "VALIDATION");
+  await assert.rejects(ws.saveManualWebsite({ report_start: "2026-10-27", report_end: "2026-10-01", website_users: "5" }, "m@x.com"), (x: unknown) => x instanceof ws.WebError && x.code === "BAD_PERIOD");
+  ok("กรอกยอดผู้ใช้ 20,000 แล้วแก้เป็น 21,000 → แถวเดียว (แก้ทับ) · ไม่กรอก Users / วันที่กลับด้าน → ปฏิเสธ");
+  const { computePerformance: cp } = await import("../src/lib/performance");
+  const pd5 = await fetchDashboardData("marketing"); const pk5 = Object.fromEntries(cp(pd5, { from: "2026-10-01", to: "2026-10-27" }).groups.flatMap((g) => g.items).map((x) => [x.key, x]));
+  assert.equal(pk5.w_pv.value, 35820); assert.equal(pk5.w_users.value, 21000); assert.equal(pk5.w_dur.value, Math.round((992565 / 21000) * 100) / 100); assert.equal(pk5.s_clicks.value, 4751);
+  ok(`Marketing Performance จาก Sheet: Users 21,000 · Page Views 35,820 · Duration ${(992565 / 21000).toFixed(2)} วินาที · Search Clicks 4,751`);
+  const ov = await ws.websiteOverview(); assert.deepEqual(ov.selected, { start: "2026-10-01", end: "2026-10-27" }); assert.equal(ov.dims.filter((r) => r.dimension_type === "search_device").length, 3);
+  const audW = tabs.get("AUDIT_LOG")!.rows.map((r) => r.join("|")); assert.ok(audW.some((r) => r.includes("website ga4_pages")) && audW.some((r) => r.includes("website_manual")));
+  ok("หน้า Website อ่านรายละเอียดของช่วงล่าสุดได้ · Audit Log บันทึกการนำเข้าและการกรอกเอง");
+}
 console.log("16) Phase 6 — Marketing Performance ผ่าน Sheets จำลอง");
 const { computePerformance } = await import("../src/lib/performance");
 const pd = await fetchDashboardData("marketing"); const perf = computePerformance(pd, { from: "2026-09-01", to: "2026-09-30" });

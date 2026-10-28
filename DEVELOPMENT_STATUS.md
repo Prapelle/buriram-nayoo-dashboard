@@ -10,7 +10,7 @@
 | 2 | Marketing Overview: Total Paid Media Spend / Total Leads / CPL | เสร็จ · ผู้ใช้ยืนยันบนเว็บจริงแล้ว (27/10/2026) |
 | 3 | Facebook Ads Action Names | เสร็จ · ผู้ใช้ยืนยันบนเว็บจริงแล้ว (27/10/2026) |
 | 4 | Lead Management (ฟิลด์ใหม่ + Need/Status Logic) | เสร็จ · ผู้ใช้ยืนยันบนเว็บจริงแล้ว (27/10/2026) |
-| 5 | Website Analytics Import | **ข้ามไปก่อน (รอข้อมูลจากผู้ใช้)** |
+| 5 | Website Analytics Import | **เสร็จ 28/10/2026** (ทดสอบอัตโนมัติ + เบราว์เซอร์จริงผ่าน · ยังไม่ทดสอบบนเว็บจริง) |
 | 6 | Marketing Performance Dashboard (+ กราฟ Lead ตาม Buy/Sell Status) | เสร็จ · ผู้ใช้ยืนยันบนเว็บจริงแล้ว (27/10/2026) |
 | 7 | YoY Comparison | เสร็จ · ผู้ใช้ยืนยันบนเว็บจริงแล้ว (27/10/2026) |
 | 8 | Export (Looker Studio ถูกตัดออกจากขอบเขต) | เสร็จ (ทดสอบอัตโนมัติ + HTTP Integration ผ่าน · ผู้ใช้ยังไม่ได้รายงานผลบนเว็บจริง) |
@@ -762,3 +762,34 @@ Not Tested: หน้าเว็บจริงหลังการเปล�
 - **ไม่เปลี่ยน:** ขั้น Pipeline / กราฟ Pipeline / `qualified_at` ยังคำนวณจาก Buy/Sell Status ตามเดิม · ไม่เปลี่ยน Schema
 - ไฟล์: `src/lib/dashboard.ts`, `src/app/(app)/page.tsx`, `src/lib/export/service.ts`, `src/lib/export/datasets.ts`, ชุดทดสอบ
 - Test: **318/318 ผ่าน** · Cloudflare build ผ่าน · Not Tested: บนเว็บจริง
+
+## 25) รายงาน Phase 5 — Website Analytics (28/10/2026)
+
+### ข้อมูลที่ผู้ใช้ส่งมา (ตรวจแล้ว)
+| ไฟล์ | ระดับข้อมูล | สิ่งที่พบ |
+|---|---|---|
+| GA4 "หน้าและหน้าจอ" (ภาษาไทย, property buriram, 01–27/10/2026) | เส้นทางหน้า × หน้า Landing · ยอดรวมทั้งช่วง | 9,685 แถว / 2,539 หน้า · Page Views 35,820 · User engagement 992,565 วินาที · **ผู้ใช้เป็นรายหน้า รวมได้ 27,361 ซึ่งนับซ้ำ → ไม่มี Website Users ที่ถูกต้องในไฟล์นี้** · ไม่มีแถวซ้ำ · รายได้ 0 ทุกแถว |
+| Search Console Chart | รายวัน 27 วัน | Clicks 4,744 · Impressions 203,839 · ตำแหน่งเฉลี่ยถ่วงน้ำหนัก 6.79 |
+| Search Console Pages / Queries / Countries / Devices / Search appearance | ยอดรวมทั้งช่วง (สูงสุด 1,000 แถว) | Pages = 4,744 Clicks (รวมตามหน้า) · Queries/Countries/Devices = 1,293 (Google รวมตามเว็บไซต์ + ตัดคำค้นที่ระบุตัวตนได้) → **ห้ามรวมข้ามตาราง** |
+| Search Console Filters | — | ช่วงวันที่ Oct 1–27, 2026 · ตัวกรอง Page: +buriram |
+
+### การออกแบบ
+- **แท็บใหม่ 2 แท็บ** (ไม่มีแท็บเดิมที่ทำหน้าที่นี้): `WEBSITE_ANALYTICS` (สรุปต่อช่วง/วัน) และ `WEBSITE_DIMENSIONS` (รายละเอียด) แยกจาก Social/Ads
+- **เบราว์เซอร์อ่านไฟล์:** แปลงไฟล์ GA4 2 MB ใช้ CPU ~0.4–0.6 วินาที เกิน 10 ms ของ Cloudflare Workers แผนฟรี → อ่าน/สรุปในเบราว์เซอร์ (0.3–0.9 วินาทีในการทดสอบ) ส่งเฉพาะสรุป + 300 อันดับแรก + แถว (อื่น ๆ) · Server ตรวจทุกช่องซ้ำ (ยอดรวมต้องเท่ากับรายหน้า, ห้ามมียอดผู้ใช้ในไฟล์รายหน้า, วันที่/ตัวเลข/ซ้ำ)
+- **กันซ้ำ:** row_key + SHA-256 ของไฟล์ (นำเข้าซ้ำต้อง Admin ยืนยัน แล้วข้าม/อัปเดตตามคีย์)
+- **Website Users กรอกเอง** (Master 3.1 รองรับการกรอกด้วยตนเอง) ต่อช่วงวันที่ · ใช้ได้เมื่อช่วงตรงกับรายงาน GA4 พอดี
+- **การคำนวณ:** Page Views / เวลารวม รวมข้ามช่วงที่ไม่ทับกันได้ · Users ไม่รวมข้ามช่วง · PV per User = Page Views ÷ Users (0 → N/A) · Duration = User engagement ÷ Users (วินาที) · Search CTR = Clicks ÷ Impressions (คำนวณใหม่ ไม่เฉลี่ย CTR รายวัน) · ตำแหน่งเฉลี่ยถ่วงน้ำหนักด้วย Impressions · รายงานช่วงทับกัน → ใช้ช่วงที่ตรงพอดี/ไม่รวมซ้ำ + ข้อมูลไม่ครบ
+- **Marketing Performance:** กลุ่ม Website (GA4) 4 KPI + เวลามีส่วนร่วมรวม, กลุ่มใหม่ Google Search (Organic), Ads Cost per Page View / Spend per User คำนวณจริง (Google Ads Spend ช่วงเดียวกัน + หมายเหตุ Attribution), กราฟ Search Clicks, ตาราง/สถานะแหล่งข้อมูล, YoY
+- **หน้าใหม่ Website:** นำเข้าหลายไฟล์พร้อมกัน, ตรวจสอบก่อนนำเข้า, กรอกยอดผู้ใช้, ตารางหน้า GA4 / หน้า / คำค้น / อุปกรณ์ / ประเทศ · **Export:** website_analytics.csv, website_dimensions.csv (+ data_dictionary)
+
+### ไฟล์ที่เปลี่ยน
+`src/lib/website/parse.ts`, `src/lib/website/service.ts`, `src/app/api/website/route.ts`, `src/components/WebsiteManager.tsx`, `src/app/(app)/website/page.tsx` (ใหม่) · `src/lib/schema.ts`, `src/lib/performance.ts`, `src/lib/dashboard.ts` (Kpi fmt "sec", DashData.web), `src/lib/dashboard-data.ts` (อ่าน WEBSITE_ANALYTICS — ถ้ายังไม่มีแท็บ Dashboard อื่นยังทำงาน), `src/components/KpiCard.tsx`, `src/app/(app)/performance/page.tsx`, `src/lib/roles.ts`, `src/lib/export/{datasets,service,dictionary}.ts`
+
+### Data / Schema Impact
+- **แท็บใหม่ WEBSITE_ANALYTICS, WEBSITE_DIMENSIONS → ต้องกด ตั้งค่า → เตรียม Google Sheet** · ไม่แตะแท็บเดิม · ไฟล์ส่งออกใหม่ 2 ไฟล์
+
+### Test Results
+**Passed:** 358/358 — website (ใหม่ 23: ไฟล์จริง, ไฟล์ผิด, ตรวจข้อมูลฝั่ง Server, KPI), e2e 15d (7: นำเข้า/ซ้ำ/อัปเดต/กรอกเอง/Performance/Audit), Export 26 ชุดตรวจชนิด 34,076 ช่อง, HTTP Integration (+1), **เบราว์เซอร์จริง 9** (อัปโหลดไฟล์จริง 8 ไฟล์ → นำเข้า 1,026 แถว → กรอก Users 21,000 → Performance: PV/User 1.71, Duration 47 วินาที, Search Clicks 4,744, CTR 2.33% · มือถือ 390px ไม่ล้น · ไม่มี JS error) · TypeScript + Cloudflare build ผ่าน
+**พบและแก้ระหว่างทดสอบ:** วันที่รูปแบบผิด (เช่น 2026-13-01) ทำให้ตัวตรวจฝั่ง Server error แทนที่จะปฏิเสธ — แก้แล้ว
+**Failed:** 0
+**Not Tested:** บนเว็บที่ deploy จริง/Google Sheet จริง · ไฟล์ GA4 ภาษาอังกฤษ · ไฟล์ Search Console ภาษาไทย (ยังไม่รองรับ) · ข้อมูล Google Ads ช่วงเดียวกับ GA4 (ยังไม่มีจริง — ทดสอบด้วยข้อมูลสมมติ)

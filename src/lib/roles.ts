@@ -16,6 +16,7 @@ export const NAV: NavItem[] = [
   { href: "/facebook-ads", label: "Facebook Ads", roles: MKT },
   { href: "/google-ads", label: "Google Ads", roles: MKT },
   { href: "/line-oa", label: "LINE OA", roles: MKT },
+  { href: "/website", label: "Website", roles: MKT },
   { href: "/leads", label: "Leads", roles: SALES },
   { href: "/sales", label: "Sales", roles: SALES },
   { href: "/export", label: "ส่งออกข้อมูล", roles: ALL },

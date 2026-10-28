@@ -17,11 +17,11 @@ export type PerfFilters = { from?: string; to?: string; compare?: CompareMode; g
 export type Range = { from: string; to: string };
 export type PKpi = Kpi & { prev?: number | null; prevIncomplete?: string; prevLabel?: string; source?: string };
 export type Source = { name: string; kind: "Paid" | "Organic" | "Website"; status: "ครบ" | "ไม่ครบ" | "รอข้อมูล"; detail: string; available: string };
-export type PlatformRow = { platform: string; kind: "Paid" | "Organic" | "Website"; spend: number | null; clicks: number | null; engagement: number | null; impressions: number | null; period: string; source: string; status: string };
+export type PlatformRow = { platform: string; kind: "Paid" | "Organic" | "Website"; spend: number | null; clicks: number | null; engagement: number | null; impressions: number | null; pageViews?: number | null; period: string; source: string; status: string };
 export type Performance = {
   range: Range | null; prevRange: Range | null; defaulted: boolean; compare: CompareMode | null; compareNote?: string;
   groups: { title: string; kind: "Paid" | "Organic" | "Website" | "Compare"; note?: string; items: PKpi[] }[];
-  trend: { gran: "day" | "month"; google: { x: string; cost: number; clicks: number }[] | null; fb: { x: string; engagement: number }[] | null; googleNote?: string };
+  trend: { gran: "day" | "month"; google: { x: string; cost: number; clicks: number }[] | null; fb: { x: string; engagement: number }[] | null; search?: { x: string; clicks: number }[] | null; googleNote?: string };
   platforms: PlatformRow[];
   sources: Source[];
   meta: { actions: { label: string; results: number; spend: number; rows: number }[] };
@@ -85,6 +85,57 @@ export function fbAt(rows: Row[], g: Range) {
     if (gaps.length) incomplete = `ไม่มีข้อมูลรายวันช่วง ${fmtGaps(gaps)}`;
   } else incomplete = `เป็นยอดสะสม (Lifetime) ณ ${dmyS(s.lifetime.snapshot)} ไม่ใช่ยอดของช่วงที่เลือก`;
   return { basis: s.basis, t, cover: s.basis === "daily" ? span({ from: s.daily.from, to: s.daily.to }) : `Lifetime ณ ${dmyS(s.lifetime.snapshot)}`, incomplete, lifetimeOnlyPosts: s.lifetimeOnlyPosts };
+}
+
+/**
+ * Phase 5 — Website (GA4 / กรอกเอง): รายงานเป็นยอดรวมทั้งช่วง
+ * - เลือกแถวที่ช่วงตรงกับที่เลือกพอดีก่อน · ไม่เช่นนั้นรวมหลายช่วงที่ไม่ทับกัน (การดู/เวลารวมบวกกันได้)
+ * - ผู้ใช้ (Users) รวมข้ามช่วงไม่ได้: ต้องมีแถวผู้ใช้ของช่วงเดียวกับที่ใช้คำนวณพอดี
+ */
+function pickPeriods(rows: Row[], g: Range) {
+  const cand = rows.filter((r) => overlaps(r, g)).sort((a, b) => a.report_start.localeCompare(b.report_start) || b.report_end.localeCompare(a.report_end));
+  if (!cand.length) return null;
+  const exact = cand.find((r) => r.report_start === g.from && r.report_end === g.to);
+  if (exact) return { used: [exact], incomplete: undefined as string | undefined, overlapped: 0 };
+  const used: Row[] = []; let overlapped = 0;
+  for (const r of cand) { if (used.length && r.report_start <= used[used.length - 1].report_end) { overlapped++; continue; } used.push(r); }
+  const spans = mergeSpans(used), gaps = gapsIn(spans, g.from, g.to), outside = spans.some(([a, b]) => a < g.from || b > g.to);
+  const problems = [gaps.length ? `ไม่มีรายงานช่วง ${fmtGaps(gaps)}` : "", outside ? `รายงาน ${spans.map(([a, b]) => span({ from: a, to: b })).join(", ")} ครอบคลุมเกินช่วงที่เลือก (ตัดรายวันไม่ได้)` : "", overlapped ? `มีรายงานช่วงทับกัน ${overlapped} ชุด (ไม่นำมารวมซ้ำ)` : ""].filter(Boolean);
+  return { used, incomplete: problems.join(" · ") || undefined, overlapped };
+}
+
+export function websiteAt(web: Row[], g: Range) {
+  const ga = web.filter((r) => r.source === "ga4" && r.granularity === "period");
+  const manual = web.filter((r) => r.source === "manual");
+  const G = pickPeriods(ga, g);
+  const M = pickPeriods(manual, g);
+  const base = G ?? (M && M.used.some((r) => num(r.page_views) !== null) ? M : null);
+  const views = base ? sum(base.used, "page_views") : null;
+  const engagement = G ? sum(G.used, "user_engagement_sec") : null;
+  const cover = base ? base.used.map((r) => span({ from: r.report_start, to: r.report_end })).join(", ") : "";
+  // ผู้ใช้: ต้องเป็นช่วงเดียวกับที่ใช้คำนวณยอดการดูพอดี (หรือช่วงที่เลือก ถ้ายังไม่มีไฟล์ GA4)
+  const period = base && base.used.length === 1 ? { from: base.used[0].report_start, to: base.used[0].report_end } : !base ? g : null;
+  const urow = period ? manual.find((r) => r.report_start === period.from && r.report_end === period.to && num(r.website_users) !== null) : undefined;
+  const users = urow ? num(urow.website_users) : null;
+  const usersWhy = base && base.used.length > 1 ? "รวมยอดผู้ใช้ข้ามหลายช่วงรายงานไม่ได้ (คนเดียวกันถูกนับซ้ำ) — เลือกช่วงให้ตรงกับรายงาน หรือกรอกยอดผู้ใช้ของช่วงที่เลือก"
+    : period ? `ยังไม่ได้กรอกยอดผู้ใช้ของช่วง ${span(period)} (ไฟล์ GA4 รายหน้าไม่มียอดผู้ใช้รวม) — กรอกได้ที่หน้า Website` : undefined;
+  const avgManual = urow ? num(urow.avg_engagement_sec_per_user) : null;
+  const duration = users !== null && engagement !== null && G && G.used.length === 1 ? (users > 0 ? r2(engagement / users) : null) : avgManual;
+  return { views, engagement, users, usersWhy, duration, durationNa: users === 0, cover, incomplete: base?.incomplete, source: G ? "GA4 หน้าและหน้าจอ" : base ? "กรอกเอง" : "", hasAny: ga.length + manual.length > 0 };
+}
+
+/** Search Console รายวัน: รวมตามวันได้ · CTR คำนวณใหม่ = Clicks ÷ Impressions · ตำแหน่งเฉลี่ยถ่วงน้ำหนักด้วย Impressions */
+export function searchAt(web: Row[], g: Range) {
+  const daily = web.filter((r) => r.source === "search_console" && r.granularity === "day" && r.report_start >= g.from && r.report_start <= g.to);
+  if (!daily.length) return null;
+  const have = new Set(daily.map((r) => r.report_start)), missing = daysOf(g).filter((x) => !have.has(x));
+  const clicks = sum(daily, "search_clicks") ?? 0, impressions = sum(daily, "search_impressions") ?? 0;
+  const wsum = daily.reduce((t, r) => t + (num(r.search_position) ?? 0) * (num(r.search_impressions) ?? 0), 0);
+  return {
+    clicks, impressions, ctr: impressions > 0 ? r2((clicks / impressions) * 100) : null, position: impressions > 0 ? Math.round((wsum / impressions) * 100) / 100 : null,
+    incomplete: missing.length ? `ไม่มีข้อมูลรายวัน ${missing.length} วัน (${fmtGaps(mergeSpans(missing.map((x) => ({ report_start: x, report_end: x }))))})` : undefined,
+    cover: span({ from: [...have].sort()[0], to: [...have].sort().pop()! }), property: daily[0].property,
+  };
 }
 
 /** ช่วงเริ่มต้นเมื่อไม่ได้เลือก: ครอบคลุมข้อมูลโฆษณา/Facebook รายวันทั้งหมดที่มี */
@@ -164,15 +215,36 @@ export function computePerformance(d: DashData, f: PerfFilters): Performance {
   if (ft?.views !== null && ft?.views !== undefined) fbItems.push(kp("f_views", "Views", "int", ft.views, { incomplete: F?.incomplete, prev: pv(fpt?.views), prevIncomplete: Fp?.incomplete }));
   if (ft?.link_clicks !== null && ft?.link_clicks !== undefined) fbItems.push(kp("f_link", "Link Clicks", "int", ft.link_clicks, { incomplete: F?.incomplete, prev: pv(fpt?.link_clicks), prevIncomplete: Fp?.incomplete }));
 
-  // ---- Website (ยังไม่มีโมดูล Phase 5) ----
-  const W = "ยังไม่มีข้อมูล Website Analytics (Phase 5 รอไฟล์ตัวอย่าง)";
+  // ---- Website (GA4 / กรอกเอง) และ Google Search (Search Console) ----
+  const web = d.web ?? [];
+  const Wb = websiteAt(web, range), Wp = prevRange ? websiteAt(web, prevRange) : null;
+  const S = searchAt(web, range), Sp = prevRange ? searchAt(web, prevRange) : null;
+  const noWeb = d.webTabMissing ? "ยังไม่ได้สร้างแท็บ Website — ไปที่ ตั้งค่า → เตรียม Google Sheet" : Wb.hasAny ? `ไม่มีรายงาน Website ในช่วง ${span(range)}` : "ยังไม่ได้นำเข้าข้อมูล Website (หน้า Website)";
+  const wNote = Wb.views !== null ? `${Wb.source} · ${Wb.cover}` : undefined;
+  const pvu = Wb.views !== null && Wb.users !== null ? (Wb.users > 0 ? { v: r2(Wb.views / Wb.users), na: false } : { v: null, na: true }) : { v: null, na: false };
+  const pvuP = Wp && Wp.views !== null && Wp.users !== null && Wp.users > 0 ? r2(Wp.views / Wp.users) : null;
   const webItems: PKpi[] = [
-    kp("w_users", "Website Users", "int", null, { pending: W }), kp("w_pv", "Website Page Views", "int", null, { pending: W }),
-    kp("w_pvu", "Page Views per User", "int", null, { pending: "Page Views ÷ Users (Users = 0 → N/A)" }), kp("w_dur", "Duration", "int", null, { pending: "หน่วยตามรายงานต้นฉบับ (เช่น วินาทีเฉลี่ยต่อผู้ใช้)" }),
+    kp("w_users", "Website Users", "int", Wb.users, { note: Wb.users !== null ? `กรอกจาก GA4 · ${Wb.cover || span(range)}` : undefined, pending: Wb.views !== null ? Wb.usersWhy : noWeb, prev: pv(Wp?.users) }),
+    kp("w_pv", "Website Page Views", "int", Wb.views, { note: wNote, incomplete: Wb.incomplete, pending: noWeb, prev: pv(Wp?.views), prevIncomplete: Wp?.incomplete }),
+    kp("w_pvu", "Page Views per User", "int", pvu.v, { na: pvu.na, note: pvu.na ? "Users = 0 หารไม่ได้" : "Page Views ÷ Users ช่วงเดียวกัน", incomplete: Wb.incomplete, pending: Wb.views === null ? noWeb : Wb.usersWhy, prev: pv(pvuP) }),
+    kp("w_dur", "Duration (เวลามีส่วนร่วมเฉลี่ยต่อผู้ใช้)", "sec", Wb.duration, { na: Wb.durationNa, note: "เวลามีส่วนร่วมรวม (GA4 User engagement) ÷ Users — หน่วย วินาที", incomplete: Wb.incomplete, pending: Wb.views === null ? noWeb : Wb.usersWhy, prev: pv(Wp?.duration) }),
   ];
+  if (Wb.engagement !== null) webItems.push(kp("w_eng", "เวลามีส่วนร่วมรวม (ชั่วโมง)", "int", r2(Wb.engagement / 3600), { note: "ผลรวม User engagement ทุกหน้าในช่วงรายงาน", incomplete: Wb.incomplete, prev: pv(Wp?.engagement !== null && Wp?.engagement !== undefined ? r2(Wp.engagement / 3600) : null) }));
+  const sNote = S ? `Search Console รายวัน · ${S.cover}${S.property ? ` · ${S.property}` : ""}` : undefined;
+  const sPending = d.webTabMissing ? noWeb : "ยังไม่มีข้อมูล Search Console รายวัน (Chart) ในช่วงนี้";
+  const searchItems: PKpi[] = [
+    kp("s_clicks", "Search Clicks", "int", S?.clicks ?? null, { note: sNote, incomplete: S?.incomplete, pending: sPending, prev: pv(Sp?.clicks), prevIncomplete: Sp?.incomplete }),
+    kp("s_impr", "Search Impressions", "int", S?.impressions ?? null, { incomplete: S?.incomplete, pending: sPending, prev: pv(Sp?.impressions), prevIncomplete: Sp?.incomplete }),
+    kp("s_ctr", "Search CTR", "pct", S?.ctr ?? null, { na: !!S && S.ctr === null, note: "Clicks ÷ Impressions ของช่วงเดียวกัน", incomplete: S?.incomplete, pending: sPending, prev: pv(Sp?.ctr), prevIncomplete: Sp?.incomplete }),
+    kp("s_pos", "ตำแหน่งเฉลี่ย (ยิ่งน้อยยิ่งดี)", "int", S?.position ?? null, { na: !!S && S.position === null, note: "เฉลี่ยถ่วงน้ำหนักด้วย Impressions ของแต่ละวัน", incomplete: S?.incomplete, pending: sPending, prev: pv(Sp?.position), prevIncomplete: Sp?.incomplete }),
+  ];
+  const both = (a?: string, b?: string) => [a, b].filter(Boolean).join(" · ") || undefined;
+  const cppv = G?.spend != null && Wb.views !== null ? (Wb.views > 0 ? { v: r2(G.spend / Wb.views), na: false } : { v: null, na: true }) : { v: null, na: false };
+  const spu = G?.spend != null && Wb.users !== null ? (Wb.users > 0 ? { v: r2(G.spend / Wb.users), na: false } : { v: null, na: true }) : { v: null, na: false };
+  const why = (need: string, have: boolean) => (!G ? "ไม่มี Google Ads Spend ในช่วงนี้" : !have ? need : undefined);
   const cmpItems: PKpi[] = [
-    kp("x_cppv", "Ads Cost per Website Page View", "thb", null, { pending: "Google Ads Spend ÷ Website Page Views ช่วงเดียวกัน — รอข้อมูล Website" }),
-    kp("x_spu", "Ads Spend per Website User", "thb", null, { pending: "Google Ads Spend ÷ Website Users ช่วงเดียวกัน — รอข้อมูล Website" }),
+    kp("x_cppv", "Ads Cost per Website Page View", "thb", cppv.v, { na: cppv.na, note: cppv.na ? "Page Views = 0" : "Google Ads Spend ÷ Website Page Views ช่วงเดียวกัน", incomplete: both(G?.incomplete, Wb.incomplete), pending: why(Wb.views === null ? noWeb : "", Wb.views !== null) }),
+    kp("x_spu", "Ads Spend per Website User", "thb", spu.v, { na: spu.na, note: spu.na ? "Users = 0" : "Google Ads Spend ÷ Website Users ช่วงเดียวกัน", incomplete: both(G?.incomplete, Wb.incomplete), pending: why(Wb.usersWhy ?? noWeb, Wb.users !== null) }),
   ];
 
   // ---- แนวโน้ม (เฉพาะข้อมูลรายวันจริง) ----
@@ -183,6 +255,9 @@ export function computePerformance(d: DashData, f: PerfFilters): Performance {
   for (const r of fbRows) { if (scopeOf(r) !== "daily") continue; const x = metricDateOf(r); if (x < range.from || x > range.to) continue; const v = num(r.reactions_comments_shares); if (v === null) continue; const k = bucket(x); fMap.set(k, (fMap.get(k) ?? 0) + v); }
   const google = gMap.size ? [...gMap].sort().map(([x, v]) => ({ x, cost: r2(v.cost), clicks: v.clicks })) : null;
   const fb = fMap.size ? [...fMap].sort().map(([x, v]) => ({ x, engagement: v })) : null;
+  const sMap = new Map<string, number>();
+  for (const r of web) { if (r.source !== "search_console" || r.granularity !== "day" || r.report_start < range.from || r.report_start > range.to) continue; const k = bucket(r.report_start); sMap.set(k, (sMap.get(k) ?? 0) + (num(r.search_clicks) ?? 0)); }
+  const search = sMap.size ? [...sMap].sort().map(([x, v]) => ({ x, clicks: v })) : null;
 
   // ---- ตารางตามแพลตฟอร์ม + สถานะความครบถ้วน ----
   const st = (x: { incomplete?: string } | null) => (!x ? "รอข้อมูล" : x.incomplete ? "ไม่ครบ" : "ครบ") as Source["status"];
@@ -190,7 +265,8 @@ export function computePerformance(d: DashData, f: PerfFilters): Performance {
     { platform: "Google Ads", kind: "Paid", spend: G?.spend ?? null, clicks: G?.clicks ?? null, engagement: null, impressions: G?.impressions ?? null, period: G?.cover ?? "—", source: G?.source ?? "—", status: st(G) },
     { platform: "Meta Ads", kind: "Paid", spend: M?.spend ?? null, clicks: null, engagement: null, impressions: M?.impressions ?? null, period: M?.cover ?? "—", source: M ? "Meta Ads Report" : "—", status: st(M) },
     { platform: "Facebook Page", kind: "Organic", spend: null, clicks: ft?.link_clicks ?? null, engagement: ft?.reactions_comments_shares ?? null, impressions: null, period: F?.cover ?? "—", source: F ? (F.basis === "daily" ? "Facebook Page รายวัน" : "Facebook Page Lifetime") : "—", status: st(F) },
-    { platform: "Website", kind: "Website", spend: null, clicks: null, engagement: null, impressions: null, period: "—", source: "—", status: "รอข้อมูล" },
+    { platform: "Website (GA4)", kind: "Website", spend: null, clicks: null, engagement: null, impressions: null, pageViews: Wb.views, period: Wb.cover || "—", source: Wb.source || "—", status: Wb.views === null ? "รอข้อมูล" : Wb.incomplete ? "ไม่ครบ" : "ครบ" },
+    { platform: "Google Search", kind: "Organic", spend: null, clicks: S?.clicks ?? null, engagement: null, impressions: S?.impressions ?? null, period: S?.cover ?? "—", source: S ? "Search Console รายวัน" : "—", status: st(S) },
   ];
   const avail = (ds: string[]) => { const s = ds.filter(Boolean).sort(); return s.length ? span({ from: s[0].slice(0, 10), to: s[s.length - 1].slice(0, 10) }) : "ไม่มี"; };
   const sources: Source[] = [
@@ -198,7 +274,9 @@ export function computePerformance(d: DashData, f: PerfFilters): Performance {
     { name: "Google Ads Campaign Report", kind: "Paid", status: G?.source.includes("Campaign") ? st(G) : camp ? (camp.incomplete ? "ไม่ครบ" : "ครบ") : "รอข้อมูล", detail: G?.source.includes("Campaign") ? (G.incomplete ?? "ใช้คำนวณ Google Ads ช่วงนี้") : camp ? "ใช้ตรวจไขว้กับ Time series" : "ไม่มีรายงานในช่วงนี้", available: avail(d.google.flatMap((r) => [r.report_start, r.report_end])) },
     { name: "Meta Ads Report", kind: "Paid", status: st(M), detail: M?.incomplete ?? (M ? "ครอบคลุมช่วงที่เลือกพอดี" : "ไม่มีรายงานในช่วงนี้"), available: avail(d.meta.flatMap((r) => [r.report_start, r.report_end])) },
     { name: "Facebook Page", kind: "Organic", status: st(F), detail: F?.incomplete ?? (F ? "ครอบคลุมช่วงที่เลือก" : "ไม่มีข้อมูลในช่วงนี้") + (F?.lifetimeOnlyPosts ? ` · ${F.lifetimeOnlyPosts} โพสต์มีแต่ยอดสะสม (ไม่รวม)` : ""), available: avail(fbRows.filter((r) => scopeOf(r) === "daily").map(metricDateOf)) },
-    { name: "Website Analytics", kind: "Website", status: "รอข้อมูล", detail: "ยังไม่มีโมดูล (Phase 5 ข้ามไว้ รอไฟล์ตัวอย่าง)", available: "ไม่มี" },
+    { name: "GA4 หน้าและหน้าจอ", kind: "Website", status: Wb.source === "GA4 หน้าและหน้าจอ" ? (Wb.incomplete ? "ไม่ครบ" : "ครบ") : "รอข้อมูล", detail: d.webTabMissing ? noWeb : Wb.source === "GA4 หน้าและหน้าจอ" ? (Wb.incomplete ?? "ช่วงรายงานตรงกับที่เลือก") : "ไม่มีรายงานในช่วงนี้", available: web.filter((r) => r.source === "ga4").map((r) => span({ from: r.report_start, to: r.report_end })).join(", ") || "ไม่มี" },
+    { name: "ยอดผู้ใช้เว็บไซต์ (กรอกเอง)", kind: "Website", status: Wb.users !== null ? "ครบ" : "รอข้อมูล", detail: Wb.users !== null ? "ใช้คำนวณ Users / Page Views per User / Duration" : Wb.usersWhy ?? "ยังไม่ได้กรอก", available: web.filter((r) => r.source === "manual").map((r) => span({ from: r.report_start, to: r.report_end })).join(", ") || "ไม่มี" },
+    { name: "Search Console รายวัน", kind: "Organic", status: st(S), detail: S?.incomplete ?? (S ? "ครอบคลุมช่วงที่เลือก" : "ไม่มีข้อมูลในช่วงนี้"), available: avail(web.filter((r) => r.source === "search_console" && r.granularity === "day").map((r) => r.report_start)) },
   ];
 
   return {
@@ -207,10 +285,11 @@ export function computePerformance(d: DashData, f: PerfFilters): Performance {
       { title: "Google Ads (Paid)", kind: "Paid", items: googleItems },
       { title: "Meta Ads (Paid)", kind: "Paid", items: metaItems },
       { title: "Facebook Page (Organic)", kind: "Organic", note: "ไม่รวมกับตัวเลขโฆษณา · ไม่รวมเพจที่ตั้งค่าให้ตัดออก", items: fbItems },
-      { title: "Website", kind: "Website", items: webItems },
+      { title: "Website (GA4)", kind: "Website", note: "ข้อมูลเว็บไซต์รวมทุกช่องทาง (Organic, Ads, Social, Direct) แยกจากตัวเลข Social และโฆษณา", items: webItems },
+      { title: "Google Search (Search Console)", kind: "Organic", note: "การค้นหาแบบ Organic บน Google เท่านั้น — Clicks ไม่เท่ากับ Users/Page Views ของ GA4", items: searchItems },
       { title: "Google Ads Spend เทียบ Website", kind: "Compare", note: "เป็นการเทียบค่าโฆษณา Google Ads กับยอด Website รวมทุกช่องทางในช่วงเดียวกัน ไม่ใช่ต้นทุนที่พิสูจน์ Attribution แล้ว", items: cmpItems },
     ]),
-    trend: { gran, google, fb, googleNote: google ? undefined : d.google.length ? "แนวโน้มต้องใช้ Google Ads Time series (รายวัน) — Campaign Report เป็นยอดรวมทั้งช่วง แบ่งรายวันไม่ได้" : undefined },
+    trend: { gran, google, fb, search, googleNote: google ? undefined : d.google.length ? "แนวโน้มต้องใช้ Google Ads Time series (รายวัน) — Campaign Report เป็นยอดรวมทั้งช่วง แบ่งรายวันไม่ได้" : undefined },
     platforms, sources, meta: { actions: [...byAct].map(([label, v]) => ({ label, ...v, spend: r2(v.spend) })).sort((a, b) => b.spend - a.spend) },
   };
 }

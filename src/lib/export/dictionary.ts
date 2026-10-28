@@ -47,6 +47,10 @@ const MANUAL: Record<string, ColType> = {
   duration_sec: "number",
   // รายการขายจากรายงานบัญชี (Excel)
   gross_sales: "money_thb", discount_amount: "money_thb", net_value: "money_thb", vat_amount: "money_thb", total_net: "money_thb",
+  // Website Analytics (Phase 5)
+  website_users: "integer", page_views: "integer", user_engagement_sec: "number", avg_engagement_sec_per_user: "number", event_count: "integer", key_events: "integer",
+  total_revenue: "number", pages_count: "integer", search_clicks: "integer", search_impressions: "integer", search_position: "number",
+  views: "integer", impressions: "integer", position: "number",
   sales_inc_vat: "money_thb", discount_before_vat: "money_thb", discount_doc: "money_thb",
 };
 

@@ -87,7 +87,7 @@ assert.equal(p.trend.google!.length, 30); assert.equal(r2(p.trend.google!.reduce
 ({ p } = run({ gtime: [] })); assert.equal(p.trend.google, null); assert.match(p.trend.googleNote!, /แบ่งรายวันไม่ได้/);
 ok("แนวโน้มรายวัน 30 จุด / รายเดือน ก.ย. = 28,814.82 · ไม่มี Time series → ไม่สร้างกราฟจาก Campaign Report (บอกเหตุผล)");
 ({ p } = run({}, { from: "2026-09-10", to: "2026-09-20" }));
-const pf = Object.fromEntries(p.platforms.map((r) => [r.platform, r])); assert.equal(pf["Google Ads"].status, "ครบ"); assert.equal(pf["Meta Ads"].status, "ไม่ครบ"); assert.equal(pf.Website.status, "รอข้อมูล"); assert.equal(pf["Facebook Page"].spend, null);
+const pf = Object.fromEntries(p.platforms.map((r) => [r.platform, r])); assert.equal(pf["Google Ads"].status, "ครบ"); assert.equal(pf["Meta Ads"].status, "ไม่ครบ"); assert.equal(pf["Website (GA4)"].status, "รอข้อมูล"); assert.equal(pf["Google Search"].status, "รอข้อมูล"); assert.equal(pf["Facebook Page"].spend, null);
 const so = Object.fromEntries(p.sources.map((s) => [s.name, s])); assert.equal(so["Google Ads Time series (รายวัน)"].available, "01/09/2026–30/09/2026");
 ok("ตารางตามแพลตฟอร์มแยก Paid/Organic/Website พร้อมสถานะ ครบ / ไม่ครบ / รอข้อมูล และช่วงข้อมูลที่มีของแต่ละแหล่ง");
 ({ p } = run({}, { from: "2026-09-20", to: "2026-09-10" })); assert.ok(p.warnings[0].includes("หลังวันที่สิ้นสุด")); assert.equal(p.groups.length, 0); ok("วันที่เริ่มหลังวันสิ้นสุด → เตือน ไม่คำนวณ");

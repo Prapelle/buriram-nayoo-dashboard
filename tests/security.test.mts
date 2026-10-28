@@ -14,7 +14,7 @@ console.log("1) ทุก API Route ต้องตรวจ Session และ R
 const routes = files.map(norm).filter((f) => /\/api\/.*route\.ts$/.test(f));
 const EXPECT: Record<string, string[] | "public"> = {
   "src/app/api/auth/[...nextauth]/route.ts": "public", // Auth.js จัดการเอง (login/callback)
-  "src/app/api/init/route.ts": ["admin"], "src/app/api/health/route.ts": ["admin"], "src/app/api/users/route.ts": ["admin"],
+  "src/app/api/init/route.ts": ["admin"], "src/app/api/health/route.ts": ["admin"], "src/app/api/users/route.ts": ["admin"], "src/app/api/website/route.ts": ["admin", "marketing"],
   "src/app/api/import/plan/route.ts": ["admin", "marketing"], "src/app/api/import/commit/route.ts": ["admin", "marketing"], "src/app/api/import/history/route.ts": ["admin", "marketing"],
   "src/app/api/line-oa/route.ts": ["admin", "marketing"],
   "src/app/api/leads/route.ts": ["admin", "sales"],

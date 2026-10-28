@@ -7,6 +7,8 @@ export type Row = Record<string, string>;
 export type DashData = {
   meta: Row[]; google: Row[]; gtime: Row[]; posts: Row[]; line: Row[]; leads: Row[]; sales: Row[];
   excludedPages: string[]; lastImport: string;
+  /** Phase 5: แท็บ WEBSITE_ANALYTICS (ว่าง/undefined ถ้ายังไม่ได้เตรียม Sheet) */
+  web?: Row[]; webTabMissing?: boolean;
 };
 export type Filters = { from?: string; to?: string; channel?: string; campaign?: string; area?: string; service?: string };
 
@@ -18,7 +20,7 @@ const PAID_CHANNELS = ["Facebook Ads", "Google Ads"];
 const CH = { meta: "Facebook Ads", google: "Google Ads", posts: "Facebook Organic", line: "LINE OA" };
 
 export type KpiState = "value" | "pending" | "excluded" | "restricted" | "na";
-export type Kpi = { key: string; label: string; fmt: "thb" | "int" | "pct"; value: number | null; state: KpiState; note?: string; /** มีค่าแต่ข้อมูลไม่ครบ: เหตุผล */ incomplete?: string;
+export type Kpi = { key: string; label: string; fmt: "thb" | "int" | "pct" | "sec"; value: number | null; state: KpiState; note?: string; /** มีค่าแต่ข้อมูลไม่ครบ: เหตุผล */ incomplete?: string;
   /** Phase 7: ค่าช่วงเปรียบเทียบ (undefined = ไม่เปรียบเทียบ, null = ไม่มีข้อมูล) */ prev?: number | null; prevLabel?: string; prevIncomplete?: string; prevBlocked?: string };
 export type Dashboard = {
   groups: { title: string; items: Kpi[] }[];

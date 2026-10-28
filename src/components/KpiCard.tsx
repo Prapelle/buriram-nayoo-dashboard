@@ -1,7 +1,8 @@
 import type { Kpi } from "@/lib/dashboard";
 import { changePct } from "@/lib/compare";
 
-const show = (fmt: Kpi["fmt"], v: number) => fmt === "thb" ? `฿${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : fmt === "pct" ? `${v}%` : v.toLocaleString("en-US");
+const dur = (v: number) => { const m = Math.floor(v / 60), sec = Math.round(v - m * 60); return m ? `${m} นาที ${sec} วินาที` : `${Math.round(v * 10) / 10} วินาที`; };
+const show = (fmt: Kpi["fmt"], v: number) => fmt === "sec" ? dur(v) : fmt === "thb" ? `฿${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : fmt === "pct" ? `${v}%` : v.toLocaleString("en-US");
 
 /** การ์ด KPI ใช้ร่วมกันทุกหน้า: รอข้อมูล / N/A / ข้อมูลไม่ครบ / เทียบปีก่อนหรือช่วงก่อน (prev = undefined คือไม่ได้เปรียบเทียบ, null คือไม่มีข้อมูล) */
 export function KpiCard({ k }: { k: Kpi }) {

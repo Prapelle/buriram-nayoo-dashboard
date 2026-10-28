@@ -20,16 +20,16 @@
 | Total Leads ใช้ lead_id และ Lead Date | ✅ | Phase 2 · Phase 8 แก้ไฟล์สรุปรายเดือนให้นับไม่ซ้ำด้วย |
 | CPL คำนวณจากช่วงเวลาเดียวกัน | ✅ | CPL 2 ตัว (จาก Ads / ทั้งหมด) · N/A เมื่อหาร 0 |
 | Lead Management ฟิลด์และ Status Logic ครบ | ✅ | Phase 4 · เว็บจริง |
-| Website Analytics รองรับการนำเข้า | ⛔ | **ยังไม่ได้ทำ** — ผู้ใช้ให้ข้าม Phase 5 จนกว่าจะมีไฟล์ตัวอย่าง (ข้อ F) · หน้าจอแสดง "รอข้อมูล" ไม่แสดง 0 |
-| Marketing Performance Dashboard ใช้ข้อมูลจริง | ✅ (ยกเว้นส่วน Website) | Phase 6 · เว็บจริง |
+| Website Analytics รองรับการนำเข้า | ✅ (มีเงื่อนไข) | Phase 5 (28/10/2026): GA4 หน้าและหน้าจอ + Search Console ทั้งชุด + กรอกเอง · **Website Users ต้องกรอกเอง** เพราะไฟล์ GA4 รายหน้าไม่มียอดผู้ใช้รวม · ทดสอบกับไฟล์จริงและในเบราว์เซอร์จริง · ยังไม่ได้ทดสอบบนเว็บที่ deploy |
+| Marketing Performance Dashboard ใช้ข้อมูลจริง | ✅ | Phase 6 · เว็บจริง · ส่วน Website/Search Console เพิ่มใน Phase 5 |
 | Google Ads KPI ไม่ใช้ Total Paid Media Spend | ✅ | CPC = Google Spend ÷ Clicks แหล่งเดียวกัน (ทดสอบแล้ว) |
-| Website Metrics ไม่ถูกอ้างว่าเกิดจาก Paid Ads | ✅ | หมายเหตุ Attribution บนหน้า (ตัวเลขยังรอข้อมูล) |
+| Website Metrics ไม่ถูกอ้างว่าเกิดจาก Paid Ads | ✅ | หมายเหตุ Attribution บนหน้า · แยกกลุ่ม Website (GA4) / Google Search (Organic) / เทียบ Google Ads |
 | YoY คำนวณและจัดการ Missing Data ถูกต้อง | ✅ | Phase 7 · เว็บจริง · ข้อมูลปีก่อนจริงยังไม่มี |
 | Export ทำงานได้จริง | ⚠️ | อัตโนมัติ + ดาวน์โหลดผ่าน HTTP ผ่าน · **ผู้ใช้ยังไม่ได้ยืนยันบนเว็บจริงหลัง Phase 8** |
 | Google Sheets ยังเป็นฐานข้อมูลหลัก | ✅ | ไม่มีฐานข้อมูลอื่น |
 | Looker Studio Compatibility | ⛔ | **ตัดออกจากขอบเขต** ตามการตัดสินใจของผู้ใช้ (ข้อ G) — ไม่ได้ตรวจ |
 | ไม่ลบ/เขียนทับข้อมูลเดิมโดยไม่ได้รับอนุญาต | ✅ | Schema เพิ่มคอลัมน์ต่อท้ายเท่านั้น · การลบมีเฉพาะ "ลบ Lead" ที่ผู้ใช้กดยืนยัน · ข้อมูลม็อกอัปผู้ใช้ลบเอง |
-| ทดสอบการทำงานร่วมกันทุกโมดูล | ✅ | Phase 9: 310/310 (Website/Looker อยู่นอกขอบเขต) |
+| ทดสอบการทำงานร่วมกันทุกโมดูล | ✅ | Phase 9 + Phase 5: 358/358 (Looker อยู่นอกขอบเขต) |
 | รายงานสถานะการทดสอบตรงไปตรงมา | ✅ | ทุกเฟสแยก Passed / Failed / Not Tested |
 
 ---
@@ -70,6 +70,8 @@
 | `SALES` | manual | 22 | — |
 | `SALES_TRANSACTIONS` | manual | 37 | — |
 | `SALES_IMPORT_LOG` | system | 20 | — |
+| `WEBSITE_ANALYTICS` | marketing | 24 | **แท็บใหม่ (Phase 5)** |
+| `WEBSITE_DIMENSIONS` | marketing | 19 | **แท็บใหม่ (Phase 5)** |
 
 | ไฟล์ส่งออก | กลุ่ม | ระดับข้อมูล (grain) | สิทธิ์ |
 |---|---|---|---|
@@ -92,6 +94,8 @@
 | `google_ads_time_series.csv` | การตลาด | หนึ่งแถวต่อ date (รายวัน) | admin, marketing |
 | `google_ads_auction_insights.csv` | การตลาด | หนึ่งแถวต่อ advertiser_name ต่อช่วงรายงาน (report_start–report_end) | admin, marketing |
 | `line_oa_monthly.csv` | การตลาด | หนึ่งแถวต่อเดือน (report_month) | admin, marketing |
+| `website_analytics.csv` | การตลาด | หนึ่งแถวต่อ แหล่ง (source) × ช่วงรายงาน — GA4 และกรอกเอง = ยอดรวมทั้งช่วง (granularity = period), Search Console = รายวัน (granularity = day) | admin, marketing |
+| `website_dimensions.csv` | การตลาด | หนึ่งแถวต่อ แหล่ง × ช่วงรายงาน × dimension_type × dimension_value (300 อันดับแรก + แถว (อื่น ๆ)) | admin, marketing |
 | `leads.csv` | Leads / Sales | หนึ่งแถวต่อ Lead (lead_id) | admin, sales |
 | `sales.csv` | Leads / Sales | หนึ่งแถวต่อดีล (sale_id) | admin, sales |
 | `sales_transactions.csv` | Leads / Sales | หนึ่งแถวต่อเอกสารขาย (invoice_no) | admin, sales |
@@ -99,7 +103,7 @@
 | `marketing_performance_kpis.csv` | สรุป | หนึ่งแถวต่อ KPI ของช่วงวันที่ที่เลือก พร้อมค่าปีก่อน (YoY) — ตัวเลขสรุป ห้ามนำไปรวมกับไฟล์ต้นฉบับ | admin, marketing |
 | `data_dictionary.csv` | สรุป | หนึ่งแถวต่อ คอลัมน์ × ไฟล์ส่งออก | admin, marketing, sales |
 
-คีย์กันข้อมูลซ้ำ (`row_key`): Facebook Page = page_id + post_id + metric_date · Meta Ads = ช่วงรายงาน + ad set + ad · Google Ads = ช่วงรายงาน + มิติของรายงาน · Time series = วันที่ · Leads = `lead_id` (UUID) + `lead_code` (LD-ปี-ลำดับ) · รายการขาย = เลขที่เอกสาร
+คีย์กันข้อมูลซ้ำ (`row_key`): Facebook Page = page_id + post_id + metric_date · Meta Ads = ช่วงรายงาน + ad set + ad · Google Ads = ช่วงรายงาน + มิติของรายงาน · Time series = วันที่ · Leads = `lead_id` (UUID) + `lead_code` (LD-ปี-ลำดับ) · รายการขาย = เลขที่เอกสาร · Website สรุป = แหล่ง + property + ระดับ + ช่วงวันที่ (Search Console รายวัน = วันที่) · Website รายละเอียด = แหล่ง + ช่วง + ประเภทมิติ + ค่า
 
 ---
 
@@ -141,6 +145,15 @@
 - **Marketing Performance:** Google Ads Spend/Clicks/CPC, Meta Ads, Facebook Page (Organic), Website (รอข้อมูล) แยก Paid/Organic/Website · กราฟรายวัน/รายเดือน · ตารางตามแพลตฟอร์ม · สถานะความครบของข้อมูล · เปรียบเทียบ YoY
 - อ่านสถานะ: **รอข้อมูล** = ไม่มีข้อมูล (ไม่ใช่ 0) · **N/A** = หารด้วย 0 · **ข้อมูลไม่ครบ** = มีค่าแต่ช่วงข้อมูลไม่ครบ (อ่านเหตุผลบนการ์ด) · **Missing Data** = ไม่มีข้อมูลช่วงเปรียบเทียบ
 
+### 4.5 Website (เมนู Website — Admin / Marketing)
+1. **GA4:** Reports → Engagement → **Pages and screens** → ตั้งช่วงวันที่ → Share → Download CSV (ไม่ต้องแก้ไฟล์ — ระบบอ่านช่วงวันที่จากหัวไฟล์)
+2. **Search Console:** Performance → Search results → ตั้งช่วงวันที่ → Export → CSV แล้วแตกไฟล์ zip
+3. หน้า Website → เลือก **ทุกไฟล์พร้อมกัน** (รวม Filters.csv ที่บอกช่วงวันที่) → **ตรวจสอบก่อนนำเข้า** → **ยืนยันนำเข้า**
+4. **กรอก Users** ของช่วงเดียวกับไฟล์ GA4 (ดูจาก GA4 Reports snapshot หรือ Explore ที่ไม่มีมิติ) — กดชื่อช่วงที่แสดงเพื่อเติมวันที่ให้ตรงกัน
+5. ดูตัวเลขที่หน้า **Marketing Performance** โดยเลือกช่วงวันที่ให้ตรงกับรายงาน GA4 (ไม่ตรง = ข้อมูลไม่ครบ) · Search Console เป็นรายวัน เลือกช่วงไหนก็ได้
+- เบราว์เซอร์เป็นผู้อ่านไฟล์และสรุปยอด (ไฟล์ GA4 รายหน้ามีหลายพันแถว เกินเวลาประมวลผลของ Cloudflare แผนฟรี) แล้วส่งเฉพาะยอดสรุป + 300 หน้า/คำค้นแรก + แถว (อื่น ๆ) ขึ้นระบบ — Server ตรวจทุกช่องซ้ำ
+- Duration = เวลามีส่วนร่วมรวม (GA4 User engagement) ÷ Users — นิยามเดียวกับ "เวลามีส่วนร่วมเฉลี่ยต่อผู้ใช้" ของ GA4
+
 ### 4.4 ส่งออกข้อมูล (เมนู ส่งออกข้อมูล)
 - เลือกชุดข้อมูล → ดู **ระดับข้อมูล** → กรอง → ดูจำนวนแถว → ดาวน์โหลด CSV (UTF-8 BOM เปิดใน Excel ได้)
 - `data_dictionary.csv` อธิบายชนิดและรูปแบบของทุกคอลัมน์ · ไฟล์กลุ่ม **สรุป** (`marketing_monthly_summary`, `marketing_performance_kpis`) เป็นตัวเลขที่สรุปแล้ว **ห้ามนำไปบวกกับไฟล์ต้นฉบับ**
@@ -149,7 +162,7 @@
 ---
 
 ## 5. ข้อจำกัดที่ยังเหลือ
-1. **Website Analytics ยังไม่มี** (Phase 5) — ส่งไฟล์ตัวอย่าง (GA4/อื่น ๆ) เพื่อออกแบบคีย์กันซ้ำก่อนพัฒนา · ตัวเลข Website และ Ads Cost per Page View / Spend per User จะแสดงหลังจากนั้น
+1. **Website Users ต้องกรอกเอง** — ไฟล์ GA4 "หน้าและหน้าจอ" นับผู้ใช้รายหน้า (รวมกันไม่ได้) · ไฟล์ GA4 เป็นยอดรวมทั้งช่วง ตัดรายวันไม่ได้ · ยอดผู้ใช้รวมข้ามหลายช่วงรายงานไม่ได้ · เก็บรายละเอียด 300 อันดับแรก + (อื่น ๆ) · Search Console รองรับเฉพาะไฟล์หัวคอลัมน์ภาษาอังกฤษ (GA4 รองรับไทย/อังกฤษ แต่ทดสอบเฉพาะไฟล์ภาษาไทย) · Ads Cost per Page View ต้องมี Google Ads ช่วงเดียวกับรายงาน GA4
 2. **Meta Ads และ Google Campaign Report เป็นยอดรวมทั้งช่วง** ตัดรายวันไม่ได้ เลือกช่วงย่อยจะได้ยอดทั้งรายงาน + คำเตือน (Google แก้ได้ด้วย Time series · Meta ต้องส่งออกแบบแยกวัน ซึ่งยังไม่รองรับ)
 3. **ไฟล์ Facebook Page รายวันไม่มี Reach/Views/Link Clicks** → การ์ดเหล่านี้ "รอข้อมูล"
 4. **ยังไม่มีข้อมูลปีก่อน** → YoY เป็น Missing Data จนกว่าจะนำเข้าข้อมูลปี 2025
@@ -165,7 +178,7 @@
 - ข้อมูลปริมาณมาก (หลายเดือน/หลายหมื่นแถว) — ทดสอบด้วยข้อมูล ก.ย. 2026 เท่านั้น
 - ข้อมูลปีก่อนจริง (YoY ทดสอบด้วยข้อมูลสมมติในชุดทดสอบ)
 - รายงานยอดขาย Excel จากระบบบัญชีจริง (ทดสอบด้วยไฟล์จำลองตามโครงสร้างในสเปก)
-- Website Analytics และ Looker Studio (นอกขอบเขต)
+- Website Analytics บนเว็บที่ deploy จริง (ทดสอบในเบราว์เซอร์จริงกับ production build + Sheet จำลองแล้ว) · Looker Studio (นอกขอบเขต)
 
 ## 7. สำรองข้อมูลและการดูแลระบบ
 
@@ -186,7 +199,8 @@
 - **ก่อน deploy ทุกครั้ง:** `npx opennextjs-cloudflare build` แล้ว `bash tests/run-all.sh` (วางไฟล์ตัวอย่างใน `tests/fixtures` ตาม README ในโฟลเดอร์นั้น)
 
 ## 8. ชุดทดสอบ
-`bash tests/run-all.sh` — 310 รายการ (security, sales, import, dashboard, overview, fbactions, performance, yoy, kpicard, fbpage, e2e, http-integration)
+`bash tests/run-all.sh` — 358 รายการ (security, sales, import, dashboard, overview, fbactions, performance, yoy, kpicard, website, fbpage, e2e, http-integration, browser-website)
 - `tests/e2e.test.mts`: ทุกโมดูลผ่าน service + Google Sheets จำลอง
 - `tests/integration/run.mjs`: เปิด production build จริง ล็อกอินด้วยคุกกี้เซสชันจริงตาม Role แล้วเรียกหน้าเว็บ/API (ต้อง build ก่อน)
+- `tests/integration/browser-website.mjs`: เปิดหน้า Website ใน Chromium จริง อัปโหลดไฟล์จริง 8 ไฟล์ นำเข้า กรอกยอดผู้ใช้ แล้วตรวจหน้า Performance (ต้องมี Playwright)
 - ไฟล์ข้อมูลจริงไม่อยู่ใน repo (มีตัวเลขธุรกิจ) — ดู `tests/fixtures/README.md`
