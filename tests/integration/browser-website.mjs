@@ -10,7 +10,7 @@ const { chromium } = createRequire(import.meta.url)("playwright"); // ติด�
 
 const PORT = 3220, CTRL = 3221, BASE = `http://127.0.0.1:${PORT}`, SECRET = "browser-secret-0123456789abcdef0123456789abcdef";
 const DIR = `${process.env.FIXTURE_DIR ?? "tests/fixtures"}/website/`;
-const FILES = ["ga4_pages.csv", "gsc_Chart.csv", "gsc_Pages.csv", "gsc_Queries.csv", "gsc_Countries.csv", "gsc_Devices.csv", "gsc_Search_appearance.csv", "gsc_Filters.csv"].map((f) => DIR + f);
+const FILES = ["ga4_pages.csv", "gsc_Chart.csv", "gsc_Pages.csv", "gsc_Queries.csv", "gsc_Countries.csv", "gsc_Devices.csv", "gsc_Search_appearance.csv", "gsc_Filters.csv", "ga4_reports_snapshot.csv"].map((f) => DIR + f);
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048, privateKeyEncoding: { type: "pkcs8", format: "pem" }, publicKeyEncoding: { type: "spki", format: "pem" } });
 const server = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "-p", String(PORT), "-H", "127.0.0.1"], { stdio: ["ignore", "pipe", "pipe"], env: {
   ...process.env, NODE_ENV: "production", FAKE_CONTROL_PORT: String(CTRL), NODE_OPTIONS: `--import ${new URL("./preload.mjs", import.meta.url).pathname}`,
@@ -39,15 +39,16 @@ try {
   const sec = (h) => page.locator("section", { has: page.getByRole("heading", { name: h }) }).last();
   const text = await sec("1. นำเข้าไฟล์ GA4 / Search Console").innerText();
   assert.ok(text.includes("GA4 — หน้าและหน้าจอ") && text.includes("01/10/2026 – 27/10/2026")); assert.ok(text.includes("views: 35,820")); assert.ok(text.includes("27,361"));
-  ok(`เลือกไฟล์จริง 8 ไฟล์ (GA4 2 MB) → เบราว์เซอร์อ่านและสรุปใน ${(readMs / 1000).toFixed(1)} วินาที · แสดงช่วง 01/10–27/10/2026, Page Views 35,820 และคำเตือนยอดผู้ใช้รายหน้า`);
+  assert.ok(text.includes("GA4 — Reports snapshot") && text.includes("01/09/2026 – 30/09/2026") && text.includes("users: 17,443"));
+  ok(`เลือกไฟล์จริง 9 ไฟล์ (GA4 รายหน้า 2 MB + Reports snapshot) → เบราว์เซอร์อ่านและสรุปใน ${(readMs / 1000).toFixed(1)} วินาที · แสดงช่วง 01/10–27/10/2026, Page Views 35,820 และคำเตือนยอดผู้ใช้รายหน้า`);
   await page.getByRole("button", { name: "ตรวจสอบก่อนนำเข้า" }).click();
   await page.getByText(/เพิ่ม 302 · อัปเดต 0 · ข้าม 0/).waitFor();
   assert.equal((await tab("WEBSITE_ANALYTICS")).length, 1);
   ok("ตรวจสอบก่อนนำเข้า: GA4 เพิ่ม 302 แถว — ยังไม่เขียนลง Sheet");
   await page.getByRole("button", { name: "ยืนยันนำเข้า" }).click();
-  await page.getByText(/นำเข้าแล้ว 7 ไฟล์: เพิ่ม 1026/).waitFor({ timeout: 30000 });
-  assert.equal((await tab("WEBSITE_ANALYTICS")).length - 1, 28); assert.equal((await tab("WEBSITE_DIMENSIONS")).length - 1, 998);
-  ok("ยืนยันนำเข้า → เพิ่ม 1,026 แถว (สรุป 28 + รายละเอียด 998) ใน Google Sheet");
+  await page.getByText(/นำเข้าแล้ว 8 ไฟล์: เพิ่ม 1732/).waitFor({ timeout: 30000 });
+  assert.equal((await tab("WEBSITE_ANALYTICS")).length - 1, 29); assert.equal((await tab("WEBSITE_DIMENSIONS")).length - 1, 998 + 705);
+  ok("ยืนยันนำเข้า 8 ไฟล์ (รวม Reports snapshot) → เพิ่ม 1,732 แถวใน Google Sheet");
   await page.getByText("GA4 — หน้าที่มีการดูมากที่สุด").waitFor(); const detail = await sec("3. ข้อมูลที่นำเข้าแล้ว").innerText();
   assert.ok(detail.includes("/buriram") && detail.includes("5,164") && detail.includes("Search Console — คำค้นหา") && detail.includes("บุรีรัมย์น่าอยู่"), detail.slice(0, 1500));
   ok("ตารางรายละเอียด: /buriram 5,164 การดู · คำค้น บุรีรัมย์น่าอยู่ · อุปกรณ์/ประเทศ");
@@ -63,10 +64,17 @@ try {
   await page.getByText("บันทึกยอดผู้ใช้แล้ว").waitFor();
   ok("กดช่วงของไฟล์ GA4 แล้วกรอก Users 21,000 → บันทึกแล้ว");
   await page.goto(BASE + "/performance?from=2026-10-01&to=2026-10-27");
+  await page.getByText("Website Users", { exact: false }).first().waitFor();
   const perf = (await page.locator("main").innerText()).replace(/\s+/g, " ");
   assert.ok(/Website Users 21,000/.test(perf), perf.slice(perf.indexOf("Website (GA4)"), perf.indexOf("Website (GA4)") + 900)); assert.ok(/Website Page Views 35,820/.test(perf)); assert.ok(/Page Views per User 1\.71/.test(perf)); assert.ok(perf.includes("47 วินาที") || perf.includes("47.3 วินาที"), "duration");
   assert.ok(/Search Clicks 4,744/.test(perf) && /Search CTR 2\.33%/.test(perf));
   ok("Marketing Performance (เบราว์เซอร์): Users 21,000 · Page Views 35,820 · PV/User 1.71 · Duration 47 วินาที · Search Clicks 4,744 · CTR 2.33%");
+  await page.goto(BASE + "/performance?from=2026-09-01&to=2026-09-30");
+  await page.getByText("Website Users", { exact: false }).first().waitFor();
+  const sepT = (await page.locator("main").innerText()).replace(/\s+/g, " ");
+  assert.ok(/Website Users 17,443/.test(sepT) && /Website Page Views 42,450/.test(sepT) && /Page Views per User 2\.43/.test(sepT) && sepT.includes("1 นาที 0 วินาที") && /Sessions 22,409/.test(sepT), sepT.slice(sepT.indexOf("Website (GA4)"), sepT.indexOf("Website (GA4)") + 700));
+  ok("Performance ก.ย. 2026 (เบราว์เซอร์): Users 17,443 จาก Snapshot · Page Views 42,450 · PV/User 2.43 · Duration 1 นาที · Sessions 22,409");
+  await page.goto(BASE + "/website"); await page.getByText("GA4 Snapshot — Sessions ตามแหล่งที่มา").waitFor({ timeout: 5000 }).catch(() => {});
   await page.setViewportSize({ width: 390, height: 844 }); await page.goto(BASE + "/website");
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   assert.ok(overflow <= 1, `หน้าเลื่อนแนวนอน ${overflow}px`); await page.screenshot({ path: "/tmp/website-mobile.png", fullPage: false });

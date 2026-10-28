@@ -13,9 +13,10 @@ import { DIM_TYPE, KIND_LABEL, type DimRow, type SummaryRow, type UploadBatch, t
 export class WebError extends Error { constructor(public status: number, message: string, public code: string) { super(message); } }
 
 const SUM_TAB = "WEBSITE_ANALYTICS", DIM_TAB = "WEBSITE_DIMENSIONS";
+const SNAP_DIMS = ["ga4_page_title", "ga4_first_user_source", "ga4_session_source", "ga4_city"];
 const KINDS = Object.keys(KIND_LABEL).filter((k) => k !== "gsc_filters") as WebKind[];
-const SUM_NUM = ["website_users", "page_views", "user_engagement_sec", "avg_engagement_sec_per_user", "event_count", "key_events", "total_revenue", "pages_count", "search_clicks", "search_impressions", "search_ctr_pct", "search_position"] as const;
-const DIM_NUM = ["views", "user_engagement_sec", "event_count", "key_events", "clicks", "impressions", "ctr_pct", "position"] as const;
+const SUM_NUM = ["new_users", "sessions", "website_users", "page_views", "user_engagement_sec", "avg_engagement_sec_per_user", "event_count", "key_events", "total_revenue", "pages_count", "search_clicks", "search_impressions", "search_ctr_pct", "search_position"] as const;
+const DIM_NUM = ["users", "sessions", "views", "user_engagement_sec", "event_count", "key_events", "clicks", "impressions", "ctr_pct", "position"] as const;
 const isIso = (s: unknown) => { if (typeof s !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false; const t = Date.parse(s + "T00:00:00Z"); return Number.isFinite(t) && new Date(t).toISOString().startsWith(s); };
 const str = (v: unknown, max: number, what: string) => { const s = String(v ?? ""); if (s.length > max) throw new WebError(422, `${what} ยาวเกิน ${max} ตัวอักษร`, "VALIDATION"); return s; };
 const numOrBlank = (v: unknown, what: string): number | "" => {
@@ -33,7 +34,7 @@ export function validateBatch(b: UploadBatch): UploadBatch {
   if (!b || !KINDS.includes(b.kind)) throw new WebError(400, "ประเภทไฟล์ไม่ถูกต้อง", "BAD_KIND");
   if (!isIso(b.period?.start) || !isIso(b.period?.end) || b.period.start > b.period.end) throw new WebError(422, "ช่วงวันที่ไม่ถูกต้อง", "BAD_PERIOD");
   if (!/^[0-9a-f]{64}$/.test(String(b.sha256))) throw new WebError(400, "ไม่มีรหัสไฟล์ (SHA-256)", "BAD_REQUEST");
-  const source = b.kind === "ga4_pages" ? "ga4" : "search_console";
+  const source = b.kind === "ga4_pages" ? "ga4" : b.kind === "ga4_snapshot" ? "ga4_snapshot" : "search_console";
   const property = str(b.property, 200, "Property");
   const summary = (b.summary ?? []).map((s) => {
     if (s.source !== source) throw new WebError(422, "แหล่งข้อมูลไม่ตรงกับประเภทไฟล์", "VALIDATION");
@@ -44,24 +45,29 @@ export function validateBatch(b: UploadBatch): UploadBatch {
     const out: SummaryRow = { source, property, granularity: gran, report_start: s.report_start, report_end: s.report_end, notes: str(s.notes, 300, "หมายเหตุ") };
     for (const k of SUM_NUM) (out as Record<string, unknown>)[k] = numOrBlank(s[k], k);
     if (source === "ga4" && out.website_users !== "") throw new WebError(422, "ไฟล์รายหน้า GA4 ไม่มียอดผู้ใช้รวม", "VALIDATION");
+    if (source === "ga4_snapshot" && (out.website_users === "" || !Number.isInteger(out.website_users))) throw new WebError(422, "Reports snapshot ต้องมี Active users เป็นจำนวนเต็ม", "VALIDATION");
     if (out.search_clicks !== "" && out.search_impressions !== "" && Number(out.search_clicks) > Number(out.search_impressions)) throw new WebError(422, "Clicks มากกว่า Impressions", "VALIDATION");
     return out;
   });
-  if (b.kind === "ga4_pages" && summary.length !== 1) throw new WebError(422, "ไฟล์ GA4 ต้องมีแถวสรุป 1 แถว", "VALIDATION");
+  if ((b.kind === "ga4_pages" || b.kind === "ga4_snapshot") && summary.length !== 1) throw new WebError(422, "ไฟล์ GA4 ต้องมีแถวสรุป 1 แถว", "VALIDATION");
   if (b.kind === "gsc_chart" && (summary.length < 1 || summary.length > 400 || new Set(summary.map((s) => s.report_start)).size !== summary.length)) throw new WebError(422, "ข้อมูลรายวันไม่ถูกต้อง", "VALIDATION");
-  const dimType = DIM_TYPE[b.kind];
+  const dimTypes = b.kind === "ga4_snapshot" ? SNAP_DIMS : [DIM_TYPE[b.kind]];
   if ((b.dims ?? []).length > 2000) throw new WebError(413, "รายละเอียดมากเกินไป", "TOO_LARGE");
   const dims = (b.dims ?? []).map((d) => {
-    if (d.dimension_type !== dimType || d.source !== source || d.report_start !== b.period.start || d.report_end !== b.period.end) throw new WebError(422, "แถวรายละเอียดไม่ตรงกับประเภท/ช่วงของไฟล์", "VALIDATION");
-    const out: DimRow = { source, property, report_start: d.report_start, report_end: d.report_end, dimension_type: dimType, dimension_value: str(d.dimension_value, 1000, "ค่าในตาราง").trim() || "(not set)" };
+    if (!dimTypes.includes(d.dimension_type) || d.source !== source || d.report_start !== b.period.start || d.report_end !== b.period.end) throw new WebError(422, "แถวรายละเอียดไม่ตรงกับประเภท/ช่วงของไฟล์", "VALIDATION");
+    const out: DimRow = { source, property, report_start: d.report_start, report_end: d.report_end, dimension_type: d.dimension_type, dimension_value: str(d.dimension_value, 1000, "ค่าในตาราง").trim() || "(not set)" };
     for (const k of DIM_NUM) (out as Record<string, unknown>)[k] = numOrBlank(d[k], k);
     return out;
   });
   if (new Set(dims.map(dimKey)).size !== dims.length) throw new WebError(422, "มีรายการซ้ำในไฟล์", "DUPLICATE_ROW");
-  if (b.kind === "ga4_pages") {
-    const s = summary[0], dv = dims.reduce((t, d) => t + Number(d.views || 0), 0);
-    if (Math.abs(dv - Number(s.page_views)) > 0.5) throw new WebError(422, "ยอดการดูรายหน้าไม่เท่ากับยอดรวม (ข้อมูลไม่สอดคล้อง)", "VALIDATION");
-  }
+  // ยอดรวมต้องเท่ากับผลรวมรายละเอียด (ตารางที่รวมกันได้เท่านั้น)
+  const sumOf = (type: string, k: "views" | "sessions") => dims.filter((d) => d.dimension_type === type).reduce((t, d) => t + Number(d[k] || 0), 0);
+  const checkTotal = (type: string, k: "views" | "sessions", total: number | "" | undefined, what: string) => {
+    if (total === "" || total === undefined || !dims.some((d) => d.dimension_type === type)) return;
+    if (Math.abs(sumOf(type, k) - Number(total)) > 0.5) throw new WebError(422, `${what}รายการไม่เท่ากับยอดรวม (ข้อมูลไม่สอดคล้อง)`, "VALIDATION");
+  };
+  if (b.kind === "ga4_pages") checkTotal("ga4_page", "views", summary[0].page_views ?? "", "ยอดการดู");
+  if (b.kind === "ga4_snapshot") { checkTotal("ga4_page_title", "views", summary[0].page_views, "ยอดการดู"); checkTotal("ga4_session_source", "sessions", summary[0].sessions, "Sessions "); }
   return { ...b, property, summary, dims };
 }
 

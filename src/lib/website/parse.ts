@@ -13,9 +13,9 @@
  */
 import { parseCsv } from "../csv";
 
-export type WebKind = "ga4_pages" | "gsc_chart" | "gsc_pages" | "gsc_queries" | "gsc_countries" | "gsc_devices" | "gsc_appearance" | "gsc_filters";
+export type WebKind = "ga4_snapshot" | "ga4_pages" | "gsc_chart" | "gsc_pages" | "gsc_queries" | "gsc_countries" | "gsc_devices" | "gsc_appearance" | "gsc_filters";
 export const KIND_LABEL: Record<WebKind, string> = {
-  ga4_pages: "GA4 — หน้าและหน้าจอ (Pages and screens)", gsc_chart: "Search Console — รายวัน (Chart)", gsc_pages: "Search Console — หน้า (Pages)",
+  ga4_snapshot: "GA4 — Reports snapshot (ยอดผู้ใช้รวม + ตารางสรุป)", ga4_pages: "GA4 — หน้าและหน้าจอ (Pages and screens)", gsc_chart: "Search Console — รายวัน (Chart)", gsc_pages: "Search Console — หน้า (Pages)",
   gsc_queries: "Search Console — คำค้นหา (Queries)", gsc_countries: "Search Console — ประเทศ (Countries)", gsc_devices: "Search Console — อุปกรณ์ (Devices)",
   gsc_appearance: "Search Console — ลักษณะการแสดงผล (Search appearance)", gsc_filters: "Search Console — ตัวกรอง/ช่วงวันที่ (Filters)",
 };
@@ -26,13 +26,15 @@ export const OTHERS = "(อื่น ๆ)";
 export class WebParseError extends Error { constructor(public code: string, message: string) { super(message); } }
 
 export type SummaryRow = {
-  source: "ga4" | "search_console" | "manual"; property: string; granularity: "period" | "day"; report_start: string; report_end: string;
+  source: "ga4" | "ga4_snapshot" | "search_console" | "manual"; property: string; granularity: "period" | "day"; report_start: string; report_end: string;
+  new_users?: number | ""; sessions?: number | "";
   website_users?: number | ""; page_views?: number | ""; user_engagement_sec?: number | ""; avg_engagement_sec_per_user?: number | "";
   event_count?: number | ""; key_events?: number | ""; total_revenue?: number | ""; pages_count?: number | "";
   search_clicks?: number | ""; search_impressions?: number | ""; search_ctr_pct?: number | ""; search_position?: number | ""; notes?: string;
 };
 export type DimRow = {
-  source: "ga4" | "search_console"; property: string; report_start: string; report_end: string; dimension_type: string; dimension_value: string;
+  source: "ga4" | "ga4_snapshot" | "search_console"; property: string; report_start: string; report_end: string; dimension_type: string; dimension_value: string;
+  users?: number | ""; sessions?: number | "";
   views?: number | ""; user_engagement_sec?: number | ""; event_count?: number | ""; key_events?: number | "";
   clicks?: number | ""; impressions?: number | ""; ctr_pct?: number | ""; position?: number | "";
 };
@@ -107,7 +109,86 @@ function topWithOthers<T extends Record<string, unknown>>(rows: T[], by: keyof T
   return [...sorted.slice(0, TOP_N), merge(sorted.slice(TOP_N))];
 }
 
+/**
+ * GA4 Reports snapshot: หลายตารางในไฟล์เดียว คั่นด้วยบรรทัด # (แต่ละตารางมีช่วงวันที่ของตัวเอง)
+ * - ตารางแรก = ยอดรวมทั้งพร็อพเพอร์ตี้: Active users (ผู้ใช้ไม่ซ้ำของช่วง), New users, Average engagement time per active user, Event count
+ * - Page title: Views รวมกันได้ = Page Views · Session source: Sessions รวมกันได้ = Sessions
+ * - First user source / City: ผู้ใช้ต่อกลุ่ม (เก็บเป็นรายละเอียด ไม่ใช้แทนยอดรวม)
+ */
+type Block = { meta: Record<string, string>; title: string; headers: string[]; rows: string[][] };
+function splitBlocks(text: string): Block[] {
+  const lines = text.replace(/^\ufeff/, "").split(/\r?\n/);
+  const blocks: Block[] = []; let meta: Record<string, string> = {}, title = "", body: string[] = [];
+  const flush = () => { const rows = parseCsv(body.join("\n")); if (rows.length) blocks.push({ meta, title, headers: rows[0].map((h) => h.trim()), rows: rows.slice(1).filter((r) => r.some((c) => c.trim() !== "")) }); body = []; };
+  let inComment = false;
+  for (const l of lines) {
+    if (l.startsWith("#")) {
+      if (!inComment) { if (body.some((x) => x.trim())) flush(); body = []; meta = { ...meta }; title = ""; inComment = true; }
+      const m = /^#\s*([^:]+):\s*(.*)$/.exec(l); if (m) meta[m[1].trim().toLowerCase()] = m[2].trim();
+      else { const t = l.replace(/^#\s*/, "").trim(); if (t && !/^-+$/.test(t)) title = t; }
+    } else { inComment = false; body.push(l); }
+  }
+  if (body.some((x) => x.trim())) flush();
+  return blocks;
+}
+const SNAP_TOTAL = { users: ["active users", "ผู้ใช้ที่ใช้งานอยู่"], newUsers: ["new users", "ผู้ใช้ใหม่"], avg: ["average engagement time per active user", "เวลาในการมีส่วนร่วมโดยเฉลี่ยต่อผู้ใช้ที่ใช้งานอยู่"], events: ["event count", "จำนวนเหตุการณ์"] };
+export function isSnapshot(text: string): boolean {
+  const b = splitBlocks(text);
+  if (b.length < 2) return false;
+  const m = H(b[0].headers);
+  return pick(m, ...SNAP_TOTAL.users) === 0 && pick(m, ...SNAP_TOTAL.avg) >= 0 && b[0].rows.length === 1;
+}
+function parseSnapshot(filename: string, text: string): ParsedFile {
+  const blocks = splitBlocks(text);
+  const per = (b: Block) => ({ start: ymd(b.meta["start date"] ?? b.meta["วันที่เริ่มต้น"]), end: ymd(b.meta["end date"] ?? b.meta["วันที่สิ้นสุด"]) });
+  const period = per(blocks[0]);
+  if (!isIso(period.start) || !isIso(period.end) || period.start > period.end) throw new WebParseError("BAD_PERIOD", "ไม่พบช่วงวันที่ในไฟล์ Reports snapshot (บรรทัด # Start date / End date)");
+  for (const b of blocks) { const p = per(b); if (p.start !== period.start || p.end !== period.end) throw new WebParseError("BAD_PERIOD", `ตาราง "${b.headers[0]}" มีช่วงวันที่ต่างจากตารางแรก — ไฟล์ต้องเป็นช่วงเดียวกันทั้งไฟล์`); }
+  const property = blocks[0].meta["property"] ?? blocks[0].meta["พร็อพเพอร์ตี้"] ?? "";
+  const tm = H(blocks[0].headers), tr = blocks[0].rows[0];
+  const users = num(tr[pick(tm, ...SNAP_TOTAL.users)], "Active users", 2);
+  const newIx = pick(tm, ...SNAP_TOTAL.newUsers), evIx = pick(tm, ...SNAP_TOTAL.events);
+  const avg = num(tr[pick(tm, ...SNAP_TOTAL.avg)], "Average engagement time", 2);
+  if (!Number.isInteger(users) || users < 0) throw new WebParseError("BAD_NUMBER", "Active users ต้องเป็นจำนวนเต็ม");
+  const find = (first: string[]) => blocks.find((b) => first.includes(b.headers[0]?.trim().toLowerCase()));
+  const warnings: string[] = [], dims: DimRow[] = [], info: Record<string, number | string> = { users, avg_engagement_sec: r2(avg) };
+  const base = { source: "ga4_snapshot" as const, property, report_start: period.start, report_end: period.end };
+  const addDims = (type: string, b: Block | undefined, cols: Record<string, string[]>, sortBy: string, othersLabel: string) => {
+    if (!b) return null;
+    const m = H(b.headers); const ix = Object.fromEntries(Object.entries(cols).map(([k, names]) => [k, pick(m, ...names)]));
+    if (Object.values(ix).some((i) => i < 0)) { warnings.push(`ตาราง "${b.headers[0]}" ไม่มีคอลัมน์ที่ต้องใช้ — ข้าม`); return null; }
+    const seen = new Set<string>();
+    const rows = b.rows.map((r, i) => {
+      const v = (r[0] ?? "").trim() || "(not set)";
+      if (seen.has(v)) throw new WebParseError("DUPLICATE_ROW", `ตาราง "${b.headers[0]}" มี "${v}" ซ้ำ`); seen.add(v);
+      return { dimension_value: v, ...Object.fromEntries(Object.entries(ix).map(([k, j]) => [k, num(r[j], k, i + 2)])) } as Record<string, string | number>;
+    });
+    const tot = (k: string, list = rows) => list.reduce((t, x) => t + Number(x[k]), 0);
+    const top = topWithOthers(rows, sortBy, (rest) => ({ dimension_value: `${OTHERS} ${rest.length} ${othersLabel}`, ...Object.fromEntries(Object.keys(cols).map((k) => [k, tot(k, rest)])) }));
+    for (const t of top) dims.push({ ...base, dimension_type: type, ...(t as object) } as DimRow);
+    if (rows.length > TOP_N) warnings.push(`${b.headers[0]}: เก็บ ${TOP_N} อันดับแรก อีก ${rows.length - TOP_N} รายการรวมไว้ในแถว "${OTHERS}"`);
+    return { count: rows.length, tot };
+  };
+  const pt = addDims("ga4_page_title", find(["page title and screen class", "ชื่อหน้าและคลาสหน้าจอ"]), { views: ["views", "จำนวนการดู"], users: ["active users", "ผู้ใช้ที่ใช้งานอยู่"], event_count: ["event count", "จำนวนเหตุการณ์"] }, "views", "หน้า");
+  const fu = addDims("ga4_first_user_source", find(["first user source / medium"]), { users: ["active users"] }, "users", "แหล่ง");
+  const ss = addDims("ga4_session_source", find(["session source / medium"]), { sessions: ["sessions"] }, "sessions", "แหล่ง");
+  const ct = addDims("ga4_city", find(["city"]), { users: ["active users"] }, "users", "เมือง");
+  const plat = find(["platform"]); const ke = plat ? plat.rows.reduce((t, r, i) => t + num(r[pick(H(plat.headers), "key events", "กิจกรรมสำคัญ")], "Key events", i + 2), 0) : "";
+  const views = pt ? pt.tot("views") : "", sessions = ss ? ss.tot("sessions") : "";
+  if (!pt) warnings.push("ไม่พบตาราง Page title — ไม่มียอด Page Views จากไฟล์นี้");
+  if (pt) info.page_views = pt.tot("views"); if (ss) info.sessions = ss.tot("sessions"); if (ke !== "") info.key_events = ke;
+  if (pt) warnings.push(`ผู้ใช้ในตาราง Page title / City / First user source เป็นรายกลุ่ม (รวมกันไม่ได้) — ใช้ Active users ${users.toLocaleString("en-US")} จากตารางยอดรวมเป็น Website Users`);
+  if (fu && Math.abs(fu.tot("users") - users) > 0) warnings.push(`ผลรวมตาราง First user source (${fu.tot("users").toLocaleString("en-US")}) ไม่เท่ากับ Active users ทั้งหมด — GA4 ตัดบางแถวออกจากตาราง เก็บเป็นรายละเอียดเท่านั้น`);
+  void ct;
+  return {
+    kind: "ga4_snapshot", filename, period, property, warnings, dims, info,
+    summary: [{ ...base, granularity: "period", website_users: users, new_users: newIx >= 0 ? num(tr[newIx], "New users", 2) : "", avg_engagement_sec_per_user: r4(avg),
+      event_count: evIx >= 0 ? num(tr[evIx], "Event count", 2) : "", key_events: ke, page_views: views, sessions, pages_count: pt ? pt.count : "", user_engagement_sec: "", total_revenue: "", notes: "GA4 Reports snapshot" }],
+  };
+}
+
 export function parseWebsiteFile(filename: string, text: string): ParsedFile {
+  if (isSnapshot(text)) return parseSnapshot(filename, text);
   const { meta, body } = splitComments(text);
   const rows = parseCsv(body);
   if (!rows.length) throw new WebParseError("EMPTY_FILE", "ไฟล์ว่างเปล่า");
@@ -206,7 +287,7 @@ export function assembleBatches(files: (ParsedFile & { sha256: string })[], fall
   for (const f of files) {
     if (f.kind === "gsc_filters") continue;
     const isGsc = f.kind.startsWith("gsc_");
-    const period = f.kind === "ga4_pages" || f.kind === "gsc_chart" ? f.period! : gscPeriod;
+    const period = f.kind === "ga4_pages" || f.kind === "ga4_snapshot" || f.kind === "gsc_chart" ? f.period! : gscPeriod;
     if (!period) { errors.push(`${f.filename}: ไม่ทราบช่วงวันที่ — เลือกไฟล์ Filters.csv มาพร้อมกัน หรือกรอกช่วงวันที่`); continue; }
     const property = isGsc ? gscProperty : f.property ?? "";
     batches.push({

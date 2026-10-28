@@ -47,9 +47,13 @@ export const TABS: TabDef[] = [
   { name: "SALES_TRANSACTIONS", group: "manual", headers: SALES_TX_COLUMNS },
   { name: "SALES_IMPORT_LOG", group: "system", headers: SALES_LOG_COLUMNS },
   // Phase 5: Website Analytics (แยกจาก Social/Ads) — สรุปต่อช่วงรายงาน (GA4/กรอกเอง) หรือรายวัน (Search Console)
-  { name: "WEBSITE_ANALYTICS", group: "marketing", headers: ["record_id","source","property","granularity","report_start","report_end","website_users","page_views","user_engagement_sec","avg_engagement_sec_per_user","event_count","key_events","total_revenue","pages_count","search_clicks","search_impressions","search_ctr_pct","search_position","notes","row_key","source_filename","source_batch_id","imported_at","updated_at"] },
+  { name: "WEBSITE_ANALYTICS", group: "marketing", headers: ["record_id","source","property","granularity","report_start","report_end","website_users","page_views","user_engagement_sec","avg_engagement_sec_per_user","event_count","key_events","total_revenue","pages_count","search_clicks","search_impressions","search_ctr_pct","search_position","notes","row_key","source_filename","source_batch_id","imported_at","updated_at",
+    // GA4 Reports snapshot (ต่อท้าย)
+    "new_users","sessions"] },
   // รายละเอียดตามมิติ (หน้า GA4 / หน้า คำค้น ประเทศ อุปกรณ์ ของ Search Console) ต่อช่วงรายงาน — N อันดับแรก + แถว (อื่น ๆ)
-  { name: "WEBSITE_DIMENSIONS", group: "marketing", headers: ["record_id","source","property","report_start","report_end","dimension_type","dimension_value","views","user_engagement_sec","event_count","key_events","clicks","impressions","ctr_pct","position","row_key","source_filename","source_batch_id","imported_at"] },
+  { name: "WEBSITE_DIMENSIONS", group: "marketing", headers: ["record_id","source","property","report_start","report_end","dimension_type","dimension_value","views","user_engagement_sec","event_count","key_events","clicks","impressions","ctr_pct","position","row_key","source_filename","source_batch_id","imported_at",
+    // GA4 Reports snapshot (ต่อท้าย)
+    "users","sessions"] },
 ];
 
 export const AREAS = ["buriram", "surin", "multi_province", "unknown"] as const;

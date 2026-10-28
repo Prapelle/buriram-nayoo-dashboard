@@ -571,6 +571,13 @@ console.log("15d) Phase 5 — Website Analytics ผ่าน service + Sheets �
   const ov = await ws.websiteOverview(); assert.deepEqual(ov.selected, { start: "2026-10-01", end: "2026-10-27" }); assert.equal(ov.dims.filter((r) => r.dimension_type === "search_device").length, 3);
   const audW = tabs.get("AUDIT_LOG")!.rows.map((r) => r.join("|")); assert.ok(audW.some((r) => r.includes("website ga4_pages")) && audW.some((r) => r.includes("website_manual")));
   ok("หน้า Website อ่านรายละเอียดของช่วงล่าสุดได้ · Audit Log บันทึกการนำเข้าและการกรอกเอง");
+  const snapText = readFileSync(WD + "ga4_reports_snapshot.csv", "utf8");
+  const snapB = assembleBatches([{ ...parseWebsiteFile("Reports_snapshot.csv", snapText), sha256: createHash("sha256").update(snapText).digest("hex") }]).batches;
+  const rs = await ws.commitWebsite(snapB, "m@x.com", "marketing"); assert.equal(rs.results[0].inserted, 1 + 301 + 52 + 51 + 301);
+  const pd6 = await fetchDashboardData("marketing"); const pk6 = Object.fromEntries(cp(pd6, { from: "2026-09-01", to: "2026-09-30" }).groups.flatMap((g) => g.items).map((x) => [x.key, x]));
+  assert.equal(pk6.w_users.value, 17443); assert.equal(pk6.w_pv.value, 42450); assert.equal(pk6.w_dur.value, 60.042); assert.equal(pk6.w_sess.value, 22409);
+  assert.equal(pk6.x_cppv.value, Math.round((28814.82 / 42450) * 100) / 100); assert.equal(pk6.x_spu.value, Math.round((28814.82 / 17443) * 100) / 100);
+  ok("GA4 Reports snapshot ก.ย. → Sheet → Performance: Users 17,443 · Page Views 42,450 · Duration 60.04 วินาที · Ads Cost per Page View ฿0.68 · Ads Spend per User ฿1.65 (Google Ads ก.ย. จริงใน Sheet)");
 }
 console.log("16) Phase 6 — Marketing Performance ผ่าน Sheets จำลอง");
 const { computePerformance } = await import("../src/lib/performance");
@@ -620,9 +627,9 @@ ok(`สรุปรายเดือน ก.ย.: Total Paid = Meta + Google �
 const pfx = await exp("marketing_performance_kpis", { from: "2026-09-01", to: "2026-09-30" }, "marketing");
 const byK = Object.fromEntries(pfx.rows.map((r) => [r.kpi_key, r]));
 assert.equal(Number(byK.g_spend.value), 28814.82); assert.equal(Number(byK.g_clicks.value), 31513); assert.equal(byK.g_spend.yoy_period_from, "2025-09-01"); assert.equal(byK.g_spend.yoy_status, "missing"); assert.equal(byK.g_spend.yoy_change_pct, "");
-assert.equal(byK.w_users.state, "pending"); assert.equal(byK.w_users.value, ""); assert.equal(byK.w_users.yoy_status, "current_unavailable"); assert.equal(byK.g_spend.kind, "Paid"); assert.equal(byK.f_eng.kind, "Organic");
+assert.equal(byK.w_users.value, "17443"); assert.equal(byK.w_users.yoy_status, "missing"); assert.equal(byK.s_clicks.state, "pending"); assert.equal(byK.s_clicks.value, ""); assert.equal(byK.s_clicks.yoy_status, "current_unavailable"); assert.equal(byK.g_spend.kind, "Paid"); assert.equal(byK.f_eng.kind, "Organic");
 await assert.rejects(exportDataset("marketing_performance_kpis", {}, "sales", "u@x.com"), isExp("FORBIDDEN"));
-ok("marketing_performance_kpis.csv: หนึ่งแถวต่อ KPI ค่าเดียวกับหน้า Performance (Spend 28,814.82) · ปีก่อนไม่มีข้อมูล → yoy_status = missing · Website ว่าง (pending) ไม่ใช่ 0 · Paid/Organic แยกคอลัมน์ kind · Sales ไม่มีสิทธิ์");
+ok("marketing_performance_kpis.csv: หนึ่งแถวต่อ KPI ค่าเดียวกับหน้า Performance (Spend 28,814.82) · ปีก่อนไม่มีข้อมูล → yoy_status = missing · Website Users 17,443 (Snapshot) · Search Console ก.ย. ไม่มี → ว่าง (pending) ไม่ใช่ 0 · Paid/Organic แยกคอลัมน์ kind · Sales ไม่มีสิทธิ์");
 
 const ln = await exp("leads", { need: "ขาย" }, "admin"); assert.ok(ln.rows.length > 0 && ln.rows.every((r) => r.need === "ขาย"));
 await assert.rejects(exp("leads", { need: "ยืม" }, "admin"), isExp("BAD_NEED")); ok("Export Leads กรองตาม Need ได้ · ค่าไม่ถูกต้อง → ปฏิเสธ");

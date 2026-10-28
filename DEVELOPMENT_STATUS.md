@@ -793,3 +793,31 @@ Not Tested: หน้าเว็บจริงหลังการเปล�
 **พบและแก้ระหว่างทดสอบ:** วันที่รูปแบบผิด (เช่น 2026-13-01) ทำให้ตัวตรวจฝั่ง Server error แทนที่จะปฏิเสธ — แก้แล้ว
 **Failed:** 0
 **Not Tested:** บนเว็บที่ deploy จริง/Google Sheet จริง · ไฟล์ GA4 ภาษาอังกฤษ · ไฟล์ Search Console ภาษาไทย (ยังไม่รองรับ) · ข้อมูล Google Ads ช่วงเดียวกับ GA4 (ยังไม่มีจริง — ทดสอบด้วยข้อมูลสมมติ)
+
+## 26) รองรับ GA4 Reports snapshot (28/10/2026)
+
+### ข้อมูลที่ผู้ใช้ส่งมา (ตรวจแล้ว)
+`Reports_snapshot.csv` — หน้าแรกของ GA4 Reports ช่วง 01–30/09/2026 · หลายตารางในไฟล์เดียว (ยอดรวม, รายวัน, แหล่งที่มาผู้ใช้ใหม่, แหล่งที่มาเซสชัน, ชื่อหน้า, เมือง, แพลตฟอร์ม ฯลฯ) ทุกตารางช่วงวันที่เดียวกัน
+- Active users **17,443** · New users 16,604 · เวลามีส่วนร่วมเฉลี่ยต่อผู้ใช้ 60.04 วินาที · Page views (รวมตามชื่อหน้า) **42,450** · Sessions (รวมตามแหล่งที่มาเซสชัน) **22,409** · Key events 86,085
+- ชื่อหน้า: Users เป็นรายหน้า (รวมกันไม่ได้) — เก็บเป็นรายละเอียด ไม่ใช้เป็นยอดรวม
+
+### การออกแบบ
+- ไฟล์ประเภทใหม่ `ga4_snapshot` (ตรวจจับอัตโนมัติ) → แถวสรุป 1 แถวใน WEBSITE_ANALYTICS (มี Users จริง) + รายละเอียด ชื่อหน้า / แหล่งที่มาผู้ใช้ใหม่ / แหล่งที่มาเซสชัน / เมือง ใน WEBSITE_DIMENSIONS
+- Server ตรวจซ้ำ: Users ต้องเป็นจำนวนเต็ม · Page views รวม = ผลรวมตารางชื่อหน้า · Sessions รวม = ผลรวมแหล่งที่มาเซสชัน · ช่วงวันที่ทุกตารางต้องตรงกัน
+- **ช่วงเดียวกันมีหลายแหล่ง → รวมแบบเลือก ไม่บวก:** snapshot > ไฟล์รายหน้า > กรอกเอง (Users, Page Views, Duration) · เวลามีส่วนร่วมรวมยังมาจากไฟล์รายหน้า
+- Performance: KPI ใหม่ **Sessions** (แสดงเมื่อมีข้อมูล) · ข้อความ "รอข้อมูล" ของ Users แนะนำให้นำเข้า snapshot
+
+### ผลกับข้อมูลจริง ก.ย. 2026
+Users 17,443 · Page Views 42,450 · PV/User 2.43 · Duration 1 นาที 0 วินาที · Sessions 22,409 · Ads Cost per Page View ฿0.68 · Spend per User ฿1.65 (Google Ads ก.ย. ฿28,814.82)
+
+### ไฟล์ที่เปลี่ยน
+`src/lib/website/parse.ts`, `src/lib/website/service.ts`, `src/components/WebsiteManager.tsx`, `src/lib/performance.ts`, `src/lib/dashboard-data.ts`, `src/lib/schema.ts`, `src/lib/export/dictionary.ts` · tests: `website.test.ts`, `e2e.test.mts`, `integration/browser-website.mjs`, `run-all.sh`
+
+### Data / Schema Impact
+- **เพิ่มคอลัมน์ต่อท้าย** WEBSITE_ANALYTICS: new_users, sessions · WEBSITE_DIMENSIONS: users, sessions → **ต้องกด ตั้งค่า → เตรียม Google Sheet อีกครั้ง** · ไม่เปลี่ยนชื่อ/ลำดับคอลัมน์เดิม ข้อมูลเดิมไม่ถูกแตะ
+
+### Test Results
+**Passed:** 367/367 (รันทั้งชุด 2 รอบติดกัน) — website 30 (+7 snapshot: ไฟล์จริง, ช่วงวันที่ไม่ตรงกัน, ยอดไม่ตรง, Users ไม่ใช่จำนวนเต็ม), e2e 119 (นำเข้า snapshot → KPI ก.ย. ตรงตามด้านบน, Export ก.ย.), HTTP Integration 29, **เบราว์เซอร์จริง 10** (อัปโหลด 9 ไฟล์ → นำเข้า 1,732 แถว → Performance ก.ย. Users 17,443 / PV/User 2.43 / 1 นาที / Sessions 22,409) · TypeScript + Cloudflare build ผ่าน
+**แก้ระหว่างทดสอบ:** ทดสอบเบราว์เซอร์อ่านหน้า Performance ก่อนโหลดเสร็จ (ไม่สม่ำเสมอ) → รอให้การ์ดแสดงก่อน · run-all รอพอร์ตว่างก่อนเปิดเบราว์เซอร์
+**Failed:** 0
+**Not Tested:** บนเว็บที่ deploy จริง/Google Sheet จริง · snapshot ภาษาไทย หรือที่ผู้ใช้ปรับแต่งการ์ดหน้า Reports เอง (ทดสอบเฉพาะไฟล์ภาษาอังกฤษที่ส่งมา)

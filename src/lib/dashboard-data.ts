@@ -14,7 +14,7 @@ const wanted = (role: Role): Record<string, string[]> => ({
   LEADS: ["lead_id", "received_at", "source_channel", "campaign_name", "area", "service_category", "status", "qualified_at", "need", "buy_status", "sell_status", "call_status"],
   SALES: ["closing_date", "revenue_date", "service_category", "source_channel", "campaign_name", "payment_status", ...(role === "marketing" ? [] : FIN_COLS)],
   APP_CONFIG: ["config_key", "config_value"],
-  WEBSITE_ANALYTICS: ["source", "property", "granularity", "report_start", "report_end", "website_users", "page_views", "user_engagement_sec", "avg_engagement_sec_per_user", "search_clicks", "search_impressions", "search_position", "imported_at"],
+  WEBSITE_ANALYTICS: ["source", "property", "granularity", "report_start", "report_end", "website_users", "page_views", "user_engagement_sec", "avg_engagement_sec_per_user", "search_clicks", "search_impressions", "search_position", "imported_at", "new_users", "sessions"],
 });
 
 export async function fetchDashboardData(role: Role): Promise<DashData> {

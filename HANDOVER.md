@@ -8,7 +8,7 @@
 ## 1. สรุปสถานะ (Definition of Done)
 
 สถานะ: ✅ ผ่าน · ⚠️ ผ่านบางส่วน/มีเงื่อนไข · ⛔ ไม่ได้ทำ (ระบุเหตุผล)
-"เว็บจริง" = ผู้ใช้ตรวจบนเว็บที่ deploy แล้ว · "อัตโนมัติ" = ชุดทดสอบ 310 รายการ (รวม HTTP Integration กับ production build)
+"เว็บจริง" = ผู้ใช้ตรวจบนเว็บที่ deploy แล้ว · "อัตโนมัติ" = ชุดทดสอบ 367 รายการ (รวม HTTP Integration กับ production build)
 
 | ข้อกำหนด | สถานะ | หลักฐาน |
 |---|---|---|
@@ -20,7 +20,7 @@
 | Total Leads ใช้ lead_id และ Lead Date | ✅ | Phase 2 · Phase 8 แก้ไฟล์สรุปรายเดือนให้นับไม่ซ้ำด้วย |
 | CPL คำนวณจากช่วงเวลาเดียวกัน | ✅ | CPL 2 ตัว (จาก Ads / ทั้งหมด) · N/A เมื่อหาร 0 |
 | Lead Management ฟิลด์และ Status Logic ครบ | ✅ | Phase 4 · เว็บจริง |
-| Website Analytics รองรับการนำเข้า | ✅ (มีเงื่อนไข) | Phase 5 (28/10/2026): GA4 หน้าและหน้าจอ + Search Console ทั้งชุด + กรอกเอง · **Website Users ต้องกรอกเอง** เพราะไฟล์ GA4 รายหน้าไม่มียอดผู้ใช้รวม · ทดสอบกับไฟล์จริงและในเบราว์เซอร์จริง · ยังไม่ได้ทดสอบบนเว็บที่ deploy |
+| Website Analytics รองรับการนำเข้า | ✅ (มีเงื่อนไข) | Phase 5 (28/10/2026): GA4 หน้าและหน้าจอ + Search Console ทั้งชุด + กรอกเอง · **Website Users มาจากไฟล์ GA4 Reports snapshot** (ถ้าไม่มี snapshot ของช่วงนั้นจึงกรอกเอง) · ทดสอบกับไฟล์จริงและในเบราว์เซอร์จริง · ยังไม่ได้ทดสอบบนเว็บที่ deploy |
 | Marketing Performance Dashboard ใช้ข้อมูลจริง | ✅ | Phase 6 · เว็บจริง · ส่วน Website/Search Console เพิ่มใน Phase 5 |
 | Google Ads KPI ไม่ใช้ Total Paid Media Spend | ✅ | CPC = Google Spend ÷ Clicks แหล่งเดียวกัน (ทดสอบแล้ว) |
 | Website Metrics ไม่ถูกอ้างว่าเกิดจาก Paid Ads | ✅ | หมายเหตุ Attribution บนหน้า · แยกกลุ่ม Website (GA4) / Google Search (Organic) / เทียบ Google Ads |
@@ -70,8 +70,8 @@
 | `SALES` | manual | 22 | — |
 | `SALES_TRANSACTIONS` | manual | 37 | — |
 | `SALES_IMPORT_LOG` | system | 20 | — |
-| `WEBSITE_ANALYTICS` | marketing | 24 | **แท็บใหม่ (Phase 5)** |
-| `WEBSITE_DIMENSIONS` | marketing | 19 | **แท็บใหม่ (Phase 5)** |
+| `WEBSITE_ANALYTICS` | marketing | 26 | **แท็บใหม่ (Phase 5)** · +new_users, sessions (28/10/2026) |
+| `WEBSITE_DIMENSIONS` | marketing | 21 | **แท็บใหม่ (Phase 5)** · +users, sessions (28/10/2026) |
 
 | ไฟล์ส่งออก | กลุ่ม | ระดับข้อมูล (grain) | สิทธิ์ |
 |---|---|---|---|
@@ -149,10 +149,11 @@
 1. **GA4:** Reports → Engagement → **Pages and screens** → ตั้งช่วงวันที่ → Share → Download CSV (ไม่ต้องแก้ไฟล์ — ระบบอ่านช่วงวันที่จากหัวไฟล์)
 2. **Search Console:** Performance → Search results → ตั้งช่วงวันที่ → Export → CSV แล้วแตกไฟล์ zip
 3. หน้า Website → เลือก **ทุกไฟล์พร้อมกัน** (รวม Filters.csv ที่บอกช่วงวันที่) → **ตรวจสอบก่อนนำเข้า** → **ยืนยันนำเข้า**
-4. **กรอก Users** ของช่วงเดียวกับไฟล์ GA4 (ดูจาก GA4 Reports snapshot หรือ Explore ที่ไม่มีมิติ) — กดชื่อช่วงที่แสดงเพื่อเติมวันที่ให้ตรงกัน
+4. **Users:** แนะนำนำเข้า **GA4 Reports snapshot** (หน้าแรกของ Reports → Share → Download CSV) ของช่วงเดียวกัน — มี Active users, New users, เวลามีส่วนร่วมเฉลี่ย, Sessions, Page views ในไฟล์เดียว จึงไม่ต้องกรอกเอง · ถ้าไม่มี snapshot ให้กรอก Users ที่ช่วงนั้น (กดชื่อช่วงเพื่อเติมวันที่)
+   - ช่วงเดียวกันมีหลายแหล่ง → ใช้ snapshot ก่อน แล้วจึงไฟล์รายหน้า แล้วจึงที่กรอกเอง (ไม่บวกซ้ำ)
 5. ดูตัวเลขที่หน้า **Marketing Performance** โดยเลือกช่วงวันที่ให้ตรงกับรายงาน GA4 (ไม่ตรง = ข้อมูลไม่ครบ) · Search Console เป็นรายวัน เลือกช่วงไหนก็ได้
 - เบราว์เซอร์เป็นผู้อ่านไฟล์และสรุปยอด (ไฟล์ GA4 รายหน้ามีหลายพันแถว เกินเวลาประมวลผลของ Cloudflare แผนฟรี) แล้วส่งเฉพาะยอดสรุป + 300 หน้า/คำค้นแรก + แถว (อื่น ๆ) ขึ้นระบบ — Server ตรวจทุกช่องซ้ำ
-- Duration = เวลามีส่วนร่วมรวม (GA4 User engagement) ÷ Users — นิยามเดียวกับ "เวลามีส่วนร่วมเฉลี่ยต่อผู้ใช้" ของ GA4
+- Duration = ค่า "เวลามีส่วนร่วมเฉลี่ยต่อผู้ใช้ที่ใช้งานอยู่" จาก snapshot · ถ้าไม่มี snapshot = เวลามีส่วนร่วมรวม (GA4 User engagement) ÷ Users
 
 ### 4.4 ส่งออกข้อมูล (เมนู ส่งออกข้อมูล)
 - เลือกชุดข้อมูล → ดู **ระดับข้อมูล** → กรอง → ดูจำนวนแถว → ดาวน์โหลด CSV (UTF-8 BOM เปิดใน Excel ได้)
@@ -162,7 +163,7 @@
 ---
 
 ## 5. ข้อจำกัดที่ยังเหลือ
-1. **Website Users ต้องกรอกเอง** — ไฟล์ GA4 "หน้าและหน้าจอ" นับผู้ใช้รายหน้า (รวมกันไม่ได้) · ไฟล์ GA4 เป็นยอดรวมทั้งช่วง ตัดรายวันไม่ได้ · ยอดผู้ใช้รวมข้ามหลายช่วงรายงานไม่ได้ · เก็บรายละเอียด 300 อันดับแรก + (อื่น ๆ) · Search Console รองรับเฉพาะไฟล์หัวคอลัมน์ภาษาอังกฤษ (GA4 รองรับไทย/อังกฤษ แต่ทดสอบเฉพาะไฟล์ภาษาไทย) · Ads Cost per Page View ต้องมี Google Ads ช่วงเดียวกับรายงาน GA4
+1. **Website Users มาจาก GA4 Reports snapshot หรือกรอกเอง** — ไฟล์ GA4 "หน้าและหน้าจอ" นับผู้ใช้รายหน้า (รวมกันไม่ได้) · snapshot ต้องมีทุกตารางเป็นช่วงวันที่เดียวกัน · ไฟล์ GA4 เป็นยอดรวมทั้งช่วง ตัดรายวันไม่ได้ · ยอดผู้ใช้รวมข้ามหลายช่วงรายงานไม่ได้ · เก็บรายละเอียด 300 อันดับแรก + (อื่น ๆ) · Search Console รองรับเฉพาะไฟล์หัวคอลัมน์ภาษาอังกฤษ (GA4 รองรับไทย/อังกฤษ แต่ทดสอบเฉพาะไฟล์ภาษาไทย) · Ads Cost per Page View ต้องมี Google Ads ช่วงเดียวกับรายงาน GA4
 2. **Meta Ads และ Google Campaign Report เป็นยอดรวมทั้งช่วง** ตัดรายวันไม่ได้ เลือกช่วงย่อยจะได้ยอดทั้งรายงาน + คำเตือน (Google แก้ได้ด้วย Time series · Meta ต้องส่งออกแบบแยกวัน ซึ่งยังไม่รองรับ)
 3. **ไฟล์ Facebook Page รายวันไม่มี Reach/Views/Link Clicks** → การ์ดเหล่านี้ "รอข้อมูล"
 4. **ยังไม่มีข้อมูลปีก่อน** → YoY เป็น Missing Data จนกว่าจะนำเข้าข้อมูลปี 2025
@@ -199,8 +200,8 @@
 - **ก่อน deploy ทุกครั้ง:** `npx opennextjs-cloudflare build` แล้ว `bash tests/run-all.sh` (วางไฟล์ตัวอย่างใน `tests/fixtures` ตาม README ในโฟลเดอร์นั้น)
 
 ## 8. ชุดทดสอบ
-`bash tests/run-all.sh` — 358 รายการ (security, sales, import, dashboard, overview, fbactions, performance, yoy, kpicard, website, fbpage, e2e, http-integration, browser-website)
+`bash tests/run-all.sh` — 367 รายการ (security, sales, import, dashboard, overview, fbactions, performance, yoy, kpicard, website, fbpage, e2e, http-integration, browser-website)
 - `tests/e2e.test.mts`: ทุกโมดูลผ่าน service + Google Sheets จำลอง
 - `tests/integration/run.mjs`: เปิด production build จริง ล็อกอินด้วยคุกกี้เซสชันจริงตาม Role แล้วเรียกหน้าเว็บ/API (ต้อง build ก่อน)
-- `tests/integration/browser-website.mjs`: เปิดหน้า Website ใน Chromium จริง อัปโหลดไฟล์จริง 8 ไฟล์ นำเข้า กรอกยอดผู้ใช้ แล้วตรวจหน้า Performance (ต้องมี Playwright)
+- `tests/integration/browser-website.mjs`: เปิดหน้า Website ใน Chromium จริง อัปโหลดไฟล์จริง 9 ไฟล์ (รวม Reports snapshot) นำเข้า กรอกยอดผู้ใช้ แล้วตรวจหน้า Performance ต.ค. และ ก.ย. (ต้องมี Playwright)
 - ไฟล์ข้อมูลจริงไม่อยู่ใน repo (มีตัวเลขธุรกิจ) — ดู `tests/fixtures/README.md`

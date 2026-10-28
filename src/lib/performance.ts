@@ -104,24 +104,45 @@ function pickPeriods(rows: Row[], g: Range) {
   return { used, incomplete: problems.join(" · ") || undefined, overlapped };
 }
 
+/**
+ * รวมแหล่งข้อมูลเว็บไซต์ต่อ "ช่วงรายงาน" ก่อนคำนวณ — ไม่บวกแหล่งต่างกันของช่วงเดียวกัน
+ * ลำดับความน่าเชื่อถือ: GA4 Reports snapshot (มี Active users จริง) > GA4 หน้าและหน้าจอ > กรอกเอง
+ */
+export function mergeWebPeriods(web: Row[]): Row[] {
+  const by = new Map<string, Row[]>();
+  for (const r of web) if (r.granularity === "period" && ["ga4_snapshot", "ga4", "manual"].includes(r.source)) { const k = `${r.report_start}|${r.report_end}`; by.set(k, [...(by.get(k) ?? []), r]); }
+  return [...by.values()].map((rows) => {
+    const snap = rows.find((r) => r.source === "ga4_snapshot"), pages = rows.find((r) => r.source === "ga4"), man = rows.find((r) => r.source === "manual");
+    const first = (k: string, ...src: (Row | undefined)[]) => { for (const r of src) { const v = r ? num(r[k]) : null; if (v !== null) return v; } return null; };
+    const users = first("website_users", snap, man);
+    const views = first("page_views", snap, pages, man);
+    const engagement = pages ? num(pages.user_engagement_sec) : null;
+    // Duration: ค่าต้นฉบับของ GA4 ก่อน (snapshot) · ไม่มี → เวลารวมจากไฟล์รายหน้า ÷ Users · ไม่มี → ที่กรอกเอง
+    const duration = first("avg_engagement_sec_per_user", snap) ?? (engagement !== null && users !== null && users > 0 ? r2(engagement / users) : null) ?? first("avg_engagement_sec_per_user", man);
+    const usersFrom = snap && num(snap.website_users) !== null ? "GA4 Reports snapshot" : man && num(man.website_users) !== null ? "กรอกเอง" : "";
+    const viewsFrom = snap && num(snap.page_views) !== null ? "GA4 Reports snapshot" : pages && num(pages.page_views) !== null ? "GA4 หน้าและหน้าจอ" : man && num(man.page_views) !== null ? "กรอกเอง" : "";
+    const fmtN = (v: number | null) => (v === null ? "" : String(v));
+    return { report_start: rows[0].report_start, report_end: rows[0].report_end, users: fmtN(users), views: fmtN(views), engagement: fmtN(engagement), duration: fmtN(duration), sessions: fmtN(first("sessions", snap)), new_users: fmtN(first("new_users", snap)), usersFrom, viewsFrom } as Row;
+  });
+}
+
 export function websiteAt(web: Row[], g: Range) {
-  const ga = web.filter((r) => r.source === "ga4" && r.granularity === "period");
-  const manual = web.filter((r) => r.source === "manual");
-  const G = pickPeriods(ga, g);
-  const M = pickPeriods(manual, g);
-  const base = G ?? (M && M.used.some((r) => num(r.page_views) !== null) ? M : null);
-  const views = base ? sum(base.used, "page_views") : null;
-  const engagement = G ? sum(G.used, "user_engagement_sec") : null;
-  const cover = base ? base.used.map((r) => span({ from: r.report_start, to: r.report_end })).join(", ") : "";
-  // ผู้ใช้: ต้องเป็นช่วงเดียวกับที่ใช้คำนวณยอดการดูพอดี (หรือช่วงที่เลือก ถ้ายังไม่มีไฟล์ GA4)
-  const period = base && base.used.length === 1 ? { from: base.used[0].report_start, to: base.used[0].report_end } : !base ? g : null;
-  const urow = period ? manual.find((r) => r.report_start === period.from && r.report_end === period.to && num(r.website_users) !== null) : undefined;
-  const users = urow ? num(urow.website_users) : null;
-  const usersWhy = base && base.used.length > 1 ? "รวมยอดผู้ใช้ข้ามหลายช่วงรายงานไม่ได้ (คนเดียวกันถูกนับซ้ำ) — เลือกช่วงให้ตรงกับรายงาน หรือกรอกยอดผู้ใช้ของช่วงที่เลือก"
-    : period ? `ยังไม่ได้กรอกยอดผู้ใช้ของช่วง ${span(period)} (ไฟล์ GA4 รายหน้าไม่มียอดผู้ใช้รวม) — กรอกได้ที่หน้า Website` : undefined;
-  const avgManual = urow ? num(urow.avg_engagement_sec_per_user) : null;
-  const duration = users !== null && engagement !== null && G && G.used.length === 1 ? (users > 0 ? r2(engagement / users) : null) : avgManual;
-  return { views, engagement, users, usersWhy, duration, durationNa: users === 0, cover, incomplete: base?.incomplete, source: G ? "GA4 หน้าและหน้าจอ" : base ? "กรอกเอง" : "", hasAny: ga.length + manual.length > 0 };
+  const periods = mergeWebPeriods(web);
+  const P = pickPeriods(periods.filter((r) => r.views !== "" || r.users !== ""), g);
+  const used = P?.used ?? [];
+  const withViews = used.filter((r) => r.views !== "");
+  const views = withViews.length ? sum(withViews, "views") : null;
+  const single = used.length === 1 ? used[0] : null;
+  const users = single && single.users !== "" ? num(single.users) : null;
+  const duration = single && single.duration !== "" ? num(single.duration) : null;
+  const engagementRows = used.filter((r) => r.engagement !== "");
+  const engagement = engagementRows.length === used.length && used.length ? sum(used, "engagement") : null;
+  const sessions = used.length && used.every((r) => r.sessions !== "") ? sum(used, "sessions") : null;
+  const cover = used.map((r) => span({ from: r.report_start, to: r.report_end })).join(", ");
+  const usersWhy = used.length > 1 ? "รวมยอดผู้ใช้ข้ามหลายช่วงรายงานไม่ได้ (คนเดียวกันถูกนับซ้ำ) — เลือกช่วงให้ตรงกับรายงาน GA4 ช่วงเดียว"
+    : single ? `ช่วง ${span({ from: single.report_start, to: single.report_end })} ยังไม่มียอดผู้ใช้ — นำเข้า GA4 Reports snapshot ของช่วงนี้ หรือกรอกยอดผู้ใช้ที่หน้า Website` : undefined;
+  const sources = [...new Set(used.flatMap((r) => [r.viewsFrom, r.usersFrom]).filter(Boolean))].join(" + ");
+  return { views, engagement, users, usersWhy, duration, durationNa: users === 0, sessions, cover, incomplete: P?.incomplete, source: sources, hasAny: periods.length > 0 };
 }
 
 /** Search Console รายวัน: รวมตามวันได้ · CTR คำนวณใหม่ = Clicks ÷ Impressions · ตำแหน่งเฉลี่ยถ่วงน้ำหนักด้วย Impressions */
@@ -224,11 +245,12 @@ export function computePerformance(d: DashData, f: PerfFilters): Performance {
   const pvu = Wb.views !== null && Wb.users !== null ? (Wb.users > 0 ? { v: r2(Wb.views / Wb.users), na: false } : { v: null, na: true }) : { v: null, na: false };
   const pvuP = Wp && Wp.views !== null && Wp.users !== null && Wp.users > 0 ? r2(Wp.views / Wp.users) : null;
   const webItems: PKpi[] = [
-    kp("w_users", "Website Users", "int", Wb.users, { note: Wb.users !== null ? `กรอกจาก GA4 · ${Wb.cover || span(range)}` : undefined, pending: Wb.views !== null ? Wb.usersWhy : noWeb, prev: pv(Wp?.users) }),
+    kp("w_users", "Website Users", "int", Wb.users, { note: Wb.users !== null ? `Active users · ${Wb.source} · ${Wb.cover}` : undefined, pending: Wb.views !== null ? Wb.usersWhy : noWeb, prev: pv(Wp?.users) }),
     kp("w_pv", "Website Page Views", "int", Wb.views, { note: wNote, incomplete: Wb.incomplete, pending: noWeb, prev: pv(Wp?.views), prevIncomplete: Wp?.incomplete }),
     kp("w_pvu", "Page Views per User", "int", pvu.v, { na: pvu.na, note: pvu.na ? "Users = 0 หารไม่ได้" : "Page Views ÷ Users ช่วงเดียวกัน", incomplete: Wb.incomplete, pending: Wb.views === null ? noWeb : Wb.usersWhy, prev: pv(pvuP) }),
     kp("w_dur", "Duration (เวลามีส่วนร่วมเฉลี่ยต่อผู้ใช้)", "sec", Wb.duration, { na: Wb.durationNa, note: "เวลามีส่วนร่วมรวม (GA4 User engagement) ÷ Users — หน่วย วินาที", incomplete: Wb.incomplete, pending: Wb.views === null ? noWeb : Wb.usersWhy, prev: pv(Wp?.duration) }),
   ];
+  if (Wb.sessions !== null) webItems.push(kp("w_sess", "Sessions", "int", Wb.sessions, { note: "ผลรวม Sessions ตามแหล่งที่มาของเซสชัน (GA4 Reports snapshot)", incomplete: Wb.incomplete, prev: pv(Wp?.sessions) }));
   if (Wb.engagement !== null) webItems.push(kp("w_eng", "เวลามีส่วนร่วมรวม (ชั่วโมง)", "int", r2(Wb.engagement / 3600), { note: "ผลรวม User engagement ทุกหน้าในช่วงรายงาน", incomplete: Wb.incomplete, prev: pv(Wp?.engagement !== null && Wp?.engagement !== undefined ? r2(Wp.engagement / 3600) : null) }));
   const sNote = S ? `Search Console รายวัน · ${S.cover}${S.property ? ` · ${S.property}` : ""}` : undefined;
   const sPending = d.webTabMissing ? noWeb : "ยังไม่มีข้อมูล Search Console รายวัน (Chart) ในช่วงนี้";
@@ -274,8 +296,8 @@ export function computePerformance(d: DashData, f: PerfFilters): Performance {
     { name: "Google Ads Campaign Report", kind: "Paid", status: G?.source.includes("Campaign") ? st(G) : camp ? (camp.incomplete ? "ไม่ครบ" : "ครบ") : "รอข้อมูล", detail: G?.source.includes("Campaign") ? (G.incomplete ?? "ใช้คำนวณ Google Ads ช่วงนี้") : camp ? "ใช้ตรวจไขว้กับ Time series" : "ไม่มีรายงานในช่วงนี้", available: avail(d.google.flatMap((r) => [r.report_start, r.report_end])) },
     { name: "Meta Ads Report", kind: "Paid", status: st(M), detail: M?.incomplete ?? (M ? "ครอบคลุมช่วงที่เลือกพอดี" : "ไม่มีรายงานในช่วงนี้"), available: avail(d.meta.flatMap((r) => [r.report_start, r.report_end])) },
     { name: "Facebook Page", kind: "Organic", status: st(F), detail: F?.incomplete ?? (F ? "ครอบคลุมช่วงที่เลือก" : "ไม่มีข้อมูลในช่วงนี้") + (F?.lifetimeOnlyPosts ? ` · ${F.lifetimeOnlyPosts} โพสต์มีแต่ยอดสะสม (ไม่รวม)` : ""), available: avail(fbRows.filter((r) => scopeOf(r) === "daily").map(metricDateOf)) },
-    { name: "GA4 หน้าและหน้าจอ", kind: "Website", status: Wb.source === "GA4 หน้าและหน้าจอ" ? (Wb.incomplete ? "ไม่ครบ" : "ครบ") : "รอข้อมูล", detail: d.webTabMissing ? noWeb : Wb.source === "GA4 หน้าและหน้าจอ" ? (Wb.incomplete ?? "ช่วงรายงานตรงกับที่เลือก") : "ไม่มีรายงานในช่วงนี้", available: web.filter((r) => r.source === "ga4").map((r) => span({ from: r.report_start, to: r.report_end })).join(", ") || "ไม่มี" },
-    { name: "ยอดผู้ใช้เว็บไซต์ (กรอกเอง)", kind: "Website", status: Wb.users !== null ? "ครบ" : "รอข้อมูล", detail: Wb.users !== null ? "ใช้คำนวณ Users / Page Views per User / Duration" : Wb.usersWhy ?? "ยังไม่ได้กรอก", available: web.filter((r) => r.source === "manual").map((r) => span({ from: r.report_start, to: r.report_end })).join(", ") || "ไม่มี" },
+    { name: "GA4 (Reports snapshot / หน้าและหน้าจอ / กรอกเอง)", kind: "Website", status: Wb.views === null && Wb.users === null ? "รอข้อมูล" : Wb.incomplete || Wb.users === null ? "ไม่ครบ" : "ครบ", detail: d.webTabMissing ? noWeb : Wb.views === null && Wb.users === null ? "ไม่มีรายงานในช่วงนี้" : [Wb.source && `ใช้ ${Wb.source}`, Wb.incomplete, Wb.users === null ? Wb.usersWhy : ""].filter(Boolean).join(" · "),
+      available: ["ga4_snapshot", "ga4", "manual"].map((src) => { const l = web.filter((r) => r.source === src && r.granularity === "period").map((r) => span({ from: r.report_start, to: r.report_end })); return l.length ? `${src === "ga4_snapshot" ? "Snapshot" : src === "ga4" ? "รายหน้า" : "กรอกเอง"} ${l.join(", ")}` : ""; }).filter(Boolean).join(" · ") || "ไม่มี" },
     { name: "Search Console รายวัน", kind: "Organic", status: st(S), detail: S?.incomplete ?? (S ? "ครอบคลุมช่วงที่เลือก" : "ไม่มีข้อมูลในช่วงนี้"), available: avail(web.filter((r) => r.source === "search_console" && r.granularity === "day").map((r) => r.report_start)) },
   ];
 

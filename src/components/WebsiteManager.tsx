@@ -11,7 +11,17 @@ async function sha256(text: string) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
-const DIM_TITLE: Record<string, string> = { ga4_page: "GA4 — หน้าที่มีการดูมากที่สุด", search_page: "Search Console — หน้า", search_query: "Search Console — คำค้นหา", search_device: "Search Console — อุปกรณ์", search_country: "Search Console — ประเทศ", search_appearance: "Search Console — ลักษณะการแสดงผล" };
+// คอลัมน์ของแต่ละตาราง: [คีย์, หัวตาราง, ชนิด]
+type Col = [string, string, "n" | "dur" | "pct" | "pos"];
+const SC: Col[] = [["clicks", "Clicks", "n"], ["impressions", "Impressions", "n"], ["ctr_pct", "CTR", "pct"], ["position", "ตำแหน่ง", "pos"]];
+const DIM_COLS: Record<string, Col[]> = {
+  ga4_page: [["views", "การดู", "n"], ["user_engagement_sec", "เวลามีส่วนร่วม/การดู", "dur"], ["key_events", "กิจกรรมสำคัญ", "n"]],
+  ga4_page_title: [["views", "การดู", "n"], ["users", "ผู้ใช้ (รายหน้า)", "n"], ["event_count", "เหตุการณ์", "n"]],
+  ga4_first_user_source: [["users", "ผู้ใช้ใหม่จากแหล่งนี้", "n"]], ga4_session_source: [["sessions", "Sessions", "n"]], ga4_city: [["users", "ผู้ใช้", "n"]],
+  search_page: SC, search_query: SC, search_device: SC, search_country: SC, search_appearance: SC,
+};
+const SORT: Record<string, string> = { ga4_page: "views", ga4_page_title: "views", ga4_first_user_source: "users", ga4_session_source: "sessions", ga4_city: "users" };
+const DIM_TITLE: Record<string, string> = { ga4_page_title: "GA4 Snapshot — หน้า (ชื่อหน้า)", ga4_session_source: "GA4 Snapshot — Sessions ตามแหล่งที่มา", ga4_first_user_source: "GA4 Snapshot — แหล่งที่มาของผู้ใช้ครั้งแรก", ga4_city: "GA4 Snapshot — เมือง", ga4_page: "GA4 — หน้าที่มีการดูมากที่สุด", search_page: "Search Console — หน้า", search_query: "Search Console — คำค้นหา", search_device: "Search Console — อุปกรณ์", search_country: "Search Console — ประเทศ", search_appearance: "Search Console — ลักษณะการแสดงผล" };
 
 export function WebsiteManager({ isAdmin }: { isAdmin: boolean }) {
   const [files, setFiles] = useState<(ParsedFile & { sha256: string })[]>([]);
@@ -76,6 +86,8 @@ export function WebsiteManager({ isAdmin }: { isAdmin: boolean }) {
   }
 
   const ga4Periods = (data?.summary ?? []).filter((r) => r.source === "ga4");
+  const snapRows = (data?.summary ?? []).filter((r) => r.source === "ga4_snapshot");
+  const snapKeys = new Set(snapRows.map((r) => `${r.report_start}|${r.report_end}`));
   const manualRows = (data?.summary ?? []).filter((r) => r.source === "manual");
   const gscDays = (data?.summary ?? []).filter((r) => r.source === "search_console").map((r) => r.report_start).sort();
   const inp = "rounded-md border border-slate-300 px-2 py-1.5 text-sm";
@@ -88,7 +100,7 @@ export function WebsiteManager({ isAdmin }: { isAdmin: boolean }) {
 
       <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-5">
         <h2 className="font-semibold">1. นำเข้าไฟล์ GA4 / Search Console</h2>
-        <p className="text-sm text-slate-600">เลือกได้หลายไฟล์พร้อมกัน (CSV): GA4 → รายงาน หน้าและหน้าจอ (Pages and screens) · Search Console → ส่งออก Performance แล้วเลือกไฟล์ทั้งหมดในโฟลเดอร์ (Chart, Pages, Queries, Countries, Devices, Search appearance และ <b>Filters</b> ที่ใช้บอกช่วงวันที่) · ระบบอ่านไฟล์ในเครื่องของคุณก่อน แล้วส่งเฉพาะยอดสรุปขึ้นระบบ</p>
+        <p className="text-sm text-slate-600">เลือกได้หลายไฟล์พร้อมกัน (CSV): GA4 → <b>Reports snapshot</b> (มียอดผู้ใช้จริง — แนะนำ) และ/หรือ หน้าและหน้าจอ (Pages and screens) · Search Console → ส่งออก Performance แล้วเลือกไฟล์ทั้งหมดในโฟลเดอร์ (Chart, Pages, Queries, Countries, Devices, Search appearance และ <b>Filters</b> ที่ใช้บอกช่วงวันที่) · ระบบอ่านไฟล์ในเครื่องของคุณก่อน แล้วส่งเฉพาะยอดสรุปขึ้นระบบ</p>
         <input type="file" accept=".csv,text/csv" multiple disabled={reading || busy} onChange={(e) => { pick(e.target.files); e.target.value = ""; }} className="text-sm" />
         {reading && <p className="text-sm text-slate-500">กำลังอ่านไฟล์...</p>}
         {fileErrors.map((e, i) => <p key={i} role="alert" className="rounded-md bg-red-50 p-2 text-sm text-red-700">{e}</p>)}
@@ -119,8 +131,8 @@ export function WebsiteManager({ isAdmin }: { isAdmin: boolean }) {
 
       <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-5">
         <h2 className="font-semibold">2. ยอดผู้ใช้เว็บไซต์ (กรอกเอง)</h2>
-        <p className="text-sm text-slate-600">ไฟล์ GA4 รายหน้าไม่มียอดผู้ใช้รวม (คนเดียวดูหลายหน้าถูกนับซ้ำ) — ดูยอด <b>Users / Active users</b> ของช่วงเดียวกันใน GA4 (หน้า Reports snapshot หรือ Explore ที่ไม่มีมิติ) แล้วกรอกที่นี่ · ใช้คำนวณ Website Users, Page Views per User, Duration และ Ads Spend per User</p>
-        {ga4Periods.length > 0 && <p className="text-xs text-slate-500">ช่วงของไฟล์ GA4 ที่นำเข้าแล้ว: {ga4Periods.map((r) => <button key={r.row_key} type="button" className="mr-2 underline" onClick={() => setManual({ ...manual, report_start: r.report_start, report_end: r.report_end })}>{dmy(r.report_start)}–{dmy(r.report_end)}</button>)} (กดเพื่อใช้ช่วงนี้ — ช่วงต้องตรงกับไฟล์จึงจะคำนวณร่วมกันได้)</p>}
+        <p className="text-sm text-slate-600"><b>ไม่ต้องกรอก ถ้านำเข้าไฟล์ GA4 Reports snapshot ของช่วงเดียวกันแล้ว</b> (ไฟล์นั้นมี Active users จริง) · ใช้เมื่อมีแต่ไฟล์ หน้าและหน้าจอ ซึ่งไม่มียอดผู้ใช้รวม — ดูยอด <b>Active users</b> ของช่วงเดียวกันใน GA4 แล้วกรอกที่นี่</p>
+        {ga4Periods.some((r) => !snapKeys.has(`${r.report_start}|${r.report_end}`)) && <p className="text-xs text-slate-500">ช่วงของไฟล์ GA4 รายหน้าที่ยังไม่มียอดผู้ใช้จาก Snapshot: {ga4Periods.filter((r) => !snapKeys.has(`${r.report_start}|${r.report_end}`)).map((r) => <button key={r.row_key} type="button" className="mr-2 underline" onClick={() => setManual({ ...manual, report_start: r.report_start, report_end: r.report_end })}>{dmy(r.report_start)}–{dmy(r.report_end)}</button>)} (กดเพื่อใช้ช่วงนี้ — ช่วงต้องตรงกับไฟล์จึงจะคำนวณร่วมกันได้)</p>}
         <div className="grid gap-3 text-sm sm:grid-cols-3">
           <label><span className="mb-1 block text-xs text-slate-500">ตั้งแต่ *</span><input type="date" className={inp + " w-full"} value={manual.report_start} onChange={(e) => setManual({ ...manual, report_start: e.target.value })} /></label>
           <label><span className="mb-1 block text-xs text-slate-500">ถึง *</span><input type="date" className={inp + " w-full"} value={manual.report_end} onChange={(e) => setManual({ ...manual, report_end: e.target.value })} /></label>
@@ -138,9 +150,10 @@ export function WebsiteManager({ isAdmin }: { isAdmin: boolean }) {
         {!data ? <p className="text-sm text-slate-500">กำลังโหลด...</p> : (
           <>
             <ul className="text-sm text-slate-700">
-              {ga4Periods.map((r) => <li key={r.row_key}>GA4 {r.property && `(${r.property})`} {dmy(r.report_start)}–{dmy(r.report_end)}: Page Views {fmt(r.page_views)} · เวลามีส่วนร่วมรวม {fmt(Number(r.user_engagement_sec) / 3600, 1)} ชม. · {fmt(r.pages_count)} หน้า</li>)}
+              {snapRows.map((r) => <li key={r.row_key}>GA4 Reports snapshot {r.property && `(${r.property})`} {dmy(r.report_start)}–{dmy(r.report_end)}: <b>Active users {fmt(r.website_users)}</b> · ผู้ใช้ใหม่ {fmt(r.new_users)} · Page Views {fmt(r.page_views)} · Sessions {fmt(r.sessions)} · เวลามีส่วนร่วมเฉลี่ย {r.avg_engagement_sec_per_user ? dur(Number(r.avg_engagement_sec_per_user)) : "—"} · กิจกรรมสำคัญ {fmt(r.key_events)}</li>)}
+              {ga4Periods.map((r) => <li key={r.row_key}>GA4 หน้าและหน้าจอ {r.property && `(${r.property})`} {dmy(r.report_start)}–{dmy(r.report_end)}: Page Views {fmt(r.page_views)} · เวลามีส่วนร่วมรวม {fmt(Number(r.user_engagement_sec) / 3600, 1)} ชม. · {fmt(r.pages_count)} หน้า</li>)}
               {gscDays.length > 0 && <li>Search Console รายวัน: {dmy(gscDays[0])}–{dmy(gscDays[gscDays.length - 1])} ({gscDays.length} วัน)</li>}
-              {!ga4Periods.length && !gscDays.length && <li className="text-slate-500">ยังไม่มีข้อมูล</li>}
+              {!ga4Periods.length && !snapRows.length && !gscDays.length && <li className="text-slate-500">ยังไม่มีข้อมูล</li>}
             </ul>
             {data.periods.length > 0 && <label className="text-sm"><span className="mr-2 text-slate-500">ช่วงของตารางรายละเอียด</span>
               <select className={inp} value={data.selected ? `${data.selected.start}|${data.selected.end}` : ""} onChange={(e) => { const [start, end] = e.target.value.split("|"); load({ start, end }); }}>
@@ -149,22 +162,22 @@ export function WebsiteManager({ isAdmin }: { isAdmin: boolean }) {
               {Object.keys(DIM_TITLE).map((t) => {
                 const rows = data.dims.filter((r) => r.dimension_type === t);
                 if (!rows.length) return null;
-                const ga = t === "ga4_page";
-                const sorted = [...rows].sort((a, b) => (a.dimension_value.startsWith("(อื่น") ? 1 : b.dimension_value.startsWith("(อื่น") ? -1 : Number(ga ? b.views : b.clicks) - Number(ga ? a.views : a.clicks)));
+                const cols = DIM_COLS[t]; const by = SORT[t] ?? "clicks";
+                const sorted = [...rows].sort((a, b) => (a.dimension_value.startsWith("(อื่น") ? 1 : b.dimension_value.startsWith("(อื่น") ? -1 : Number(b[by] || 0) - Number(a[by] || 0)));
                 const shown = showAll[t] ? sorted : sorted.slice(0, 15);
+                const cell = (r: Row, [k, , kind]: Col) => kind === "dur" ? (Number(r.views) > 0 ? dur(Number(r[k]) / Number(r.views)) : "—") : kind === "pct" ? (r[k] === "" ? "—" : `${fmt(r[k], 2)}%`) : fmt(r[k], kind === "pos" ? 1 : 0);
                 return (
-                  <div key={t} className={ga ? "lg:col-span-2" : ""}>
+                  <div key={t} className={t === "ga4_page" || t === "ga4_page_title" ? "lg:col-span-2" : ""}>
                     <h3 className="mb-1 text-sm font-semibold">{DIM_TITLE[t]}</h3>
                     <div className="overflow-x-auto"><table className="w-full text-left text-sm">
-                      <thead><tr className="border-b text-xs text-slate-500"><th className="py-1">{ga ? "หน้า" : "รายการ"}</th>{ga ? <><th className="text-right">การดู</th><th className="text-right">เวลามีส่วนร่วม/การดู</th><th className="text-right">กิจกรรมสำคัญ</th></> : <><th className="text-right">Clicks</th><th className="text-right">Impressions</th><th className="text-right">CTR</th><th className="text-right">ตำแหน่ง</th></>}</tr></thead>
+                      <thead><tr className="border-b text-xs text-slate-500"><th className="py-1">รายการ</th>{cols.map(([k, h]) => <th key={k} className="text-right">{h}</th>)}</tr></thead>
                       <tbody>{shown.map((r) => <tr key={r.row_key} className="border-b border-slate-100"><td className="max-w-md truncate py-1 pr-2" title={r.dimension_value}>{r.dimension_value}</td>
-                        {ga ? <><td className="text-right tabular-nums">{fmt(r.views)}</td><td className="text-right tabular-nums">{Number(r.views) > 0 ? dur(Number(r.user_engagement_sec) / Number(r.views)) : "—"}</td><td className="text-right tabular-nums">{fmt(r.key_events)}</td></>
-                          : <><td className="text-right tabular-nums">{fmt(r.clicks)}</td><td className="text-right tabular-nums">{fmt(r.impressions)}</td><td className="text-right tabular-nums">{r.ctr_pct === "" ? "—" : `${fmt(r.ctr_pct, 2)}%`}</td><td className="text-right tabular-nums">{fmt(r.position, 1)}</td></>}</tr>)}</tbody></table></div>
+                        {cols.map((c) => <td key={c[0]} className="text-right tabular-nums">{cell(r, c)}</td>)}</tr>)}</tbody></table></div>
                     {sorted.length > 15 && <button className="mt-1 text-xs underline" onClick={() => setShowAll({ ...showAll, [t]: !showAll[t] })}>{showAll[t] ? "แสดงน้อยลง" : `แสดงทั้งหมด ${sorted.length} รายการ`}</button>}
                   </div>);
               })}
             </div>
-            <p className="text-xs text-slate-500">• แต่ละตาราง Google รวมข้อมูลคนละแบบ (ตามหน้า / ตามเว็บไซต์ / ไม่แสดงคำค้นที่ระบุตัวบุคคลได้) ยอดรวมของแต่ละตารางจึงไม่เท่ากัน — ห้ามนำมาบวกรวมกัน · แถว &quot;(อื่น ๆ)&quot; คือรายการที่เหลือหลัง 300 อันดับแรก</p>
+            <p className="text-xs text-slate-500">• ผู้ใช้ในตารางย่อย (หน้า / เมือง / แหล่งที่มา) เป็นรายกลุ่ม คนเดียวอยู่ได้หลายกลุ่ม — ยอดผู้ใช้จริงดูจาก Active users ของ Snapshot · แต่ละตาราง Google รวมข้อมูลคนละแบบ (ตามหน้า / ตามเว็บไซต์ / ไม่แสดงคำค้นที่ระบุตัวบุคคลได้) ยอดรวมของแต่ละตารางจึงไม่เท่ากัน — ห้ามนำมาบวกรวมกัน · แถว &quot;(อื่น ๆ)&quot; คือรายการที่เหลือหลัง 300 อันดับแรก</p>
           </>
         )}
       </section>
