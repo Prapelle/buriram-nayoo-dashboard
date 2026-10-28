@@ -81,7 +81,7 @@ const GA = {
 export function detectKind(headers: string[]): WebKind | null {
   const m = H(headers);
   if (pick(m, ...GA.path) >= 0 && pick(m, ...GA.views) >= 0) return "ga4_pages";
-  const gsc = pick(m, "clicks") >= 0 && pick(m, "impressions") >= 0;
+  const gsc = pick(m, "clicks") >= 0 && pick(m, "impressions") >= 0 && pick(m, "position") >= 0; // ทุกตารางของ Search Console มี Position (ไฟล์ Google Ads ไม่มี — กันจับผิดประเภท เช่น Devices)
   if (gsc && pick(m, "date") >= 0) return "gsc_chart";
   if (gsc && pick(m, "top pages") >= 0) return "gsc_pages";
   if (gsc && pick(m, "top queries") >= 0) return "gsc_queries";

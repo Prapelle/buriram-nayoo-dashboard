@@ -2,6 +2,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SPECS } from "@/lib/import/specs";
 import { readTextFile, toCsv } from "@/lib/csv";
+import { detectSpec, parseInput } from "@/lib/import/plan";
+import { parseWebsiteFile } from "@/lib/website/parse";
+import { WebsiteManager } from "@/components/WebsiteManager";
+import { SalesImport } from "@/components/SalesImport";
 
 type Err = { row: number; column: string; raw: string; code: string; message: string };
 type Counts = { total: number; insert: number; update: number; skip: number; invalid: number };
@@ -27,7 +31,17 @@ const STATUS_TH: Record<string, [string, string]> = {
 const dmy = (iso?: string) => (iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : iso || "-");
 const dmyTime = (iso: string) => { try { return new Date(iso).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", dateStyle: "short", timeStyle: "short" }); } catch { return iso; } };
 
-export function ImportWizard() {
+/** ประเภทไฟล์ (ตรวจในเบราว์เซอร์): โฆษณา/Facebook → ขั้นตอนเดิม · GA4/Search Console → ส่วนนำเข้าของหน้า Website · .xlsx → ส่วนนำเข้าของหน้า Sales */
+function kindOf(name: string, text: string): "marketing" | "website" {
+  try { const t = parseInput(text); if (detectSpec(t.headers).spec) return "marketing"; } catch { /* ให้ Server แจ้งข้อผิดพลาด */ }
+  try { parseWebsiteFile(name, text); return "website"; } catch { return "marketing"; }
+}
+
+export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" | "sales" }) {
+  const [queue, setQueue] = useState<{ name: string; text: string }[]>([]);
+  const [webIn, setWebIn] = useState<{ files: File[]; id: number } | undefined>();
+  const [salesIn, setSalesIn] = useState<{ file: File; id: number } | undefined>();
+  const [notices, setNotices] = useState<string[]>([]);
   const [file, setFile] = useState<{ name: string; text: string } | null>(null);
   const [specId, setSpecId] = useState("");
   const [period, setPeriod] = useState({ reportStart: "", reportEnd: "", comparisonStart: "", comparisonEnd: "", snapshotDate: "" });
@@ -75,14 +89,32 @@ export function ImportWizard() {
     } catch (e) { setPlan(null); setError(e instanceof Error ? e.message : "เกิดข้อผิดพลาด"); setState("error"); }
   }
 
-  async function pick(f: File | undefined | null) {
-    if (!f) return;
-    if (!/\.csv$/i.test(f.name)) { setError("รองรับเฉพาะไฟล์ .csv"); setState("error"); return; }
-    if (f.size > 10 * 1024 * 1024) { setError("ไฟล์ใหญ่เกิน 10 MB"); setState("error"); return; }
-    const next = { name: f.name, text: await readTextFile(f) };
+  /** เลือกได้หลายไฟล์พร้อมกัน แยกส่งไปยังตัวนำเข้าที่ถูกประเภท */
+  async function pick(list: FileList | File[] | null | undefined) {
+    const all = [...(list ?? [])]; if (!all.length) return;
+    const note: string[] = [], mkt: { name: string; text: string }[] = [], web: File[] = [];
+    const xlsx = all.filter((f) => /\.xlsx$/i.test(f.name));
+    for (const f of all.filter((x) => !/\.(csv|xlsx)$/i.test(x.name))) note.push(`${f.name}: รองรับเฉพาะ .csv และ .xlsx (รายงานยอดขาย)`);
+    if (xlsx.length) {
+      if (role !== "admin") note.push(`${xlsx.map((f) => f.name).join(", ")}: ไฟล์รายงานยอดขาย (.xlsx) นำเข้าได้เฉพาะ Admin หรือ Sales (หน้า Sales → นำเข้า) เพราะมีข้อมูลลูกค้า`);
+      else { setSalesIn({ file: xlsx[0], id: Date.now() }); if (xlsx.length > 1) note.push(`ไฟล์ยอดขายนำเข้าได้ทีละไฟล์ — กำลังตรวจ ${xlsx[0].name} (ที่เหลือเลือกใหม่หลังนำเข้าเสร็จ)`); }
+    }
+    for (const f of all.filter((x) => /\.csv$/i.test(x.name))) {
+      if (f.size > 20 * 1024 * 1024) { note.push(`${f.name}: ไฟล์ใหญ่เกิน 20 MB`); continue; }
+      const text = await readTextFile(f);
+      if (kindOf(f.name, text) === "website") web.push(f);
+      else if (f.size > 10 * 1024 * 1024) note.push(`${f.name}: ไฟล์ใหญ่เกิน 10 MB`);
+      else mkt.push({ name: f.name, text });
+    }
+    if (web.length) setWebIn({ files: web, id: Date.now() });
+    setNotices(note);
+    if (mkt.length) { setQueue(mkt.slice(1)); await pickOne(mkt[0]); }
+  }
+  async function pickOne(next: { name: string; text: string }) {
     setFile(next); setSpecId(""); setPlan(null);
     await runPlan(next, {}, true);
   }
+  function nextInQueue() { const [n, ...rest] = queue; if (!n) return; setQueue(rest); setResult(null); setOverride(false); if (input.current) input.current.value = ""; pickOne(n); }
 
   async function commit() {
     setState("committing"); setError("");
@@ -113,14 +145,16 @@ export function ImportWizard() {
       <section className="space-y-4">
         <div
           onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)}
-          onDrop={(e) => { e.preventDefault(); setDrag(false); pick(e.dataTransfer.files[0]); }}
+          onDrop={(e) => { e.preventDefault(); setDrag(false); pick(e.dataTransfer.files); }}
           className={`rounded-lg border-2 border-dashed p-8 text-center ${drag ? "border-slate-900 bg-slate-100" : "border-slate-300 bg-white"}`}>
-          <p className="mb-3 text-slate-600">ลากไฟล์ CSV มาวางที่นี่ หรือ</p>
+          <p className="mb-3 text-slate-600">ลากไฟล์มาวางที่นี่ (เลือกได้หลายไฟล์พร้อมกัน) หรือ</p>
           <button onClick={() => input.current?.click()} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">เลือกไฟล์</button>
-          <input ref={input} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => pick(e.target.files?.[0])} />
-          <p className="mt-3 text-xs text-slate-500">Facebook Page, Facebook Ads, Google Ads (ตรวจประเภทอัตโนมัติ) · สูงสุด 10 MB · ระบบจะยังไม่เขียนข้อมูลจนกว่าจะกดยืนยัน</p>
+          <input ref={input} type="file" accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple className="hidden" onChange={(e) => { pick(e.target.files ? [...e.target.files] : null); e.target.value = ""; }} />
+          <p className="mt-3 text-xs text-slate-500">ตรวจประเภทอัตโนมัติ: Facebook Page (โพสต์ / Viewers / Link clicks), Facebook Ads, Google Ads, Website (GA4 / Search Console){role === "admin" ? ", รายงานยอดขาย .xlsx" : ""} · ระบบจะยังไม่เขียนข้อมูลจนกว่าจะกดยืนยัน</p>
         </div>
 
+        {notices.map((n, i) => <p key={i} role="alert" className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">{n}</p>)}
+        {queue.length > 0 && <p className="text-sm text-slate-600">ไฟล์ที่รอนำเข้าต่อ ({queue.length}): {queue.map((q) => q.name).join(", ")} — นำเข้าไฟล์นี้หรือกดยกเลิก แล้วกด <b>ไฟล์ถัดไป</b></p>}
         {state === "loading" && <p role="status" className="text-sm text-slate-600">กำลังตรวจไฟล์...</p>}
         {state === "error" && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
@@ -229,7 +263,18 @@ export function ImportWizard() {
             </div>
           </div>
         )}
+        {queue.length > 0 && (state === "done" || state === "error" || state === "idle") && (
+          <button onClick={nextInQueue} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">ไฟล์ถัดไป: {queue[0].name}</button>
+        )}
       </section>
+
+      {webIn && <WebsiteManager key={webIn.id} isAdmin={role === "admin"} importOnly incoming={webIn} />}
+      {salesIn && role === "admin" && (
+        <section className="space-y-2 rounded-lg border border-slate-200 bg-white p-5">
+          <h2 className="font-semibold">ไฟล์รายงานยอดขาย (Sales)</h2>
+          <SalesImport key={salesIn.id} incoming={salesIn} />
+        </section>
+      )}
 
       <section>
         <h2 className="mb-2 text-lg font-semibold">ประวัติการนำเข้า</h2>

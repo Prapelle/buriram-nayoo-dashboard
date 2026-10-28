@@ -879,3 +879,28 @@ Users 17,443 · Page Views 42,450 · PV/User 2.43 · Duration 1 นาที 0 �
 **Failed:** 0
 **Not Tested:** บนเว็บที่ deploy จริง/Google Sheet จริง · ไฟล์ Insights ตัวชี้วัดอื่นของ Meta Business Suite (รองรับเฉพาะ Viewers และ Facebook link clicks)
 
+## 29) หน้า นำเข้า CSV รับไฟล์ที่หน้าอื่นรับได้ด้วย (28/10/2026)
+
+### ปัญหาที่พบ (ตรวจไฟล์ทุกไฟล์ที่ได้รับ)
+- หน้า นำเข้า CSV รับเฉพาะ Facebook / Google Ads ทีละไฟล์ · ไฟล์ GA4 + Search Console (8 ประเภท) นำเข้าได้แค่หน้า Website · รายงานยอดขาย .xlsx ได้แค่หน้า Sales
+- พบเพิ่ม: ตัวอ่านไฟล์ Website จับไฟล์ **Google Ads Devices** เป็น Search Console Devices ได้ → แก้ให้ Search Console ต้องมีคอลัมน์ Position
+
+### สิ่งที่ทำ
+- หน้า นำเข้า CSV เลือก/ลากได้หลายไฟล์พร้อมกัน (.csv และ .xlsx) แล้วแยกให้อัตโนมัติ:
+  - Facebook Page / Viewers / Link clicks / Facebook Ads / Google Ads → ขั้นตอนเดิม ทีละไฟล์ + ปุ่ม **ไฟล์ถัดไป**
+  - GA4 / Search Console → ส่วน **ไฟล์เว็บไซต์** (ตัวเดียวกับหน้า Website: ตรวจสอบก่อนนำเข้า → ยืนยัน)
+  - รายงานยอดขาย .xlsx → ส่วน **ไฟล์รายงานยอดขาย** (ตัวเดียวกับหน้า Sales) — **เฉพาะ Admin**; Marketing ได้ข้อความแจ้งเหตุผล (ข้อมูลลูกค้า)
+  - ไฟล์ชนิดอื่น → แจ้งว่าไม่รองรับ
+- สิทธิ์และการตรวจฝั่ง Server ใช้ API เดิมของแต่ละโมดูล (ไม่มี API ใหม่)
+
+### ไฟล์ที่เปลี่ยน
+`src/components/ImportWizard.tsx`, `src/components/WebsiteManager.tsx` (importOnly, incoming), `src/components/SalesImport.tsx` (incoming), `src/app/(app)/import/page.tsx`, `src/lib/website/parse.ts` (Search Console ต้องมี Position) · tests: website, `integration/browser-import.mjs` (ใหม่), run-all.sh
+
+### Data / Schema Impact
+- ไม่มี (ไม่ต้องกดเตรียม Google Sheet สำหรับข้อนี้)
+
+### Test Results
+**Passed:** 394/394 (รันทั้งชุด 2 รอบติดกัน) — website +1 (Google Ads Devices/Time series ไม่ถูกจับเป็น Search Console), เบราว์เซอร์จริงใหม่ 5 (Admin เลือก 6 ไฟล์พร้อมกัน: Google Ads 24 แถว → ไฟล์ถัดไป Viewers 30 วัน → Search Console 27 วัน → รายงานยอดขาย 12 รายการ → .txt ถูกปฏิเสธ · Marketing: .xlsx ถูกปฏิเสธพร้อมเหตุผล, Devices สองแบบแยกถูกส่วน, ไม่มี JS error) · TypeScript + Cloudflare build ผ่าน
+**Failed:** 0
+**Not Tested:** บนเว็บที่ deploy จริง/Google Sheet จริง
+

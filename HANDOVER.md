@@ -8,7 +8,7 @@
 ## 1. สรุปสถานะ (Definition of Done)
 
 สถานะ: ✅ ผ่าน · ⚠️ ผ่านบางส่วน/มีเงื่อนไข · ⛔ ไม่ได้ทำ (ระบุเหตุผล)
-"เว็บจริง" = ผู้ใช้ตรวจบนเว็บที่ deploy แล้ว · "อัตโนมัติ" = ชุดทดสอบ 388 รายการ (รวม HTTP Integration กับ production build)
+"เว็บจริง" = ผู้ใช้ตรวจบนเว็บที่ deploy แล้ว · "อัตโนมัติ" = ชุดทดสอบ 394 รายการ (รวม HTTP Integration กับ production build)
 
 | ข้อกำหนด | สถานะ | หลักฐาน |
 |---|---|---|
@@ -127,6 +127,7 @@
 ## 4. วิธีใช้งาน
 
 ### 4.1 นำเข้าข้อมูล (เมนู นำเข้า CSV — Admin / Marketing)
+- **นำเข้าทุกไฟล์ได้จากหน้านี้หน้าเดียว** และเลือกหลายไฟล์พร้อมกันได้: ไฟล์โฆษณา/Facebook ทำทีละไฟล์ (กด **ไฟล์ถัดไป**), ไฟล์ GA4/Search Console แสดงในส่วน **ไฟล์เว็บไซต์**, รายงานยอดขาย .xlsx แสดงในส่วน **ไฟล์รายงานยอดขาย** (เฉพาะ Admin — Marketing ไม่มีสิทธิ์ข้อมูลลูกค้า) · หน้า Website / Sales ยังนำเข้าได้ตามเดิม
 1. เลือกไฟล์ทีละไฟล์ ระบบตรวจประเภทรายงานจากหัวคอลัมน์เอง
 2. ตรวจ **พรีวิว**: จำนวน เพิ่ม / อัปเดต / ข้าม / ผิด, ช่วงวันที่, Area แล้วกดยืนยัน
    - **Facebook Page:** ส่งออกจาก Meta Business Suite แบบ **รายวัน** (คอลัมน์ Date เป็นวันที่) · แถวก่อนโพสต์เผยแพร่ที่เป็น 0 ทั้งหมดจะถูกข้าม · ไฟล์ที่มีทั้ง วัน/เดือน และ เดือน/วัน ถูกปฏิเสธ · ไฟล์ Lifetime ยังใช้ได้ (ต้องกรอกวันที่ส่งออก)
@@ -205,7 +206,7 @@
 - **ก่อน deploy ทุกครั้ง:** `npx opennextjs-cloudflare build` แล้ว `bash tests/run-all.sh` (วางไฟล์ตัวอย่างใน `tests/fixtures` ตาม README ในโฟลเดอร์นั้น)
 
 ## 8. ชุดทดสอบ
-`bash tests/run-all.sh` — 388 รายการ (security, sales, import, dashboard, overview, fbactions, performance, yoy, kpicard, website, fbpage, e2e, http-integration, browser-website)
+`bash tests/run-all.sh` — 394 รายการ (security, sales, import, dashboard, overview, fbactions, performance, yoy, kpicard, website, fbpage, e2e, http-integration, browser-website)
 - `tests/e2e.test.mts`: ทุกโมดูลผ่าน service + Google Sheets จำลอง
 - `tests/integration/run.mjs`: เปิด production build จริง ล็อกอินด้วยคุกกี้เซสชันจริงตาม Role แล้วเรียกหน้าเว็บ/API (ต้อง build ก่อน)
 - `tests/integration/browser-website.mjs`: เปิดหน้า Website ใน Chromium จริง อัปโหลดไฟล์จริง 9 ไฟล์ (รวม Reports snapshot) นำเข้า กรอกยอดผู้ใช้ แล้วตรวจหน้า Performance ต.ค. และ ก.ย. (ต้องมี Playwright)

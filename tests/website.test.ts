@@ -2,7 +2,7 @@
 // รัน: npx tsx tests/website.test.ts (ไฟล์ตัวอย่างอยู่ใน tests/fixtures/website/)
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
-import { assembleBatches, parseGscRange, parseWebsiteFile, TOP_N, WebParseError } from "../src/lib/website/parse";
+import { assembleBatches, detectKind, parseGscRange, parseWebsiteFile, TOP_N, WebParseError } from "../src/lib/website/parse";
 import { validateBatch, WebError } from "../src/lib/website/service";
 import { computePerformance, searchAt, websiteAt } from "../src/lib/performance";
 import { DEFAULT_EXCLUDED_PAGES, type DashData, type Row } from "../src/lib/dashboard";
@@ -161,4 +161,10 @@ k = perf({ web: snapRows, gtime: gt }, SEP);
 assert.equal(k.w_users.value, 17443); assert.equal(k.w_pvu.value, Math.round((42450 / 17443) * 100) / 100); assert.equal(k.w_dur.value, 60.042); assert.equal(k.w_sess.value, 22409);
 assert.equal(k.x_cppv.value, Math.round((28814.82 / 42450) * 100) / 100); assert.equal(k.x_spu.value, Math.round((28814.82 / 17443) * 100) / 100); assert.equal(k.x_cppv.incomplete, undefined);
 ok(`ข้อมูลจริง ก.ย. 2026 ทั้งหมด: PV/User ${(42450 / 17443).toFixed(2)} · Ads Cost per Page View = 28,814.82 ÷ 42,450 = ฿${(28814.82 / 42450).toFixed(2)} · Ads Spend per User = ฿${(28814.82 / 17443).toFixed(2)} (Google Ads Spend จริง ช่วงเดียวกัน)`);
+console.log("8) แยกไฟล์ Search Console ออกจากไฟล์ Google Ads (หน้า นำเข้า CSV ใช้ตัดสินว่าไฟล์ไปส่วนไหน)");
+assert.equal(detectKind(["Device", "Cost", "Impressions", "Clicks"]), null); // Google Ads Devices
+assert.equal(detectKind(["Date", "Clicks", "Impressions", "Avg. CPC", "Cost"]), null); // Google Ads Time series
+assert.equal(detectKind(["Device", "Clicks", "Impressions", "CTR", "Position"]), "gsc_devices");
+assert.equal(detectKind(["Date", "Clicks", "Impressions", "CTR", "Position"]), "gsc_chart");
+ok("ไฟล์ Google Ads (Devices / Time series) ไม่ถูกจับเป็น Search Console — Search Console ต้องมีคอลัมน์ Position");
 console.log(`\nผ่านทั้งหมด ${pass} รายการ`);

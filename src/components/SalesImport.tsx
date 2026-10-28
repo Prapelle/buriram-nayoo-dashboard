@@ -18,7 +18,8 @@ const dmy = (iso: string) => (/^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(8, 1
 const when = (iso: string) => { try { return new Date(iso).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", dateStyle: "short", timeStyle: "short" }); } catch { return iso; } };
 const ST: Record<string, [string, string]> = { insert: ["เพิ่มใหม่", "bg-green-100 text-green-800"], update: ["อัปเดต", "bg-blue-100 text-blue-800"], duplicate: ["ซ้ำ (ข้าม)", "bg-slate-100 text-slate-600"] };
 
-export function SalesImport() {
+/** incoming: ไฟล์ที่เลือกมาจากหน้า นำเข้า CSV */
+export function SalesImport({ incoming }: { incoming?: { file: File; id: number } } = {}) {
   const [file, setFile] = useState<{ name: string; sheet: string; grid: Cell[][]; at: string } | null>(null);
   const [edit, setEdit] = useState({ taxId: "", companyName: "", periodStart: "", periodEnd: "" });
   const [mode, setMode] = useState<"skip" | "update">("skip");
@@ -52,6 +53,7 @@ export function SalesImport() {
     } catch (err) { setPlan(null); setError(err instanceof Error ? err.message : "เกิดข้อผิดพลาด"); setState("error"); }
   }
 
+  useEffect(() => { if (incoming) pick(incoming.file); }, [incoming]); // eslint-disable-line react-hooks/exhaustive-deps
   async function pick(f?: File | null) {
     if (!f) return;
     if (!/\.xlsx$/i.test(f.name)) { setError("รองรับเฉพาะไฟล์ Excel .xlsx"); setState("error"); return; }

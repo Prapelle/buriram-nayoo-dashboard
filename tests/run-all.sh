@@ -26,3 +26,4 @@ fi
 if [ -f .next/BUILD_ID ]; then echo "== http-integration"; node tests/integration/run.mjs; else echo "(ข้าม http-integration: ยังไม่ได้ build)"; fi
 # Phase 5: หน้า Website ในเบราว์เซอร์จริง (ต้องมี Playwright + Chromium และไฟล์ใน tests/fixtures/website)
 if [ -f .next/BUILD_ID ] && [ -f "${FIXTURE_DIR:-tests/fixtures}/website/ga4_pages.csv" ] && node -e 'require("playwright")' 2>/dev/null; then echo "== browser-website"; sleep 3; node tests/integration/browser-website.mjs; else echo "(ข้าม browser-website)"; fi
+if [ -f .next/BUILD_ID ] && [ -f "${FIXTURE_DIR:-tests/fixtures}/fbpage/Viewers.csv" ] && node -e 'require("playwright")' 2>/dev/null; then echo "== browser-import"; sleep 3; node tests/integration/browser-import.mjs; else echo "(ข้าม browser-import)"; fi

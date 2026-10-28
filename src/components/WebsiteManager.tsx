@@ -24,7 +24,8 @@ const DIM_COLS: Record<string, Col[]> = {
 const SORT: Record<string, string> = { ga4_page: "views", ga4_page_title: "views", ga4_first_user_source: "users", ga4_session_source: "sessions", ga4_city: "users" };
 const DIM_TITLE: Record<string, string> = { ga4_page_title: "GA4 Snapshot — หน้า (ชื่อหน้า)", ga4_session_source: "GA4 Snapshot — Sessions ตามแหล่งที่มา", ga4_first_user_source: "GA4 Snapshot — แหล่งที่มาของผู้ใช้ครั้งแรก", ga4_city: "GA4 Snapshot — เมือง", ga4_page: "GA4 — หน้าที่มีการดูมากที่สุด", search_page: "Search Console — หน้า", search_query: "Search Console — คำค้นหา", search_device: "Search Console — อุปกรณ์", search_country: "Search Console — ประเทศ", search_appearance: "Search Console — ลักษณะการแสดงผล" };
 
-export function WebsiteManager({ isAdmin }: { isAdmin: boolean }) {
+/** importOnly + incoming: ใช้ในหน้า นำเข้า CSV (รับไฟล์ที่เลือกมาจากหน้านั้น แสดงเฉพาะส่วนนำเข้า) */
+export function WebsiteManager({ isAdmin, importOnly = false, incoming }: { isAdmin: boolean; importOnly?: boolean; incoming?: { files: File[]; id: number } }) {
   const [files, setFiles] = useState<(ParsedFile & { sha256: string })[]>([]);
   const [drag, setDrag] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -51,7 +52,8 @@ export function WebsiteManager({ isAdmin }: { isAdmin: boolean }) {
   const assembled = useMemo(() => assembleBatches(files, period.start && period.end ? period : undefined), [files, period]);
   const needPeriod = files.some((f) => f.kind.startsWith("gsc_") && f.kind !== "gsc_chart" && f.kind !== "gsc_filters") && !files.some((f) => f.kind === "gsc_filters" || f.kind === "gsc_chart");
 
-  async function pick(list: FileList | null) {
+  useEffect(() => { if (incoming?.files.length) pick(incoming.files); }, [incoming]); // eslint-disable-line react-hooks/exhaustive-deps
+  async function pick(list: FileList | File[] | null) {
     if (!list?.length) return;
     setReading(true); setMsg(null); setPlans(null); setFileErrors([]);
     const ok: (ParsedFile & { sha256: string })[] = [], errs: string[] = [];
@@ -102,7 +104,7 @@ export function WebsiteManager({ isAdmin }: { isAdmin: boolean }) {
       {data?.error && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">{data.error}</p>}
 
       <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-5">
-        <h2 className="font-semibold">1. นำเข้าไฟล์ GA4 / Search Console</h2>
+        <h2 className="font-semibold">{importOnly ? "ไฟล์เว็บไซต์ (GA4 / Search Console)" : "1. นำเข้าไฟล์ GA4 / Search Console"}</h2>
         <p className="text-sm text-slate-600">เลือกได้หลายไฟล์พร้อมกัน (CSV): GA4 → <b>Reports snapshot</b> (มียอดผู้ใช้จริง — แนะนำ) และ/หรือ หน้าและหน้าจอ (Pages and screens) · Search Console → ส่งออก Performance แล้วเลือกไฟล์ทั้งหมดในโฟลเดอร์ (Chart, Pages, Queries, Countries, Devices, Search appearance และ <b>Filters</b> ที่ใช้บอกช่วงวันที่) · ระบบอ่านไฟล์ในเครื่องของคุณก่อน แล้วส่งเฉพาะยอดสรุปขึ้นระบบ</p>
         <div onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)}
           onDrop={(e) => { e.preventDefault(); setDrag(false); if (!reading && !busy) pick(e.dataTransfer.files); }}
@@ -139,6 +141,7 @@ export function WebsiteManager({ isAdmin }: { isAdmin: boolean }) {
         )}
       </section>
 
+      {!importOnly && <>
       <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-5">
         <h2 className="font-semibold">2. ยอดผู้ใช้เว็บไซต์ (กรอกเอง)</h2>
         <p className="text-sm text-slate-600"><b>ไม่ต้องกรอก ถ้านำเข้าไฟล์ GA4 Reports snapshot ของช่วงเดียวกันแล้ว</b> (ไฟล์นั้นมี Active users จริง) · ใช้เมื่อมีแต่ไฟล์ หน้าและหน้าจอ ซึ่งไม่มียอดผู้ใช้รวม — ดูยอด <b>Active users</b> ของช่วงเดียวกันใน GA4 แล้วกรอกที่นี่</p>
@@ -191,6 +194,7 @@ export function WebsiteManager({ isAdmin }: { isAdmin: boolean }) {
           </>
         )}
       </section>
+      </>}
     </div>
   );
 }
