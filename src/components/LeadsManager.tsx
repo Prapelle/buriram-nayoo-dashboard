@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CHANNELS, SERVICES } from "@/lib/dashboard";
+import { CALL_DEFAULT, normCall } from "@/lib/lead-options";
 import {
   AREA_OPTIONS, BUY_STATUS, CALL_STATUS, CONDITIONS, EDITABLE, NEEDS, PRICE_RANGES, PROPERTY_TYPES, SELL_STATUS,
   filterLeads, leadStatusOf, statusFieldOf, statusOptionsOf, todayBkk, type DupMatch, type Lead,
@@ -14,9 +15,9 @@ const STATUS_COLOR: Record<string, string> = {
   รอติดต่อ: "bg-slate-100", สนใจขาย: "bg-sky-100", นัดทำสัญญา: "bg-amber-100", เซ็นสัญญา: "bg-indigo-100", สัญญาเปิด: "bg-violet-100",
   ขายแล้ว: "bg-green-100", ยกเลิก: "bg-slate-200", บ้านไม่พร้อมขาย: "bg-slate-200",
 };
-const CALL_COLOR: Record<string, string> = { ยังไม่ได้โทร: "bg-slate-100", ติดต่อไม่ได้: "bg-red-50", ติดต่อได้แล้ว: "bg-green-50", เข้าชมโครงการแล้ว: "bg-sky-50", ซื้อสำเร็จ: "bg-emerald-100", ไม่สนใจ: "bg-amber-50" };
+const CALL_COLOR: Record<string, string> = { รอติดต่อ: "bg-slate-100", ติดต่อได้แล้ว: "bg-green-50", รอเข้าชม: "bg-yellow-50", เข้าชมแล้ว: "bg-sky-50", จอง: "bg-violet-100", ซื้อสำเร็จ: "bg-emerald-100", กู้ไม่ผ่าน: "bg-orange-100", ติดต่อไม่ได้: "bg-red-50", ไม่สนใจ: "bg-amber-50" };
 const CLOSED = ["Close", "Archive", "ขายแล้ว", "ยกเลิก", "บ้านไม่พร้อมขาย"];
-const emptyForm = (): Lead => ({ ...Object.fromEntries(EDITABLE.map((k) => [k, ""])), received_at: todayBkk(), area: "unknown", call_status: "ยังไม่ได้โทร" });
+const emptyForm = (): Lead => ({ ...Object.fromEntries(EDITABLE.map((k) => [k, ""])), received_at: todayBkk(), area: "unknown", call_status: CALL_DEFAULT });
 const EMPTY_F = { q: "", from: "", to: "", channel: "", need: "", status: "", callStatus: "", staff: "", area: "", service: "" };
 const statusLabel = (need: string) => (statusFieldOf(need) === "buy_status" ? "Buy Status" : statusFieldOf(need) === "sell_status" ? "Sell Status" : "Status");
 type Conflict = { field: string; value: string };
@@ -58,7 +59,7 @@ export function LeadsManager() {
   }
   const closeForm = () => { setForm(null); setEditing(null); setErrors({}); setDups(null); setNeedAsk(null); setDelAsk(false); };
   const openForm = (r: Lead | null) => {
-    setForm(r ? { ...emptyForm(), ...Object.fromEntries(EDITABLE.map((k) => [k, r[k] ?? ""])), call_status: r.call_status || "ยังไม่ได้โทร" } : emptyForm());
+    setForm(r ? { ...emptyForm(), ...Object.fromEntries(EDITABLE.map((k) => [k, r[k] ?? ""])), call_status: normCall(r.call_status) || CALL_DEFAULT } : emptyForm());
     setEditing(r); setViewing(null); setErrors({}); setDups(null); setNeedAsk(null); setDelAsk(false); setMsg(null);
     setMore(!!r && ["company_name", "email", "campaign_name", "service_category", "service_interest", "next_follow_up_at", "last_contacted_at", "lost_reason"].some((k) => r[k]));
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -262,7 +263,7 @@ export function LeadsManager() {
                     <td>{k ? <select aria-label={`${statusLabel(r.need)} ${r.lead_code}`} value={st} disabled={busy} onChange={(e) => quick(r, k, e.target.value)} className={`rounded px-1.5 py-1 text-xs ${STATUS_COLOR[st] ?? "bg-white"}`}><option value="">— ว่าง —</option>{opts.map((s) => <option key={s}>{s}</option>)}</select>
                       : <span className="text-xs text-slate-400">{r.status}</span>}</td>
                     <td className="whitespace-nowrap text-xs">{[r.property_type, r.price_range].filter(Boolean).join(" · ")}</td>
-                    <td><select aria-label={`Call Status ${r.lead_code}`} value={r.call_status || "ยังไม่ได้โทร"} disabled={busy || !r.need} onChange={(e) => quick(r, "call_status", e.target.value)} className={`rounded px-1.5 py-1 text-xs ${CALL_COLOR[r.call_status || "ยังไม่ได้โทร"]}`}>{CALL_STATUS.map((s) => <option key={s}>{s}</option>)}</select></td>
+                    <td><select aria-label={`Call Status ${r.lead_code}`} value={normCall(r.call_status) || CALL_DEFAULT} disabled={busy || !r.need} onChange={(e) => quick(r, "call_status", e.target.value)} className={`rounded px-1.5 py-1 text-xs ${CALL_COLOR[normCall(r.call_status) || CALL_DEFAULT]}`}>{CALL_STATUS.map((s) => <option key={s}>{s}</option>)}</select></td>
                     <td className="max-w-32 truncate">{r.staff}</td>
                     <td className={`whitespace-nowrap ${overdue ? "font-semibold text-red-600" : ""}`}>{dmy(r.next_follow_up_at) || <span className="text-slate-300">ว่าง</span>}{overdue && " (เลยกำหนด)"}</td>
                     <td className="whitespace-nowrap p-2 text-right"><button onClick={() => { setViewing(r); setForm(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="underline">ดู</button> · <button onClick={() => openForm(r)} className="underline">แก้ไข</button></td>

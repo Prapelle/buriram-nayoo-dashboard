@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/guard";
-import { changeSellStatus, deleteLead, LeadError, listLeads, saveLead } from "@/lib/leads-service";
+import { changeLeadStatus, deleteLead, LeadError, listLeads, saveLead } from "@/lib/leads-service";
 
 export const dynamic = "force-dynamic";
 
@@ -31,12 +31,13 @@ export async function DELETE(req: Request) {
   } catch (e) { return fail(e); }
 }
 
-// เปลี่ยน Sell Status อย่างเดียว (หน้า Seller Leads)
+// เปลี่ยนสถานะช่องเดียว: field = sell_status (Seller Leads) หรือ call_status (Buyer Leads)
 export async function PATCH(req: Request) {
   const g = await requireRole(["admin", "sales"]);
   if (!g.ok) return g.res;
   try {
-    const b = (await req.json()) as { lead_id?: string; sell_status?: string; updated_at_seen?: string };
-    return NextResponse.json(await changeSellStatus(String(b.lead_id ?? ""), String(b.sell_status ?? ""), String(b.updated_at_seen ?? ""), g.email));
+    const b = (await req.json()) as { lead_id?: string; field?: string; value?: string; updated_at_seen?: string };
+    if (b.field !== "sell_status" && b.field !== "call_status") throw new LeadError(400, "ไม่รองรับช่องนี้", "BAD_REQUEST");
+    return NextResponse.json(await changeLeadStatus(String(b.lead_id ?? ""), b.field, String(b.value ?? ""), String(b.updated_at_seen ?? ""), g.email));
   } catch (e) { return fail(e); }
 }

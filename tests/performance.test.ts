@@ -102,7 +102,7 @@ ok("Buy Status: Hot 2, Warm 0, Cold 1, Archive 0, Close 0, ยังไม่ร
 console.log("8) Customer Funnel + ประสิทธิภาพแต่ละช่องทาง (คำขอ 28/10/2026)");
 {
   const Ld = (id: string, day: string, ch: string, call = ""): Row => ({ lead_id: id, received_at: day, source_channel: ch, call_status: call });
-  const fl: Row[] = [Ld("F1", "2026-09-02", "Facebook Ads", "ซื้อสำเร็จ"), Ld("F2", "2026-09-03", "Facebook Ads", "เข้าชมโครงการแล้ว"), Ld("F3", "2026-09-04", "Facebook Ads", "ติดต่อไม่ได้"), Ld("F4", "2026-09-05", "Facebook Ads", "ไม่สนใจ"),
+  const fl: Row[] = [Ld("F1", "2026-09-02", "Facebook Ads", "ซื้อสำเร็จ"), Ld("F2", "2026-09-03", "Facebook Ads", "เข้าชมแล้ว"), Ld("F3", "2026-09-04", "Facebook Ads", "ติดต่อไม่ได้"), Ld("F4", "2026-09-05", "Facebook Ads", "ไม่สนใจ"),
     Ld("G1", "2026-09-06", "Google Ads", "ติดต่อได้แล้ว"), Ld("G2", "2026-09-07", "Google Ads"), Ld("L1", "2026-09-08", "LINE OA", "ซื้อสำเร็จ"), Ld("F1", "2026-09-09", "Facebook Ads", "ซื้อสำเร็จ") /* ซ้ำ */, Ld("X1", "2026-10-02", "LINE OA")];
   const web: Row[] = [{ source: "ga4_snapshot", granularity: "period", report_start: "2026-09-01", report_end: "2026-09-30", website_users: "17443", sessions: "22409", page_views: "42450", avg_engagement_sec_per_user: "60.042" }];
   const { p: fp, k: fk } = run({ leads: fl, web });

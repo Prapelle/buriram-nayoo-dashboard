@@ -1,22 +1,43 @@
 "use client";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { SELL_DEFAULT, SELL_STATUS } from "@/lib/lead-options";
+import { BUY_NEEDS, CALL_DEFAULT, CALL_STATUS, normCall, SELL_DEFAULT, SELL_NEEDS, SELL_STATUS } from "@/lib/lead-options";
 import { filterLeads, leadStatusOf, todayBkk, type Lead } from "@/lib/leads";
+
+/** บอร์ด Kanban ของ Lead: seller = คอลัมน์ตาม Sell Status (Need = ขาย) · buyer = คอลัมน์ตาม Call Status (Need = ซื้อ/เช่า/สร้าง) */
+const CFG = {
+  seller: {
+    field: "sell_status", statuses: SELL_STATUS, def: SELL_DEFAULT, needs: SELL_NEEDS, label: "Sell Status",
+    closed: ["ขายแล้ว", "ยกเลิก", "บ้านไม่พร้อมขาย"], none: "Lead ที่ Need = ขาย",
+    note: `Lead ขายที่ยังไม่มี Sell Status จะอยู่ที่ "${SELL_DEFAULT}" · เมื่อเปลี่ยนสถานะ ขั้น Pipeline ใน Dashboard จะคำนวณใหม่อัตโนมัติ`,
+  },
+  buyer: {
+    field: "call_status", statuses: CALL_STATUS, def: CALL_DEFAULT, needs: BUY_NEEDS, label: "Call Status",
+    closed: ["ซื้อสำเร็จ", "กู้ไม่ผ่าน", "ไม่สนใจ"], none: "Lead ที่ Need = ซื้อ / เช่า / สร้าง",
+    note: `Lead ที่ยังไม่มี Call Status จะอยู่ที่ "${CALL_DEFAULT}" · เมื่อเปลี่ยนสถานะ Qualified Leads และ contactable ใน Dashboard จะคำนวณใหม่อัตโนมัติ`,
+  },
+} as const;
 
 const OTHER = "__other";
 const HEAD: Record<string, string> = {
   รอติดต่อ: "bg-slate-200", สนใจขาย: "bg-sky-200", นัดทำสัญญา: "bg-amber-200", เซ็นสัญญา: "bg-indigo-200", สัญญาเปิด: "bg-violet-200",
-  บ้านไม่พร้อมขาย: "bg-slate-300", ขายแล้ว: "bg-green-200", ยกเลิก: "bg-rose-200", [OTHER]: "bg-amber-100",
+  บ้านไม่พร้อมขาย: "bg-slate-300", ขายแล้ว: "bg-green-200", ยกเลิก: "bg-rose-200",
+  ติดต่อได้แล้ว: "bg-green-100", รอเข้าชม: "bg-yellow-200", เข้าชมแล้ว: "bg-sky-200", จอง: "bg-violet-200", ซื้อสำเร็จ: "bg-emerald-200",
+  กู้ไม่ผ่าน: "bg-orange-200", ติดต่อไม่ได้: "bg-red-200", ไม่สนใจ: "bg-slate-300", [OTHER]: "bg-amber-100",
 };
-const CLOSED = ["ขายแล้ว", "ยกเลิก", "บ้านไม่พร้อมขาย"];
 const dmy = (iso: string) => (/^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "");
-/** คอลัมน์ของ Lead: ไม่มี Sell Status = รอติดต่อ · ค่าที่ไม่อยู่ในรายการ (เช่นค่าเก่า) ไปคอลัมน์ "ค่าเดิมที่ไม่รู้จัก" */
-const colOf = (r: Lead) => { const s = leadStatusOf(r) || SELL_DEFAULT; return SELL_STATUS.includes(s) ? s : OTHER; };
 
-export function SellerBoard() {
+export function StatusBoard({ kind }: { kind: "seller" | "buyer" }) {
+  const cfg = CFG[kind];
+  const statuses: readonly string[] = cfg.statuses;
+  /** คอลัมน์ของ Lead: ไม่มีสถานะ = ขั้นแรก · ค่าที่ไม่อยู่ในรายการ ไปคอลัมน์ "ค่าเดิมที่ไม่รู้จัก" */
+  const colOf = useCallback((r: Lead) => {
+    const s = (kind === "seller" ? leadStatusOf(r) : normCall(r.call_status)) || cfg.def;
+    return statuses.includes(s) ? s : OTHER;
+  }, [kind, cfg.def, statuses]);
+
   const [state, setState] = useState<"loading" | "ok" | "error">("loading");
-  const [rows, setRows] = useState<Lead[]>([]);
+  const [all, setAll] = useState<Lead[]>([]);
   const [staff, setStaff] = useState<string[]>([]);
   const [q, setQ] = useState("");
   const [staffF, setStaffF] = useState("");
@@ -29,39 +50,41 @@ export function SellerBoard() {
     try {
       const r = await fetch("/api/leads"); const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
-      setRows((j.rows as Lead[]).filter((x) => x.need === "ขาย")); setStaff(j.staff ?? []); setState("ok");
+      setAll(j.rows as Lead[]); setStaff(j.staff ?? []); setState("ok");
     } catch (e) { setMsg({ type: "error", text: e instanceof Error ? e.message : "โหลดข้อมูลไม่ได้" }); setState("error"); }
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  const rows = useMemo(() => all.filter((x) => (cfg.needs as readonly string[]).includes(x.need)), [all, cfg.needs]);
+  const noNeed = useMemo(() => all.filter((x) => !x.need).length, [all]);
   const shown = useMemo(() => filterLeads(rows, { q, staff: staffF }), [rows, q, staffF]);
   const cols = useMemo(() => {
-    const m: Record<string, Lead[]> = Object.fromEntries([...SELL_STATUS, OTHER].map((s) => [s, []]));
+    const m: Record<string, Lead[]> = Object.fromEntries([...statuses, OTHER].map((s) => [s, []]));
     for (const r of shown) m[colOf(r)].push(r);
     return m;
-  }, [shown]);
+  }, [shown, statuses, colOf]);
   const today = todayBkk();
 
   async function move(id: string, to: string) {
-    const row = rows.find((r) => r.lead_id === id);
-    if (!row || busy.has(id) || !SELL_STATUS.includes(to) || colOf(row) === to) return;
+    const row = all.find((r) => r.lead_id === id);
+    if (!row || busy.has(id) || !statuses.includes(to) || colOf(row) === to) return;
     const before = row;
     setBusy((b) => new Set(b).add(id)); setMsg(null);
-    setRows((rs) => rs.map((r) => (r.lead_id === id ? { ...r, sell_status: to } : r))); // แสดงผลทันที
+    setAll((rs) => rs.map((r) => (r.lead_id === id ? { ...r, [cfg.field]: to } : r))); // แสดงผลทันที
     try {
-      const r = await fetch("/api/leads", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ lead_id: id, sell_status: to, updated_at_seen: before.updated_at }) });
+      const r = await fetch("/api/leads", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ lead_id: id, field: cfg.field, value: to, updated_at_seen: before.updated_at }) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "เปลี่ยนสถานะไม่สำเร็จ");
-      setRows((rs) => rs.map((x) => (x.lead_id === id ? (j.lead as Lead) : x)));
+      setAll((rs) => rs.map((x) => (x.lead_id === id ? (j.lead as Lead) : x)));
       setMsg({ type: "ok", text: `${before.customer_name}: ${colOf(before) === OTHER ? "ค่าเดิม" : colOf(before)} → ${to}` });
     } catch (e) {
-      setRows((rs) => rs.map((x) => (x.lead_id === id ? before : x))); // คืนค่าเดิม
+      setAll((rs) => rs.map((x) => (x.lead_id === id ? before : x))); // คืนค่าเดิม
       setMsg({ type: "error", text: e instanceof Error ? e.message : "เกิดข้อผิดพลาด" });
       load();
     } finally { setBusy((b) => { const n = new Set(b); n.delete(id); return n; }); }
   }
 
-  const colKeys = [...SELL_STATUS, ...(cols[OTHER].length ? [OTHER] : [])];
+  const colKeys = [...statuses, ...(cols[OTHER].length ? [OTHER] : [])];
 
   return (
     <div className="space-y-3">
@@ -76,7 +99,7 @@ export function SellerBoard() {
       </div>
 
       {state === "loading" && <p className="text-sm text-slate-500">กำลังโหลด...</p>}
-      {state === "ok" && rows.length === 0 && <p className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">ยังไม่มี Lead ที่ Need = ขาย — เพิ่มได้ที่หน้า Leads</p>}
+      {state === "ok" && rows.length === 0 && <p className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">ยังไม่มี {cfg.none} — เพิ่มได้ที่หน้า Leads</p>}
 
       {state === "ok" && rows.length > 0 && (
         <div className="flex items-start gap-3 overflow-x-auto pb-3">
@@ -94,7 +117,7 @@ export function SellerBoard() {
                 <ul className="flex-1 space-y-2 overflow-y-auto p-2">
                   {list.length === 0 && <li className="py-6 text-center text-xs text-slate-400">ว่าง</li>}
                   {list.map((r) => {
-                    const overdue = r.next_follow_up_at && r.next_follow_up_at < today && !CLOSED.includes(colOf(r));
+                    const overdue = r.next_follow_up_at && r.next_follow_up_at < today && !(cfg.closed as readonly string[]).includes(colOf(r));
                     const b = busy.has(r.lead_id);
                     return (
                       <li key={r.lead_id} draggable={!b}
@@ -103,15 +126,16 @@ export function SellerBoard() {
                         className={`rounded-md border border-slate-200 bg-white p-2.5 text-sm shadow-sm ${b ? "opacity-50" : "cursor-grab active:cursor-grabbing"} ${dragId === r.lead_id ? "opacity-40" : ""}`}>
                         <div className="font-medium leading-snug">{r.customer_name}</div>
                         <div className="mt-0.5 text-xs text-slate-500">{[r.phone, r.property_type, r.price_range].filter(Boolean).join(" · ") || <span className="text-slate-300">—</span>}</div>
+                        {kind === "buyer" && <div className="mt-1 flex gap-1 text-[11px]"><span className="rounded bg-slate-100 px-1.5 py-0.5">{r.need}</span>{r.buy_status && <span className="rounded bg-slate-100 px-1.5 py-0.5">{r.buy_status}</span>}</div>}
                         <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
                           <span className="font-mono">{r.lead_code}</span>
                           {r.staff && <span>{r.staff}</span>}
                           {r.next_follow_up_at && <span className={overdue ? "font-semibold text-red-600" : ""}>ติดตาม {dmy(r.next_follow_up_at)}{overdue && " (เลยกำหนด)"}</span>}
                         </div>
-                        <select aria-label={`เปลี่ยนสถานะ ${r.customer_name}`} value={isOther ? "" : colOf(r)} disabled={b} onChange={(e) => move(r.lead_id, e.target.value)}
+                        <select aria-label={`เปลี่ยน ${cfg.label} ${r.customer_name}`} value={isOther ? "" : colOf(r)} disabled={b} onChange={(e) => move(r.lead_id, e.target.value)}
                           className="mt-2 w-full rounded border border-slate-300 bg-white px-1.5 py-1 text-xs">
                           {isOther && <option value="">— เลือกสถานะ —</option>}
-                          {SELL_STATUS.map((s) => <option key={s}>{s}</option>)}
+                          {statuses.map((s) => <option key={s}>{s}</option>)}
                         </select>
                       </li>);
                   })}
@@ -120,7 +144,7 @@ export function SellerBoard() {
           })}
         </div>
       )}
-      <p className="text-xs text-slate-500">• Lead ขายที่ยังไม่มี Sell Status จะอยู่ที่ &quot;{SELL_DEFAULT}&quot; · ลากบนมือถือไม่สะดวก ใช้เมนูสถานะบนการ์ดแทน · เมื่อเปลี่ยนสถานะ ขั้น Pipeline ใน Dashboard จะคำนวณใหม่อัตโนมัติ</p>
+      <p className="text-xs text-slate-500">• {cfg.note} · ลากบนมือถือไม่สะดวก ใช้เมนูสถานะบนการ์ดแทน{noNeed > 0 && ` · มี ${noNeed} Lead ที่ยังไม่ระบุ Need ไม่แสดงบนบอร์ด (กำหนด Need ที่หน้า Leads)`}</p>
     </div>
   );
 }

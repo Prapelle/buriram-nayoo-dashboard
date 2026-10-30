@@ -1,6 +1,6 @@
 import { writeAudit } from "./audit";
-import { isQualifiedCall, SELL_DEFAULT, SELL_STATUS } from "./lead-options";
-import { findDuplicates, LEAD_COLUMNS, leadStatusOf, nextLeadCode, normalizeEmail, normalizePhone, pipelineOf, resolveNeedStatus, stampStatus, statusFieldOf, todayBkk, validateLead, type DupMatch, type Lead } from "./leads";
+import { CALL_DEFAULT, CALL_STATUS, normCall, SELL_DEFAULT, SELL_STATUS } from "./lead-options";
+import { contactableFor, findDuplicates, LEAD_COLUMNS, leadStatusOf, nextLeadCode, normalizeEmail, normalizePhone, pipelineOf, resolveNeedStatus, stampStatus, statusFieldOf, todayBkk, validateLead, type DupMatch, type Lead } from "./leads";
 import { appendRows, batchUpdateValues, colLetter, deleteRow, listTabs, readTabs, toRow } from "./sheets";
 import { readColumns } from "./tabdata";
 
@@ -12,7 +12,7 @@ async function load() {
   try { return await readTabs(["LEADS", "APP_USERS", "APP_CONFIG"]); }
   catch { throw new LeadError(409, "อ่านฐานข้อมูลไม่ได้ กรุณาไปที่ ตั้งค่า → เตรียม Google Sheet", "SHEET_NOT_READY"); }
 }
-const pick = (r: Record<string, string>): Lead => Object.fromEntries(LEAD_COLUMNS.map((c) => [c, r[c] ?? ""]));
+const pick = (r: Record<string, string>): Lead => { const o: Lead = Object.fromEntries(LEAD_COLUMNS.map((c) => [c, r[c] ?? ""])); o.call_status = normCall(o.call_status); return o; };
 
 export async function listLeads() {
   const t = await load();
@@ -61,8 +61,8 @@ export async function saveLead(input: Record<string, unknown>, actor: string) {
   // ขั้น Pipeline เดิม (ใช้ใน Dashboard) คำนวณจาก Buy/Sell Status · Lead เก่าที่ยังไม่มี Need ไม่ถูกลดขั้นโดยอัตโนมัติ
   const derived = pipelineOf(recIn);
   recIn.status = prev && !prev.need && !leadStatusOf(recIn) && ["Qualified", "Proposal", "Won", "Lost"].includes(prev.status) ? prev.status : derived;
-  // ติดต่อได้แล้ว / เข้าชมโครงการแล้ว / ซื้อสำเร็จ / ไม่สนใจ = คุยกับลูกค้าได้แล้ว → contactable TRUE · ติดต่อไม่ได้ → FALSE
-  if (isQualifiedCall(recIn.call_status) || recIn.call_status === "ไม่สนใจ") recIn.contactable = "TRUE"; else if (recIn.call_status === "ติดต่อไม่ได้") recIn.contactable = "FALSE";
+  // คุยกับลูกค้าได้แล้ว (Qualified / ไม่สนใจ) → contactable TRUE · ติดต่อไม่ได้ → FALSE
+  recIn.contactable = contactableFor(recIn.call_status, recIn.contactable);
   v.rec = recIn;
   const stamps = stampStatus(prev, v.rec, today);
   if (!prev) {
@@ -113,25 +113,32 @@ export async function deleteLead(leadId: string, updatedAtSeen: string, actor: s
   return { deleted: true, lead_code: row.lead_code };
 }
 
-/** เปลี่ยน Sell Status อย่างเดียว (ลากวางบนหน้า Seller Leads): ตรวจข้อมูลเก่า, คำนวณขั้น Pipeline ใหม่, บันทึก Audit */
-export async function changeSellStatus(leadId: string, sellStatus: string, updatedAtSeen: string, actor: string) {
+export type StatusField = "sell_status" | "call_status";
+
+/** เปลี่ยนสถานะช่องเดียว (ลากวางบนหน้า Seller Leads = sell_status / Buyer Leads = call_status): ตรวจข้อมูลเก่า, คำนวณขั้น Pipeline และ contactable ใหม่, บันทึก Audit */
+export async function changeLeadStatus(leadId: string, field: StatusField, value: string, updatedAtSeen: string, actor: string) {
   if (!leadId) throw new LeadError(400, "ไม่ระบุ Lead", "BAD_REQUEST");
-  if (!SELL_STATUS.includes(sellStatus)) throw new LeadError(422, "Sell Status ไม่ถูกต้อง", "VALIDATION", { fields: { sell_status: "Sell Status ไม่ถูกต้อง" } });
+  const label = field === "sell_status" ? "Sell Status" : "Call Status";
+  if (!(field === "sell_status" ? SELL_STATUS : CALL_STATUS).includes(value)) throw new LeadError(422, `${label} ไม่ถูกต้อง`, "VALIDATION", { fields: { [field]: `${label} ไม่ถูกต้อง` } });
   const t = await load();
   const tab = t.LEADS;
-  if (!tab.headers.includes("sell_status")) throw new LeadError(409, "แท็บ LEADS ยังไม่พร้อม กรุณากด เตรียม Google Sheet", "SHEET_NOT_READY");
+  if (!tab.headers.includes(field)) throw new LeadError(409, "แท็บ LEADS ยังไม่พร้อม กรุณากด เตรียม Google Sheet", "SHEET_NOT_READY");
   const i = tab.rows.findIndex((r) => r.lead_id === leadId);
   if (i < 0) throw new LeadError(404, "ไม่พบ Lead นี้ (อาจถูกลบออกจาก Sheet)", "NOT_FOUND");
   const prev = pick(tab.rows[i]); const rowNo = i + 2;
-  if (statusFieldOf(prev.need) !== "sell_status") throw new LeadError(409, "Lead นี้ไม่ใช่ Need = ขาย จึงไม่มี Sell Status", "NOT_SELL");
+  if (field === "sell_status" && statusFieldOf(prev.need) !== "sell_status") throw new LeadError(409, "Lead นี้ไม่ใช่ Need = ขาย จึงไม่มี Sell Status", "NOT_SELL");
+  if (field === "call_status" && !prev.need) throw new LeadError(409, "Lead นี้ยังไม่ระบุ Need กรุณาไปที่หน้า Leads เพื่อเลือก Need ก่อน", "NO_NEED");
   if (updatedAtSeen !== prev.updated_at) throw new LeadError(409, "Lead นี้ถูกแก้ไขโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่ก่อนแก้ไข", "STALE");
-  const before = prev.sell_status || SELL_DEFAULT;
-  if (before === sellStatus && prev.sell_status) return { changed: false, lead: prev };
+  const before = prev[field] || (field === "sell_status" ? SELL_DEFAULT : CALL_DEFAULT);
+  if (prev[field] && prev[field] === value) return { changed: false, lead: prev };
 
-  const rec: Lead = { ...prev, sell_status: sellStatus };
+  const rec: Lead = { ...prev, [field]: value };
+  if (field === "call_status") rec.contactable = contactableFor(value, prev.contactable);
   rec.status = pipelineOf(rec);
   Object.assign(rec, stampStatus(prev, rec, todayBkk()), { updated_by: actor, updated_at: new Date().toISOString() });
   await batchUpdateValues([{ range: `'LEADS'!A${rowNo}:${colLetter(tab.headers.length - 1)}${rowNo}`, values: [toRow(tab.headers, rec)] }]);
-  await writeAudit(actor, "lead_status_change", "lead", rec.lead_id, `${rec.lead_code}: สถานะ ${before} → ${sellStatus}`);
+  if (field === "sell_status") await writeAudit(actor, "lead_status_change", "lead", rec.lead_id, `${rec.lead_code}: สถานะ ${before} → ${value}`);
+  else await writeAudit(actor, "lead_update", "lead", rec.lead_id, `${rec.lead_code}: Call ${before} → ${value}`);
   return { changed: true, lead: rec };
 }
+export const changeSellStatus = (leadId: string, sellStatus: string, updatedAtSeen: string, actor: string) => changeLeadStatus(leadId, "sell_status", sellStatus, updatedAtSeen, actor);

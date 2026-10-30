@@ -2,7 +2,7 @@ import { CHANNELS, SERVICES } from "./dashboard";
 import { isIsoDate } from "./import/normalize";
 
 export const AREA_OPTIONS: [string, string][] = [["unknown", "ไม่ทราบ (Unknown)"], ["buriram", "บุรีรัมย์"], ["surin", "สุรินทร์"], ["multi_province", "หลายจังหวัด"]];
-import { isQualifiedCall, NEEDS, BUY_NEEDS, SELL_NEEDS, BUY_STATUS, SELL_STATUS, CALL_STATUS, PROPERTY_TYPES, CONDITIONS, PRICE_RANGES } from "./lead-options";
+import { CALL_DEFAULT, isQualifiedCall, normCall, NEEDS, BUY_NEEDS, SELL_NEEDS, BUY_STATUS, SELL_STATUS, CALL_STATUS, PROPERTY_TYPES, CONDITIONS, PRICE_RANGES } from "./lead-options";
 export { NEEDS, BUY_NEEDS, SELL_NEEDS, BUY_STATUS, SELL_STATUS, CALL_STATUS, PROPERTY_TYPES, CONDITIONS, PRICE_RANGES };
 
 /** ช่องสถานะที่ใช้กับ Need นั้น */
@@ -31,6 +31,13 @@ export const EDITABLE = ["received_at", "customer_name", "company_name", "phone"
   "need", "buy_status", "sell_status", "property_type", "property_condition", "price_range", "call_status", "staff"];
 export type Lead = Record<string, string>;
 
+/** คุยกับลูกค้าได้แล้ว (Qualified หรือ ไม่สนใจ) → contactable TRUE · ติดต่อไม่ได้ → FALSE · อื่น ๆ คงค่าเดิม */
+export function contactableFor(call: string, current: string): string {
+  if (isQualifiedCall(call) || call === "ไม่สนใจ") return "TRUE";
+  if (call === "ติดต่อไม่ได้") return "FALSE";
+  return current;
+}
+
 export const todayBkk = () => new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10);
 
 export function normalizePhone(s: string): string {
@@ -58,7 +65,8 @@ export function validateLead(input: Record<string, unknown>): { ok: true; rec: L
   if (rec.sell_status && !SELL_STATUS.includes(rec.sell_status)) errors.sell_status = "Sell Status ไม่ถูกต้อง";
   if (sf === "buy_status" && errors.sell_status) delete errors.sell_status; // ช่องที่ไม่ใช้ จัดการตอนบันทึก
   if (sf === "sell_status" && errors.buy_status) delete errors.buy_status;
-  if (rec.call_status === "") rec.call_status = "ยังไม่ได้โทร";
+  rec.call_status = normCall(rec.call_status);
+  if (rec.call_status === "") rec.call_status = CALL_DEFAULT;
   if (!CALL_STATUS.includes(rec.call_status)) errors.call_status = "Call Status ไม่ถูกต้อง";
   if (rec.property_type && !PROPERTY_TYPES.includes(rec.property_type)) errors.property_type = "Type ไม่ถูกต้อง";
   if (rec.property_condition && !CONDITIONS.includes(rec.property_condition)) errors.property_condition = "Condition ไม่ถูกต้อง";
@@ -125,7 +133,7 @@ export function filterLeads(rows: Lead[], f: LeadFilter): Lead[] {
     if (f.area && (r.area || "unknown") !== f.area) return false;
     if (f.status && leadStatusOf(r) !== f.status) return false;
     if (f.need && r.need !== f.need) return false;
-    if (f.callStatus && (r.call_status || "ยังไม่ได้โทร") !== f.callStatus) return false;
+    if (f.callStatus && (normCall(r.call_status) || CALL_DEFAULT) !== f.callStatus) return false;
     if (f.staff && r.staff !== f.staff) return false;
     if (f.from && (r.received_at ?? "") < f.from) return false;
     if (f.to && (r.received_at ?? "").slice(0, 10) > f.to) return false;

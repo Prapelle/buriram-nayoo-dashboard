@@ -98,7 +98,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
         <Card title="Leads แยกตามช่องทาง">{c.leadsByChannel ? <BarList items={c.leadsByChannel} title="Leads แยกตามช่องทาง" /> : <Pending />}</Card>
         <Card title="Lead ซื้อ / เช่า / สร้าง แยกตาม Buy Status">{c.buyStatus ? <BarList items={c.buyStatus} title="Lead แยกตาม Buy Status" /> : <Pending text="ยังไม่มี Lead ที่ Need เป็น ซื้อ / เช่า / สร้าง" />}</Card>
         <Card title="Lead ขาย แยกตาม Sell Status">{c.sellStatus ? <BarList items={c.sellStatus} title="Lead แยกตาม Sell Status" /> : <Pending text="ยังไม่มี Lead ที่ Need เป็น ขาย" />}</Card>
-        <Card title="Qualified Leads แยกตามช่องทาง (ติดต่อได้แล้ว / เข้าชมโครงการแล้ว / ซื้อสำเร็จ)">{c.leadQualByChannel ? <BarList items={c.leadQualByChannel} title="Qualified Leads แยกตามช่องทาง" /> : <Pending text="ยังไม่มี Lead" />}</Card>
+        <Card title="Qualified Leads แยกตามช่องทาง (ติดต่อได้แล้ว / รอเข้าชม / เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน)">{c.leadQualByChannel ? <BarList items={c.leadQualByChannel} title="Qualified Leads แยกตามช่องทาง" /> : <Pending text="ยังไม่มี Lead" />}</Card>
         <Card title="Sales Pipeline (คำนวณจาก Buy/Sell Status)">{c.pipeline ? <BarList items={c.pipeline} title="Sales Pipeline" /> : <Pending />}</Card>
         <Card title="LINE OA Growth (เพื่อนทั้งหมดสิ้นเดือน)">
           {c.lineGrowth && c.lineGrowth.some((r) => r.friendsEnd !== null)

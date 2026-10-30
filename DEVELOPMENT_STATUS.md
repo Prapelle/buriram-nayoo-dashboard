@@ -904,3 +904,34 @@ Users 17,443 · Page Views 42,450 · PV/User 2.43 · Duration 1 นาที 0 �
 **Failed:** 0
 **Not Tested:** บนเว็บที่ deploy จริง/Google Sheet จริง
 
+
+## 30) หน้า Seller Leads / Buyer Leads (Kanban) + ชุด Sell Status / Call Status ใหม่ (30/10/2026)
+
+### สิ่งที่ทำ
+- **Seller Leads** (`/seller-leads`, Admin + Sales): Lead ที่ Need = ขาย แยกคอลัมน์ตาม **Sell Status** — รอติดต่อ → สนใจขาย → นัดทำสัญญา → เซ็นสัญญา → สัญญาเปิด → บ้านไม่พร้อมขาย → ขายแล้ว → ยกเลิก
+- **Buyer Leads** (`/buyer-leads`, Admin + Sales): Lead ที่ Need = ซื้อ / เช่า / สร้าง แยกคอลัมน์ตาม **Call Status** — รอติดต่อ → ติดต่อได้แล้ว → รอเข้าชม → เข้าชมแล้ว → จอง → ซื้อสำเร็จ → กู้ไม่ผ่าน → ติดต่อไม่ได้ → ไม่สนใจ
+- การ์ด = ชื่อลูกค้า (+ เบอร์ / Type / Price / รหัส / Staff / วันติดตาม) · **ลากวาง** ไปคอลัมน์ใหม่เพื่อเปลี่ยนสถานะ (บันทึกลง Sheet ทันที, ล้มเหลวแล้วการ์ดเด้งกลับ) · มี dropdown บนการ์ดสำหรับมือถือ · ค้นหา + กรอง Staff
+- API ใหม่ `PATCH /api/leads` `{lead_id, field: sell_status|call_status, value, updated_at_seen}` — ตรวจข้อมูลเก่า (409), ตรวจค่า (422), คำนวณขั้น Pipeline และ contactable ใหม่, บันทึก Audit Log
+
+### การเปลี่ยนแปลงนิยาม
+| เรื่อง | ก่อน | หลัง |
+|---|---|---|
+| Sell Status | นัดทำสัญญา, ทำสัญญา, เซ็นสัญญา, ยกเลิก, เป็นนายหน้า, บ้านไม่พร้อมขาย, ขายแล้ว, สัญญาเปิด | **รอติดต่อ, สนใจขาย**, นัดทำสัญญา, เซ็นสัญญา, สัญญาเปิด, บ้านไม่พร้อมขาย, ขายแล้ว, ยกเลิก (ตัด ทำสัญญา / เป็นนายหน้า) |
+| Sell Status ว่าง (Need = ขาย) | ว่าง | เริ่มที่ **รอติดต่อ** |
+| Pipeline | — | สนใจขาย = Qualified · รอติดต่อ ไม่นับ Qualified |
+| Call Status | ยังไม่ได้โทร, ติดต่อไม่ได้, ติดต่อได้แล้ว, เข้าชมโครงการแล้ว, ซื้อสำเร็จ, ไม่สนใจ | **รอติดต่อ** (แทน ยังไม่ได้โทร), ติดต่อได้แล้ว, **รอเข้าชม**, **เข้าชมแล้ว** (แทน เข้าชมโครงการแล้ว), **จอง**, ซื้อสำเร็จ, **กู้ไม่ผ่าน**, ติดต่อไม่ได้, ไม่สนใจ |
+| Qualified Leads | ติดต่อได้แล้ว / เข้าชมโครงการแล้ว / ซื้อสำเร็จ | ติดต่อได้แล้ว / รอเข้าชม / เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน (**ตั้งค่าเริ่มต้น รอผู้ใช้ยืนยัน**) |
+| Cost per Site Visit | นับเฉพาะ เข้าชมโครงการแล้ว | นับเฉพาะ **เข้าชมแล้ว** (ยังไม่รวม จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน — **รอผู้ใช้ยืนยัน**) |
+
+- **Lead เก่า** ที่ยังเป็นชื่อเดิมใน Sheet (ยังไม่ได้โทร / เข้าชมโครงการแล้ว) ถูกแปลงเป็นชื่อใหม่ตอนอ่าน (Dashboard, ตัวกรอง, บอร์ด) และเขียนเป็นชื่อใหม่เมื่อมีการบันทึก — ไม่ต้อง migrate ข้อมูล · ไฟล์ Export ของแถวที่ยังไม่ถูกบันทึกจะยังแสดงชื่อเดิม
+- Buyer Leads ไม่แสดง Lead เก่าที่ยังไม่ระบุ Need (บอร์ดแจ้งจำนวน) — ไปกำหนด Need ที่หน้า Leads
+
+### ไฟล์ที่เปลี่ยน
+`src/lib/lead-options.ts`, `src/lib/leads.ts`, `src/lib/leads-service.ts`, `src/app/api/leads/route.ts`, `src/lib/dashboard.ts`, `src/lib/performance.ts`, `src/lib/export/*` (ข้อความนิยาม), `src/lib/roles.ts`, `src/components/StatusBoard.tsx` (ใหม่), `src/components/LeadsManager.tsx`, `src/app/(app)/seller-leads/page.tsx`, `src/app/(app)/buyer-leads/page.tsx` (ใหม่), `src/app/(app)/page.tsx` (ข้อความ), `tests/sellerleads.test.ts`, `tests/sellerleads-service.test.mts` (ใหม่), `tests/run-all.sh`
+
+### Data / Schema Impact
+- ไม่มี (ใช้คอลัมน์ `sell_status`, `call_status` เดิม · ไม่ต้องกดเตรียม Google Sheet)
+
+### Test Results
+**Passed:** เทสต์ใหม่ 28 รายการ (sellerleads 14 + sellerleads-service 14 กับ Google Sheets จำลอง) · security 12 · sales 18 · kpicard 8 · `tsc --noEmit` · `next build`
+**Not Tested:** การลากวางในเบราว์เซอร์จริง · เทสต์ที่ต้องใช้ไฟล์ CSV ตัวอย่าง (dashboard / overview / yoy / fbactions / website / performance / fbpage / e2e / http-integration) — ปรับคำที่ใช้ในเทสต์เหล่านี้ให้ตรงชื่อสถานะใหม่แล้ว แต่ยังไม่ได้รัน

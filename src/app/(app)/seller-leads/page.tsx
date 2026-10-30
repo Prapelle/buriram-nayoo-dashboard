@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { SellerBoard } from "@/components/SellerBoard";
+import { StatusBoard } from "@/components/StatusBoard";
 
 export default async function SellerLeadsPage() {
   const s = await auth();
@@ -12,7 +12,7 @@ export default async function SellerLeadsPage() {
         <h1 className="text-2xl font-bold">Seller Leads</h1>
         <p className="text-sm text-slate-500">ลูกค้าที่ต้องการขาย (Need = ขาย) แยกตาม Sell Status · ลากการ์ดไปคอลัมน์ใหม่เพื่อเปลี่ยนสถานะ · มีข้อมูลส่วนบุคคล เข้าถึงได้เฉพาะ Admin และ Sales</p>
       </div>
-      <SellerBoard />
+      <StatusBoard kind="seller" />
     </section>
   );
 }
