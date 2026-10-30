@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CHANNELS, SERVICES } from "@/lib/dashboard";
+import { CHANNELS } from "@/lib/dashboard";
 import { CALL_DEFAULT, normCall } from "@/lib/lead-options";
 import {
   AREA_OPTIONS, BUY_STATUS, CALL_STATUS, CONDITIONS, EDITABLE, NEEDS, PRICE_RANGES, PROPERTY_TYPES, SELL_STATUS,
@@ -61,7 +61,7 @@ export function LeadsManager() {
   const openForm = (r: Lead | null) => {
     setForm(r ? { ...emptyForm(), ...Object.fromEntries(EDITABLE.map((k) => [k, r[k] ?? ""])), call_status: normCall(r.call_status) || CALL_DEFAULT } : emptyForm());
     setEditing(r); setViewing(null); setErrors({}); setDups(null); setNeedAsk(null); setDelAsk(false); setMsg(null);
-    setMore(!!r && ["company_name", "email", "campaign_name", "service_category", "service_interest", "next_follow_up_at", "last_contacted_at", "lost_reason"].some((k) => r[k]));
+    setMore(!!r && ["campaign_name", "next_follow_up_at", "last_contacted_at", "lost_reason"].some((k) => r[k]));
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -151,7 +151,7 @@ export function LeadsManager() {
               ["วันที่รับ Lead", dmy(viewing.received_at)], ["Channel", viewing.source_channel], ["Name", viewing.customer_name], ["Phone", viewing.phone],
               ["Need", viewing.need], [statusLabel(viewing.need), leadStatusOf(viewing)], ["Type", viewing.property_type], ["Condition", viewing.property_condition],
               ["Price", viewing.price_range], ["Call Status", viewing.call_status], ["Staff", viewing.staff], ["พื้นที่", AREA_TH[viewing.area || "unknown"]],
-              ["บริษัท", viewing.company_name], ["อีเมล", viewing.email], ["Campaign", viewing.campaign_name], ["หมวดบริการ", viewing.service_category],
+              ["Line", viewing.line_id], ["Campaign", viewing.campaign_name],
               ["ติดตามครั้งถัดไป", dmy(viewing.next_follow_up_at)], ["ขั้น Pipeline (คำนวณ)", viewing.status], ["สร้างโดย", `${viewing.created_by} · ${dmy(viewing.created_at)}`], ["แก้ไขล่าสุด", `${viewing.updated_by} · ${dmy(viewing.updated_at)}`],
             ] as [string, string][]).map(([k, v]) => <div key={k}><dt className="text-xs text-slate-500">{k}</dt><dd>{v || <span className="text-slate-300">—</span>}</dd></div>)}
           </dl>
@@ -170,6 +170,7 @@ export function LeadsManager() {
             {select("source_channel", "Channel", pair(CHANNELS), { required: true })}
             {field("customer_name", "Name", { required: true })}
             {field("phone", "Phone", { type: "tel" })}
+            {field("line_id", "Line")}
             {select("need", "Need", pair(NEEDS), { required: true, onChange: changeNeed })}
             {sf ? select(sf, statusLabel(form.need), pair(statusOptionsOf(form.need)))
               : <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">Status</span><select disabled className={inp("x") + " bg-slate-50"}><option>เลือก Need ก่อน</option></select></label>}
@@ -187,15 +188,12 @@ export function LeadsManager() {
             {field("notes", "Note (บันทึกภายใน)", { area: true })}
           </div>
           <div>
-            <button type="button" onClick={() => setMore(!more)} className="text-sm underline">{more ? "ซ่อนข้อมูลเพิ่มเติม" : "ข้อมูลเพิ่มเติม (บริษัท, อีเมล, Campaign, หมวดบริการ, วันติดตาม ฯลฯ)"}</button>
+            <button type="button" onClick={() => setMore(!more)} className="text-sm underline">{more ? "ซ่อนข้อมูลเพิ่มเติม" : "ข้อมูลเพิ่มเติม (Campaign, วันติดตาม ฯลฯ)"}</button>
             {more && (
               <div className="mt-3 grid gap-3 sm:grid-cols-2 md:grid-cols-4">
-                {field("company_name", "บริษัท")}{field("email", "อีเมล", { type: "email" })}
-                {field("campaign_name", "Campaign")}{select("service_category", "หมวดบริการ (ไม่บังคับ)", pair(SERVICES))}
-                {field("service_interest", "บริการที่สนใจ")}
+                {field("campaign_name", "Campaign")}
                 {field("last_contacted_at", "ติดต่อล่าสุด", { type: "date" })}{field("next_follow_up_at", "ติดตามครั้งถัดไป", { type: "date" })}
                 {field("lost_reason", "เหตุผลที่ปิดไม่สำเร็จ")}
-                {field("utm_source", "UTM source")}{field("utm_medium", "UTM medium")}{field("utm_campaign", "UTM campaign")}
               </div>
             )}
           </div>
@@ -208,7 +206,7 @@ export function LeadsManager() {
           {dups && (
             <div role="alert" className="space-y-2 rounded-md bg-amber-50 p-3 text-sm text-amber-900">
               <p className="font-medium">พบ Lead ที่เบอร์โทรหรืออีเมลซ้ำ (ระบบไม่รวมข้อมูลให้อัตโนมัติ)</p>
-              <ul className="list-disc pl-5">{dups.map((d) => <li key={d.lead_code}>{d.lead_code} · {d.customer_name}{d.company_name && ` (${d.company_name})`} · รับ {dmy(d.received_at)} · ซ้ำที่ {d.matched.map((m) => m === "phone" ? "เบอร์โทร" : "อีเมล").join(" และ ")}</li>)}</ul>
+              <ul className="list-disc pl-5">{dups.map((d) => <li key={d.lead_code}>{d.lead_code} · {d.customer_name}{d.company_name && ` (${d.company_name})`} · รับ {dmy(d.received_at)} · ซ้ำที่ {d.matched.map((m) => m === "phone" ? "เบอร์โทร" : m === "line" ? "Line" : "อีเมล").join(" และ ")}</li>)}</ul>
               <div className="flex gap-3"><button onClick={() => save({ confirmDuplicate: true })} disabled={saving} className="rounded-md bg-amber-700 px-3 py-1.5 text-white">บันทึกต่อ (เป็นรายการแยก)</button><button onClick={() => setDups(null)} className="underline">กลับไปแก้ไข</button></div>
             </div>
           )}
@@ -233,11 +231,11 @@ export function LeadsManager() {
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">ค้นหา</span>
-          <input value={f.q} onChange={(e) => { setF({ ...f, q: e.target.value }); setPage(1); }} placeholder="ชื่อ / เบอร์ / รหัส / Remark" className="w-56 rounded-md border border-slate-300 px-2 py-1.5 text-sm" /></label>
+          <input value={f.q} onChange={(e) => { setF({ ...f, q: e.target.value }); setPage(1); }} placeholder="ชื่อ / เบอร์ / Line / รหัส / Remark" className="w-56 rounded-md border border-slate-300 px-2 py-1.5 text-sm" /></label>
         {fdate("from", "รับตั้งแต่")}{fdate("to", "ถึง")}
         {fsel("channel", "Channel", pair(CHANNELS))}{fsel("need", "Need", pair(NEEDS))}{fsel("status", "Status", pair(statusOptsFilter))}
         {fsel("callStatus", "Call Status", pair(CALL_STATUS))}{fsel("staff", "Staff", pair(data.staff))}
-        {fsel("area", "พื้นที่", AREA_OPTIONS)}{fsel("service", "หมวดบริการ", pair(SERVICES))}
+        {fsel("area", "พื้นที่", AREA_OPTIONS)}
         {Object.values(f).some(Boolean) && <button onClick={() => { setF(EMPTY_F); setPage(1); }} className="py-1.5 text-sm underline">ล้าง</button>}
         <button onClick={() => openForm(null)} className="ml-auto rounded-md bg-slate-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-slate-700">+ เพิ่ม Lead</button>
       </div>

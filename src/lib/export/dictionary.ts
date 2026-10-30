@@ -41,6 +41,7 @@ const MANUAL: Record<string, ColType> = {
   closing_date: "date", revenue_date: "date", invoice_date: "date",
   report_month: "month", month: "month",
   imported_at: "timestamp_utc", created_at: "timestamp_utc", updated_at: "timestamp_utc",
+  line_id: "text", // ไม่ใช่ยอดนับของ LINE OA (กฎ line_* ด้านล่าง)
   hour_24: "integer", contactable: "boolean", is_crosspost: "boolean", is_share: "boolean", ads_reports_span_months: "boolean",
   friends_start: "integer", friends_end: "integer", new_friends: "integer", blocked_users: "integer", broadcast_count: "integer", messages_sent: "integer",
   messages_delivered: "integer", opens: "integer", clicks: "integer", new_chats: "integer", inquiries: "integer", leads: "integer", qualified_leads: "integer",

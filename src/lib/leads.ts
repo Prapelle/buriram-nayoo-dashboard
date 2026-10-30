@@ -25,10 +25,10 @@ export function pipelineOf(r: Lead): "Won" | "Lost" | "Qualified" | "Contacted" 
 export const PIPELINE_MAP = { Qualified: [...QUALIFIED, ...WON], Won: WON, Lost: LOST };
 
 export const LEAD_COLUMNS = ["lead_id", "lead_code", "received_at", "customer_name", "company_name", "phone", "email", "source_channel", "campaign_name", "utm_source", "utm_medium", "utm_campaign", "area", "service_category", "service_interest", "need_description", "owner_email", "status", "contactable", "last_contacted_at", "next_follow_up_at", "qualified_at", "won_at", "lost_reason", "notes", "created_by", "created_at", "updated_by", "updated_at",
-  "need", "buy_status", "sell_status", "property_type", "property_condition", "price_range", "call_status", "staff"];
+  "need", "buy_status", "sell_status", "property_type", "property_condition", "price_range", "call_status", "staff", "line_id"];
 /** status ไม่ได้กรอกเองแล้ว (คำนวณจาก Buy/Sell Status) · owner_email ไม่แสดงในฟอร์มแต่คงค่าเดิมไว้ */
 export const EDITABLE = ["received_at", "customer_name", "company_name", "phone", "email", "source_channel", "campaign_name", "utm_source", "utm_medium", "utm_campaign", "area", "service_category", "service_interest", "need_description", "owner_email", "contactable", "last_contacted_at", "next_follow_up_at", "lost_reason", "notes",
-  "need", "buy_status", "sell_status", "property_type", "property_condition", "price_range", "call_status", "staff"];
+  "need", "buy_status", "sell_status", "property_type", "property_condition", "price_range", "call_status", "staff", "line_id"];
 export type Lead = Record<string, string>;
 
 /** คุยกับลูกค้าได้แล้ว (ติดต่อได้แล้วขึ้นไป หรือ ไม่สนใจ) → contactable TRUE · ติดต่อไม่ได้ → FALSE · อื่น ๆ คงค่าเดิม */
@@ -47,9 +47,11 @@ export function normalizePhone(s: string): string {
   return d;
 }
 export const normalizeEmail = (s: string) => String(s ?? "").trim().toLowerCase();
+/** Line ID เทียบแบบไม่สนตัวพิมพ์/ช่องว่าง/@ นำหน้า */
+export const normalizeLine = (s: string) => String(s ?? "").trim().replace(/^@/, "").replace(/\s+/g, "").toLowerCase();
 
-const LIMITS: Record<string, number> = { customer_name: 200, company_name: 200, campaign_name: 200, utm_source: 200, utm_medium: 200, utm_campaign: 200, service_interest: 300, need_description: 2000, owner_email: 200, lost_reason: 500, notes: 2000, phone: 40, email: 200, staff: 100 };
-const LABEL: Record<string, string> = { customer_name: "ชื่อลูกค้า", company_name: "บริษัท", campaign_name: "Campaign", service_interest: "บริการที่สนใจ", need_description: "ความต้องการ", lost_reason: "เหตุผลที่ปิดไม่สำเร็จ", notes: "Note", staff: "Staff", phone: "โทรศัพท์", email: "อีเมล", owner_email: "ผู้รับผิดชอบ" };
+const LIMITS: Record<string, number> = { customer_name: 200, company_name: 200, campaign_name: 200, utm_source: 200, utm_medium: 200, utm_campaign: 200, service_interest: 300, need_description: 2000, owner_email: 200, lost_reason: 500, notes: 2000, phone: 40, email: 200, staff: 100, line_id: 100 };
+const LABEL: Record<string, string> = { customer_name: "ชื่อลูกค้า", company_name: "บริษัท", campaign_name: "Campaign", service_interest: "บริการที่สนใจ", need_description: "ความต้องการ", lost_reason: "เหตุผลที่ปิดไม่สำเร็จ", notes: "Note", staff: "Staff", line_id: "Line", phone: "โทรศัพท์", email: "อีเมล", owner_email: "ผู้รับผิดชอบ" };
 
 export function validateLead(input: Record<string, unknown>): { ok: true; rec: Lead } | { ok: false; errors: Record<string, string> } {
   const errors: Record<string, string> = {};
@@ -111,15 +113,16 @@ export function resolveNeedStatus(prev: Lead | null, rec: Lead): { rec: Lead; co
   return { rec: out, conflict: oldVal ? { field: other, value: oldVal } : null };
 }
 
-export type DupMatch = { lead_code: string; customer_name: string; company_name: string; status: string; received_at: string; matched: ("phone" | "email")[] };
+export type DupMatch = { lead_code: string; customer_name: string; company_name: string; status: string; received_at: string; matched: ("phone" | "email" | "line")[] };
 export function findDuplicates(rows: Lead[], rec: Lead, selfId?: string): DupMatch[] {
-  const p = normalizePhone(rec.phone), e = normalizeEmail(rec.email);
+  const p = normalizePhone(rec.phone), e = normalizeEmail(rec.email), l = normalizeLine(rec.line_id);
   const out: DupMatch[] = [];
   for (const r of rows) {
     if (selfId && r.lead_id === selfId) continue;
     const matched: DupMatch["matched"] = [];
     if (p && normalizePhone(r.phone) === p) matched.push("phone");
     if (e && normalizeEmail(r.email) === e) matched.push("email");
+    if (l && normalizeLine(r.line_id) === l) matched.push("line");
     if (matched.length) out.push({ lead_code: r.lead_code, customer_name: r.customer_name, company_name: r.company_name, status: r.status, received_at: r.received_at, matched });
   }
   return out;
@@ -139,7 +142,7 @@ export function filterLeads(rows: Lead[], f: LeadFilter): Lead[] {
     if (f.to && (r.received_at ?? "").slice(0, 10) > f.to) return false;
     if (f.service && r.service_category !== f.service) return false;
     if (!q) return true;
-    if (["lead_code", "customer_name", "company_name", "email", "campaign_name", "phone", "staff", "need_description", "notes"].some((k) => (r[k] ?? "").toLowerCase().includes(q))) return true;
+    if (["lead_code", "customer_name", "company_name", "email", "campaign_name", "phone", "line_id", "staff", "need_description", "notes"].some((k) => (r[k] ?? "").toLowerCase().includes(q))) return true;
     return qd.length >= 3 && normalizePhone(r.phone).includes(qd);
   });
 }

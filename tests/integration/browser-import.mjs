@@ -92,6 +92,22 @@ try {
   ok("Buyer Leads: Call Status ชื่อเดิม (ยังไม่ได้โทร / เข้าชมโครงการแล้ว) อยู่คอลัมน์ใหม่ถูกต้อง · ลากไป ติดต่อได้แล้ว (contactable TRUE) · เมนูเปลี่ยนเป็น จอง · ไม่แสดง Lead ขาย");
   assert.deepEqual(errors, []);
 
+  // ---- หน้า Leads: ตัดช่อง บริษัท/อีเมล/หมวดบริการ/บริการที่สนใจ/UTM · เพิ่ม Line ----
+  await page.goto(BASE + "/leads"); await page.getByRole("button", { name: "+ เพิ่ม Lead" }).click();
+  await page.getByRole("button", { name: /ข้อมูลเพิ่มเติม/ }).click();
+  const formT = await page.locator("section", { has: page.getByRole("heading", { name: "เพิ่ม Lead ใหม่" }) }).last().innerText();
+  for (const gone of ["บริษัท", "อีเมล", "หมวดบริการ", "บริการที่สนใจ", "UTM source", "UTM medium", "UTM campaign"]) assert.ok(!formT.includes(gone), `ยังมีช่อง ${gone}`);
+  assert.ok(formT.includes("Line") && formT.includes("Campaign") && formT.includes("ติดตามครั้งถัดไป"));
+  if (process.env.SHOT_DIR) await page.locator("section", { has: page.getByRole("heading", { name: "เพิ่ม Lead ใหม่" }) }).last().screenshot({ path: process.env.SHOT_DIR + "/lead-form.png" });
+  await page.getByLabel("Name *").fill("ทดสอบไลน์"); await page.getByLabel("Need *").selectOption("ซื้อ"); await page.getByLabel("Line", { exact: true }).fill("@line.test");
+  await page.getByLabel("Channel *").selectOption("LINE OA");
+  await page.getByRole("button", { name: "บันทึก", exact: true }).click(); await page.getByText("ทดสอบไลน์").first().waitFor();
+  lr = await tab("LEADS"); const row = lr.find((r) => r[lr[0].indexOf("customer_name")] === "ทดสอบไลน์");
+  assert.equal(row[lr[0].indexOf("line_id")], "@line.test");
+  assert.equal(await page.getByRole("combobox", { name: "หมวดบริการ" }).count(), 0);
+  ok("หน้า Leads: ฟอร์มไม่มี บริษัท / อีเมล / หมวดบริการ / บริการที่สนใจ / UTM แล้ว · มีช่อง Line → บันทึก @line.test ลง Sheet · ตัวกรองหมวดบริการถูกตัดออก");
+  assert.deepEqual(errors, []);
+
   const m = await open("marketing@example.com");
   for (const pth of ["/buyer-leads", "/seller-leads"]) { await m.page.goto(BASE + pth); await m.page.waitForURL(BASE + "/"); } // Marketing ไม่มีสิทธิ์ข้อมูลลูกค้า → กลับหน้าแรก
   const pr = await fetch(BASE + "/api/leads", { method: "PATCH", headers: { cookie: `authjs.session-token=${await cookie("marketing@example.com")}`, "sec-fetch-site": "same-origin", "content-type": "application/json" }, body: JSON.stringify({ lead_id: "B1", field: "call_status", value: "จอง" }) });

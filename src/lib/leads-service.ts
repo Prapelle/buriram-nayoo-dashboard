@@ -1,6 +1,6 @@
 import { writeAudit } from "./audit";
 import { CALL_DEFAULT, CALL_STATUS, normCall, SELL_DEFAULT, SELL_STATUS } from "./lead-options";
-import { contactableFor, findDuplicates, LEAD_COLUMNS, leadStatusOf, nextLeadCode, normalizeEmail, normalizePhone, pipelineOf, resolveNeedStatus, stampStatus, statusFieldOf, todayBkk, validateLead, type DupMatch, type Lead } from "./leads";
+import { contactableFor, findDuplicates, LEAD_COLUMNS, leadStatusOf, nextLeadCode, normalizeEmail, normalizeLine, normalizePhone, pipelineOf, resolveNeedStatus, stampStatus, statusFieldOf, todayBkk, validateLead, type DupMatch, type Lead } from "./leads";
 import { appendRows, batchUpdateValues, colLetter, deleteRow, listTabs, readTabs, toRow } from "./sheets";
 import { readColumns } from "./tabdata";
 
@@ -30,6 +30,8 @@ export async function saveLead(input: Record<string, unknown>, actor: string) {
   const t = await load();
   const tab = t.LEADS;
   if (!tab.headers.includes("lead_id") || !tab.headers.includes("need")) throw new LeadError(409, "แท็บ LEADS ยังไม่พร้อม กรุณากด เตรียม Google Sheet", "SHEET_NOT_READY");
+  // คอลัมน์ line_id เพิ่ม 30/10/2026: ยังไม่ได้เตรียม Sheet ก็บันทึก Lead ได้ตามเดิม แต่ถ้ากรอก Line ต้องมีคอลัมน์ก่อน (ไม่ทิ้งค่าเงียบ ๆ)
+  if (String(input.line_id ?? "").trim() && !tab.headers.includes("line_id")) throw new LeadError(409, "ยังไม่มีคอลัมน์ Line ในแท็บ LEADS — ให้ Admin กด ตั้งค่า → เตรียม Google Sheet ก่อน แล้วบันทึกอีกครั้ง", "SHEET_NOT_READY", { fields: { line_id: "ยังไม่มีคอลัมน์ Line ใน Sheet" } });
   const rows = tab.rows;
   const now = new Date().toISOString();
   const today = todayBkk();
@@ -43,10 +45,10 @@ export async function saveLead(input: Record<string, unknown>, actor: string) {
     if (input.updated_at_seen !== prev.updated_at) throw new LeadError(409, "Lead นี้ถูกแก้ไขโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่ก่อนแก้ไข", "STALE");
   }
 
-  const contactChanged = !prev || normalizePhone(prev.phone) !== normalizePhone(v.rec.phone) || normalizeEmail(prev.email) !== normalizeEmail(v.rec.email);
+  const contactChanged = !prev || normalizePhone(prev.phone) !== normalizePhone(v.rec.phone) || normalizeEmail(prev.email) !== normalizeEmail(v.rec.email) || normalizeLine(prev.line_id) !== normalizeLine(v.rec.line_id);
   if (contactChanged && input.confirmDuplicate !== true) {
     const matches = findDuplicates(rows.map(pick), v.rec, leadId || undefined);
-    if (matches.length) throw new LeadError(409, "พบ Lead ที่เบอร์โทรหรืออีเมลซ้ำกับรายการนี้ (ระบบไม่รวมข้อมูลให้อัตโนมัติ)", "DUPLICATE_WARNING", { matches });
+    if (matches.length) throw new LeadError(409, "พบ Lead ที่เบอร์โทร / Line / อีเมลซ้ำกับรายการนี้ (ระบบไม่รวมข้อมูลให้อัตโนมัติ)", "DUPLICATE_WARNING", { matches });
   }
 
   // Need เปลี่ยนกลุ่ม แล้วช่องสถานะของกลุ่มเดิมมีค่าใน Sheet → ห้ามล้างเงียบ ๆ ต้องยืนยันก่อน

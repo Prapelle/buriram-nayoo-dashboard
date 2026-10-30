@@ -448,9 +448,9 @@ const legacy: Record<string, string> = { lead_id: "legacy-1", lead_code: "LD-202
 tabs.set("LEADS", { id: tabs.get("LEADS")!.id, cols: OLD_LEAD_COLS.length, rows: [[...OLD_LEAD_COLS], OLD_LEAD_COLS.map((c) => legacy[c] ?? "")] });
 await assert.rejects(saveLead({ ...base, customer_name: "ก่อนเตรียม Sheet" }, "s@x.com"), isLead("SHEET_NOT_READY")); assert.equal(rowsOf("LEADS"), 1);
 const r4 = await initializeSpreadsheet("admin@example.com");
-assert.deepEqual(r4.addedHeaders.LEADS, ["need", "buy_status", "sell_status", "property_type", "property_condition", "price_range", "call_status", "staff"]);
+assert.deepEqual(r4.addedHeaders.LEADS, ["need", "buy_status", "sell_status", "property_type", "property_condition", "price_range", "call_status", "staff", "line_id"]);
 const lt = tabs.get("LEADS")!; assert.deepEqual(lt.rows[0].slice(0, OLD_LEAD_COLS.length), OLD_LEAD_COLS); assert.deepEqual(lt.rows[1].slice(0, OLD_LEAD_COLS.length), OLD_LEAD_COLS.map((c) => legacy[c] ?? ""));
-ok("Migration: แท็บ LEADS แบบเดิม → ยังไม่กด เตรียม Sheet จะบันทึกไม่ได้ (ไม่เขียนผิดคอลัมน์) · กดแล้วเพิ่ม 8 คอลัมน์ต่อท้าย คอลัมน์และข้อมูลเดิมไม่เปลี่ยน");
+ok("Migration: แท็บ LEADS แบบเดิม → ยังไม่กด เตรียม Sheet จะบันทึกไม่ได้ (ไม่เขียนผิดคอลัมน์) · กดแล้วเพิ่ม 9 คอลัมน์ต่อท้าย (รวม line_id) คอลัมน์และข้อมูลเดิมไม่เปลี่ยน");
 const old0 = (await listLeads()).rows[0]; assert.equal(old0.need, ""); assert.equal(old0.status, "Proposal");
 let dash15 = Object.fromEntries(computeDashboard(await fetchDashboardData("admin"), {}, "admin").groups.flatMap((g) => g.items).map((k) => [k.key, k.value]));
 assert.equal(dash15.qualified, 0); ok("Lead เก่า (ไม่มี Need) ยังแสดงและนับใน Total Leads · Qualified นับตาม Call Status (ยังไม่มี รอเข้าชม = 0)");
@@ -497,7 +497,7 @@ ok("กรองตาม Need / Status / Staff / Call Status / ช่วงว�
 dash15 = Object.fromEntries(computeDashboard(await fetchDashboardData("admin"), {}, "admin").groups.flatMap((g) => g.items).map((k) => [k.key, k.value]));
 assert.equal(dash15.leads, all15.length); assert.equal(dash15.qualified, all15.filter((r) => r.call_status === "รอเข้าชม").length); assert.equal(dash15.qualified, 1);
 ok("Dashboard: Total Leads = 6, Qualified Leads = 1 (Call Status = รอเข้าชม)");
-const lx = await exp("leads", {}, "admin"); assert.deepEqual(lx.headers.slice(-8), ["need", "buy_status", "sell_status", "property_type", "property_condition", "price_range", "call_status", "staff"]);
+const lx = await exp("leads", {}, "admin"); assert.deepEqual(lx.headers.slice(-9), ["need", "buy_status", "sell_status", "property_type", "property_condition", "price_range", "call_status", "staff", "line_id"]);
 assert.ok(lx.rows.some((r) => r.need === "ขาย" && r.sell_status === "ขายแล้ว")); ok("Export leads.csv: คอลัมน์ใหม่ 8 คอลัมน์ต่อท้าย ข้อมูลครบ");
 console.log("15b) คำขอเพิ่มเติม: Call Status ไม่สนใจ + Qualified Leads = รอเข้าชม");
 const ni = (await saveLead({ ...base, customer_name: "ไม่สนใจ", phone: "0867777777", need: "ซื้อ", call_status: "ไม่สนใจ" }, "s@x.com")).lead;
@@ -516,6 +516,23 @@ ok(`Call Status "ไม่สนใจ" บันทึกได้ (contactable
   const d2 = computeDashboard(await fetchDashboardData("marketing"), {}, "marketing"); const k2 = Object.fromEntries(d2.groups.flatMap((g) => g.items).map((x) => [x.key, x]));
   assert.equal(k2.qualified.value, qNow); assert.ok(qNow >= contactedNow.length + 2); assert.ok("cpsv" in k2);
   ok(`Call Status ใหม่ "เข้าชมแล้ว" / "ซื้อสำเร็จ" บันทึกลง Sheet ได้ (contactable TRUE) · Qualified Leads = ${qNow} (รอเข้าชม + เข้าชม + ซื้อสำเร็จ) · มีการ์ด Cost per Site Visit`);
+}
+console.log("15b2) หน้า Leads: ช่อง Line (30/10/2026)");
+{
+  // Sheet ที่ยังไม่ได้กด เตรียม Google Sheet (ไม่มีคอลัมน์ line_id): บันทึก Lead ปกติได้ · กรอก Line → แจ้งให้เตรียม Sheet (ไม่ทิ้งค่า)
+  const lh = tabs.get("LEADS")!; const li = lh.rows[0].indexOf("line_id"); const saved = lh.rows.map((r) => [...r]);
+  lh.rows = lh.rows.map((r) => r.filter((_, i) => i !== li));
+  const noCol = (await saveLead({ ...base, customer_name: "ก่อนมีคอลัมน์ Line", phone: "", need: "ซื้อ" }, "s@x.com")).lead; assert.ok(noCol.lead_id);
+  await assert.rejects(saveLead({ ...base, customer_name: "กรอก Line ก่อนเตรียม", phone: "", line_id: "abc", need: "ซื้อ" }, "s@x.com"), (e: unknown) => e instanceof LeadError && e.code === "SHEET_NOT_READY" && !!e.extra.fields?.line_id);
+  const added = lh.rows.slice(saved.length).map((r) => { const x = [...r]; x.splice(li, 0, ""); return x; }); lh.rows = [...saved, ...added]; // คืนคอลัมน์ (เหมือนกด เตรียม Google Sheet)
+  ok("ก่อนกด เตรียม Google Sheet: บันทึก Lead ได้ตามปกติ · ถ้ากรอก Line จะแจ้งให้เตรียม Sheet ก่อน (ไม่บันทึกแล้วทิ้งค่า Line)");
+  const ln = (await saveLead({ ...base, customer_name: "มีไลน์", phone: "", line_id: "@Somchai.BR", need: "ซื้อ" }, "s@x.com")).lead;
+  assert.equal(ln.line_id, "@Somchai.BR"); assert.ok(TABS.find((t) => t.name === "LEADS")!.headers.at(-1) === "line_id");
+  const lrow = (await listLeads()).rows.find((r) => r.lead_id === ln.lead_id)!; assert.equal(lrow.line_id, "@Somchai.BR");
+  await assert.rejects(saveLead({ ...base, customer_name: "ไลน์ซ้ำ", phone: "", line_id: "somchai.br ", need: "ซื้อ" }, "s@x.com"), (e: unknown) => e instanceof LeadError && e.code === "DUPLICATE_WARNING" && e.extra.matches![0].matched.includes("line"));
+  assert.equal(filterLeads((await listLeads()).rows, { q: "somchai.br" }).length, 1);
+  const upd = (await saveLead({ ...lrow, line_id: "@Somchai.BR", notes: "แก้โน้ต", updated_at_seen: lrow.updated_at }, "s@x.com")).lead; assert.equal(upd.line_id, "@Somchai.BR");
+  ok("บันทึก Line ลง Sheet (คอลัมน์ใหม่ต่อท้าย line_id) · Line ซ้ำ (ไม่สนตัวพิมพ์/@/ช่องว่าง) → เตือน Lead ซ้ำ · ค้นหาด้วย Line ได้ · แก้ไขส่วนอื่นค่า Line คงเดิม");
 }
 console.log("15c) จัดการผู้ใช้ (หน้า ตั้งค่า)");
 const { listUsers, saveUser, UserError } = await import("../src/lib/users-service");
@@ -596,7 +613,7 @@ assert.equal(pk.g_spend.value, 28814.82); assert.equal(pk.g_clicks.value, 31513)
 assert.equal(perf.warnings.length, 1); assert.ok(perf.warnings[0].includes("28,870.19")); // ส่วนที่ 3 แก้ Cost แคมเปญ +55.37 ไว้ → Time series กับ Campaign ไม่ตรงกันจริง
 ok("อ่านจาก Sheet (จำลอง): Google Spend 28,814.82 / Clicks 31,513 จาก Time series, Meta 37,557.54, Facebook Engagement 319 · เตือนเพราะ Campaign Report ถูกแก้ไว้ในส่วนที่ 3 (28,870.19) ยอดไม่ตรงกัน");
 const dc16 = computeDashboard(pd, {}, "marketing").charts;
-assert.deepEqual(dc16.buyStatus!.filter((x) => x.value).map((x) => [x.label, x.value]), [["Warm", 1], ["Close", 1], ["(ยังไม่ระบุสถานะ)", 4]] /* +1 จาก Lead "ไม่สนใจ" ในส่วนที่ 15b, +2 จาก Lead เข้าชม/ซื้อสำเร็จ */);
+assert.deepEqual(dc16.buyStatus!.filter((x) => x.value).map((x) => [x.label, x.value]), [["Warm", 1], ["Close", 1], ["(ยังไม่ระบุสถานะ)", 6]] /* +1 จาก Lead "ไม่สนใจ" ในส่วนที่ 15b, +2 จาก Lead เข้าชม/ซื้อสำเร็จ, +2 จากส่วน 15b2 (Line) */);
 assert.equal(dc16.sellStatus!.find((x) => x.label === "ขายแล้ว")!.value, 1); assert.equal(dc16.sellStatus!.find((x) => x.label === "บ้านไม่พร้อมขาย")!.value, 1);
 ok("Dashboard กราฟ Buy Status / Sell Status จาก Lead ใน Sheet (ข้อมูล Marketing ไม่มีชื่อ/เบอร์)");
 console.log("16b) Facebook Page ระดับเพจ: Viewers / Link clicks → ใช้ Viewers เทียบเคียง Reach");
