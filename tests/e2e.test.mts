@@ -685,6 +685,59 @@ console.log("16c) เป้าหมายรายเดือน + Dashboard �
   tabs.set("MONTHLY_TARGETS", saved);
   ok("ยังไม่มีแท็บ MONTHLY_TARGETS: Dashboard โหลดได้ ข้อมูล Website / Viewers ยังอยู่ (ตัดเฉพาะแท็บที่ขาด)");
 }
+console.log("16d) Developer + Sale developer (31/10/2026)");
+{
+  const D = await import("../src/lib/developers-service");
+  const { monthlyReport, todayBkk: tb } = await import("../src/lib/developers");
+  for (const n of ["DEVELOPERS", "DEVELOPER_PRODUCTS", "DEVELOPER_STATUS_LOG"]) assert.ok(tabs.has(n), n);
+  const today = tb(), thisMonth = today.slice(0, 7);
+  const a = (await D.saveDeveloper({ company_name: "บริษัท ทดสอบ จำกัด", project_main: "หมู่บ้าน A", project_sub1: "A2", contact_name: "คุณเอ", phone: "081-111-2222", line_id: "@dev.a", tier: "b", nayoo_url: "https://nayoo.co/a", staff: "เซลส์ 1" }, "s@x.com")).dev;
+  assert.equal(a.dev_code, "DV-0001"); assert.equal(a.tier, "B"); assert.equal(a.status, "ยังไม่เข้าร่วม"); assert.equal(rowsOf("DEVELOPERS"), 1);
+  await assert.rejects(D.saveDeveloper({ company_name: "บริษัทอื่น", project_main: "a2", phone: "0811112222" }, "s@x.com"), (e: unknown) => e instanceof D.DevError && e.code === "DUPLICATE_WARNING" && e.extra.matches![0].matched.includes("project") && e.extra.matches![0].matched.includes("phone"));
+  const b = (await D.saveDeveloper({ company_name: "บริษัทอื่น", project_main: "หมู่บ้าน B", staff: "เซลส์ 2", status: "เข้าร่วมแล้ว" }, "s@x.com")).dev;
+  await assert.rejects(D.saveDeveloper({ company_name: "ผิด", status: "กำลังใช้ Product" }, "s@x.com"), (e: unknown) => e instanceof D.DevError && e.code === "AUTO_STATUS");
+  ok("เพิ่ม Developer (DV-0001, Tier ตัวพิมพ์ใหญ่) · เตือนซ้ำ (โครงการรอง / เบอร์) · เลือก กำลังใช้ Product เองไม่ได้");
+  let r = await D.changeDevStatus(a.developer_id, "มีแผนเข้าพบ", a.updated_at, "s@x.com"); assert.equal(r.dev.status, "มีแผนเข้าพบ");
+  await assert.rejects(D.changeDevStatus(a.developer_id, "เข้าพบแล้ว", a.updated_at, "s@x.com"), (e: unknown) => e instanceof D.DevError && e.code === "STALE");
+  r = await D.changeDevStatus(a.developer_id, "เข้าพบแล้ว", r.dev.updated_at, "s@x.com"); assert.equal(r.dev.last_contacted_at, today);
+  r = await D.changeDevStatus(a.developer_id, "ปิดการขาย", r.dev.updated_at, "s@x.com"); assert.equal(r.dev.won_at, today);
+  assert.equal(rowsOf("DEVELOPER_STATUS_LOG"), 4); // b (สร้างเป็น เข้าร่วมแล้ว) + 3 ครั้ง
+  ok("ลากบนบอร์ด: มีแผนเข้าพบ → เข้าพบแล้ว (ติดต่อล่าสุด = วันนี้) → ปิดการขาย (Win วันนี้) · แก้ทับกันถูกกัน · บันทึกประวัติทุกครั้ง");
+  const tp = await D.addProductType("Banner หน้าแรก", "s@x.com"); assert.deepEqual(tp.types, ["Top ads", "Super Topads", "Banner หน้าแรก"]);
+  assert.equal((await D.addProductType("banner หน้าแรก", "s@x.com")).added, false);
+  const add = (n: number) => new Date(Date.parse(today) + n * 864e5).toISOString().slice(0, 10);
+  let pr = await D.saveProduct({ developer_id: a.developer_id, product: "Top ads", start_date: add(5), end_date: add(95), price_thb: "30,000" }, "s@x.com");
+  assert.equal(pr.dev.status, "ปิดการขาย"); // ยังไม่เริ่ม → ค้างที่ปิดการขาย
+  const fut = pr.product;
+  pr = await D.saveProduct({ ...fut, start_date: add(-1), updated_at_seen: fut.updated_at }, "s@x.com"); assert.equal(pr.dev.status, "กำลังใช้ Product");
+  await assert.rejects(D.changeDevStatus(a.developer_id, "เข้าร่วมแล้ว", pr.dev.updated_at, "s@x.com"), (e: unknown) => e instanceof D.DevError && e.code === "HAS_ACTIVE_PRODUCT");
+  pr = await D.saveProduct({ ...pr.product, end_date: add(20), updated_at_seen: pr.product.updated_at }, "s@x.com"); assert.equal(pr.dev.status, "ใกล้หมดสัญญา");
+  ok("Product: เพิ่มชนิดใหม่ได้ (ไม่ซ้ำ) · ยังไม่ถึงวันเริ่ม → ค้าง ปิดการขาย · เริ่มแล้ว → กำลังใช้ Product (ล็อก Status) · เหลือ ≤ 30 วัน → ใกล้หมดสัญญา");
+  // สิ้นเดือน: B ตั้ง มีแผนเข้าพบ ไว้เดือนก่อน → เปิดหน้า (2 คนพร้อมกัน) → กลับ เข้าร่วมแล้ว + นับนัดไม่สำเร็จ ครั้งเดียว
+  const prevMonth = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 2, 15)).toISOString().slice(0, 7);
+  const dt = tabs.get("DEVELOPERS")!; const H = dt.rows[0]; const bi = dt.rows.findIndex((x) => x[H.indexOf("developer_id")] === b.developer_id);
+  dt.rows[bi][H.indexOf("status")] = "มีแผนเข้าพบ"; dt.rows[bi][H.indexOf("status_changed_at")] = `${prevMonth}-20T03:00:00.000Z`;
+  const [l1, l2] = await Promise.all([D.listDevelopers(), D.listDevelopers()]);
+  assert.equal(l1.devs.find((d) => d.developer_id === b.developer_id)!.status, "เข้าร่วมแล้ว");
+  const l3 = await D.listDevelopers();
+  const autoLogs = l3.logs.filter((l) => l.developer_id === b.developer_id && l.kind === "auto_month_end");
+  assert.ok(autoLogs.length >= 1 && autoLogs.length <= 2); assert.equal(new Set(autoLogs.map((l) => l.log_id)).size, 1);
+  const rep = monthlyReport(l3.logs, l3.products, l3.devs, prevMonth); assert.equal(rep.find((x) => x.staff === "เซลส์ 2")!.noMeeting, 1);
+  const repNow = monthlyReport(l3.logs, l3.products, l3.devs, thisMonth); const s1 = repNow.find((x) => x.staff === "เซลส์ 1")!;
+  assert.deepEqual([s1.planned, s1.met, s1.won], [1, 1, 1]);
+  assert.equal((await D.listDevelopers()).logs.length, l3.logs.length); // เปิดซ้ำไม่บันทึกเพิ่ม
+  void l2;
+  ok(`สิ้นเดือน: มีแผนเข้าพบ ค้างจาก ${prevMonth} → เข้าร่วมแล้ว · เปิดหน้าพร้อมกัน 2 คนก็นับนัดไม่สำเร็จ 1 ครั้ง · รายงานเดือนนี้ เซลส์ 1: นัด 1 / เข้าพบ 1 / Win 1`);
+  const grid = [["ชื่อบริษัท", "โครงการหลัก", "เบอร์", "Tier", "Status"], ["นำเข้า 1", "หมู่บ้าน C", "0899999999", "a", "เข้าร่วมแล้ว"], ["ซ้ำ", "หมู่บ้าน A", "", "", ""], ["", "", "", "", ""], ["ผิด", "หมู่บ้าน D", "", "Z", ""]];
+  const plan = await D.importDevelopers(grid, false, "s@x.com"); assert.deepEqual(plan.counts, { insert: 1, duplicate: 1, invalid: 1 }); assert.equal(rowsOf("DEVELOPERS"), 2);
+  const com = await D.importDevelopers(grid, true, "s@x.com"); assert.equal(com.committed, true); assert.equal(rowsOf("DEVELOPERS"), 3);
+  assert.equal((await D.listDevelopers()).devs.find((d) => d.project_main === "หมู่บ้าน C")!.dev_code, "DV-0003");
+  ok("นำเข้ารายชื่อจากไฟล์: ตรวจก่อน (เพิ่ม 1 · ซ้ำ 1 · ไม่ถูกต้อง 1 · แถวว่างข้าม) → ยืนยันแล้วเพิ่มเฉพาะแถวที่ถูกต้อง รหัสต่อเนื่อง");
+  await D.deleteProduct(pr.product.product_id, "s@x.com");
+  const afterDel = (await D.listDevelopers()).devs.find((d) => d.developer_id === a.developer_id)!; assert.equal(afterDel.status, "เข้าร่วมแล้ว");
+  await D.deleteDeveloper(a.developer_id, afterDel.updated_at, "admin@example.com"); assert.equal(rowsOf("DEVELOPERS"), 2); assert.equal(rowsOf("DEVELOPER_PRODUCTS"), 0);
+  ok("ลบ Product ที่ใช้อยู่ → ไม่มี Product → เข้าร่วมแล้ว · ลบ Developer (Product ของรายการนั้นลบด้วย ประวัติ Status เก็บไว้)");
+}
 console.log("17) Phase 8 — Export: โครงสร้าง ชนิดข้อมูล และการไม่นับซ้ำ");
 const { columnType, valueMatches, normalizeExportValue } = await import("../src/lib/export/dictionary");
 const OLD_SUMMARY = ["month", "meta_ads_spend_thb", "google_ads_campaign_spend_thb", "total_paid_media_spend_thb", "ads_reports_span_months", "fb_posts_published", "fb_posts_reach_sum_lifetime", "fb_link_clicks", "line_new_friends", "line_inquiries", "line_leads", "leads_total", "leads_qualified", "won_deals", "deal_value_thb", "company_revenue_thb", "direct_cost_thb", "gross_profit_thb", "fb_daily_engagement", "fb_daily_seconds_viewed", "fb_daily_reach_sum", "fb_daily_link_clicks"];

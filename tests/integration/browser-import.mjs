@@ -150,6 +150,39 @@ try {
   ok("ตั้งค่าระบบ: ส่วนสำรองข้อมูลอัตโนมัติ มีขั้นตอน + สคริปต์ Apps Script (installWeeklyBackup / backupNow)");
   assert.deepEqual(errors, []);
 
+  // ---- Developer + Sale developer (31/10/2026) ----
+  const dAdd = (n) => new Date(Date.parse(today) + n * 864e5).toISOString().slice(0, 10);
+  await page.goto(BASE + "/developers"); await page.getByRole("button", { name: "+ เพิ่ม Developer" }).click();
+  const dform = () => page.locator("section", { has: page.getByRole("heading", { name: "เพิ่ม Developer ใหม่" }) }).last();
+  await dform().getByLabel("ชื่อบริษัท").fill("บริษัท บ้านดี จำกัด"); await dform().getByLabel("โครงการหลัก").fill("บ้านดี วิลล์"); await dform().getByLabel("โครงการรอง 1").fill("บ้านดี 2");
+  await dform().getByLabel("ชื่อผู้ติดต่อ").fill("คุณดี"); await dform().getByLabel("เบอร์").fill("0812223333"); await dform().getByLabel("Line", { exact: true }).fill("@baandee");
+  await dform().getByLabel("Tier", { exact: true }).selectOption("C"); await dform().getByLabel("Nayoo URL").fill("https://nayoo.co/baandee"); await dform().getByLabel("Staff", { exact: true }).fill("เซลส์ ก");
+  if (process.env.SHOT_DIR) await page.locator("section", { has: page.getByRole("heading", { name: "เพิ่ม Developer ใหม่" }) }).last().screenshot({ path: process.env.SHOT_DIR + "/dev-form.png" });
+  await page.getByRole("button", { name: "บันทึก", exact: true }).click(); await page.getByText("สร้าง DV-0001 แล้ว").waitFor();
+  await page.getByRole("button", { name: "+ เพิ่ม Product" }).click();
+  await page.getByLabel("Product", { exact: true }).selectOption("Top ads"); await page.getByLabel("วันเริ่ม").fill(dAdd(-1)); await page.getByLabel("วันหมดอายุ").fill(dAdd(90)); await page.getByLabel("ราคา (บาท)").fill("25000");
+  await page.getByRole("button", { name: "บันทึก Product" }).click(); await page.getByText("บันทึก Top ads แล้ว · Status ตอนนี้: กำลังใช้ Product").waitFor();
+  await page.getByRole("button", { name: "+ เพิ่ม Developer" }).click();
+  await dform().getByLabel("ชื่อบริษัท").fill("บริษัท สวนสวย"); await dform().getByLabel("โครงการหลัก").fill("สวนสวย โฮม"); await dform().getByLabel("Status", { exact: true }).selectOption("เข้าร่วมแล้ว"); await dform().getByLabel("Staff", { exact: true }).fill("เซลส์ ข");
+  await page.getByRole("button", { name: "บันทึก", exact: true }).click(); await page.getByText("สร้าง DV-0002 แล้ว").waitFor();
+  if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/developers.png", fullPage: true });
+  const dv = await tab("DEVELOPERS"); assert.equal(dv.length - 1, 2); assert.equal(dv[1][dv[0].indexOf("status")], "กำลังใช้ Product"); assert.equal(dv[1][dv[0].indexOf("tier")], "C");
+  ok("หน้า Developer: เพิ่มบริษัท (ครบทุกช่อง) → เพิ่ม Product Top ads ที่เริ่มแล้ว → Status เป็น กำลังใช้ Product เอง · เพิ่มรายการที่ 2 (เข้าร่วมแล้ว)");
+  await page.goto(BASE + "/sale-developer"); await page.getByText("สวนสวย โฮม").first().waitFor();
+  const colsTxt = await page.locator("[data-col]").evaluateAll((e) => e.map((x) => x.getAttribute("data-col")));
+  assert.deepEqual(colsTxt, ["ยังไม่เข้าร่วม", "เข้าร่วมแล้ว", "มีแผนเข้าพบ", "เข้าพบแล้ว", "ปิดการขาย", "กำลังใช้ Product", "ใกล้หมดสัญญา", "ไม่ให้เข้าพบ"]);
+  assert.ok(await page.locator('[data-col="กำลังใช้ Product"]').getByText("บ้านดี วิลล์").first().isVisible());
+  assert.equal(await page.getByLabel("เปลี่ยน Status บริษัท บ้านดี จำกัด").count(), 0); // ล็อกตาม Product
+  await page.getByLabel("เปลี่ยน Status บริษัท สวนสวย").selectOption("มีแผนเข้าพบ"); await page.locator('[data-col="มีแผนเข้าพบ"]').getByText("บริษัท สวนสวย").waitFor();
+  await page.locator('[data-col="มีแผนเข้าพบ"]').getByText("บริษัท สวนสวย").dragTo(page.locator('[data-col="เข้าพบแล้ว"]')); await page.locator('[data-col="เข้าพบแล้ว"]').getByText("บริษัท สวนสวย").waitFor();
+  await page.waitForTimeout(500);
+  const dv2 = await tab("DEVELOPERS"); const r2 = dv2.find((x) => x[dv2[0].indexOf("company_name")] === "บริษัท สวนสวย");
+  assert.equal(r2[dv2[0].indexOf("status")], "เข้าพบแล้ว"); assert.equal(r2[dv2[0].indexOf("last_contacted_at")], today);
+  const lg = await tab("DEVELOPER_STATUS_LOG"); assert.equal(lg.length - 1, 4); assert.equal(lg.filter((x) => x[lg[0].indexOf("kind")] === "auto_product").length, 1); // ย้ายอัตโนมัติตาม Product 1 + สร้างเป็น เข้าร่วมแล้ว 1 + ย้ายด้วยมือ 2
+  if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/sale-developer.png", fullPage: true });
+  ok("หน้า Sale developer: 8 คอลัมน์ตามลำดับที่กำหนด · การ์ดที่มี Product อยู่คอลัมน์ กำลังใช้ Product และล็อก · เมนู → มีแผนเข้าพบ · ลาก → เข้าพบแล้ว (ติดต่อล่าสุด = วันนี้) · บันทึกประวัติ");
+  assert.deepEqual(errors, []);
+
   const m = await open("marketing@example.com");
   // ---- ตั้งค่า → คู่มือนำเข้าข้อมูล / คำอธิบายตัวเลข (Marketing เปิดได้ · ตั้งค่าระบบไม่เห็น) ----
   await m.page.goto(BASE + "/settings/import-guide"); await m.page.getByRole("heading", { name: "คู่มือนำเข้าข้อมูล" }).waitFor();
@@ -171,7 +204,7 @@ try {
   assert.equal(await m.page.getByRole("link", { name: "คำอธิบายตัวเลข" }).getAttribute("href"), "/settings/metrics");
   await m.page.goto(BASE + "/settings/metrics"); await m.page.getByRole("heading", { name: "คำอธิบายตัวเลข" }).waitFor();
   const mtoc = m.page.getByRole("navigation", { name: "สารบัญ" }).getByRole("link");
-  assert.equal(await mtoc.count(), 6); assert.equal(await m.page.locator("table").count(), 0);
+  assert.equal(await mtoc.count(), 7); assert.equal(await m.page.locator("table").count(), 0);
   if (process.env.SHOT_DIR) await m.page.screenshot({ path: process.env.SHOT_DIR + "/guide-metrics.png", fullPage: true });
   const mt = [];
   for (const a of await mtoc.all()) mt.push([await a.getAttribute("href"), (await a.locator("div").first().innerText()).trim()]);
@@ -190,6 +223,7 @@ try {
   assert.equal(await m.page.getByRole("heading", { name: "ติดตามลูกค้า (ฝ่ายขาย)" }).count(), 0); assert.ok(await m.page.getByText("แก้ไขเป้า").isVisible());
   await m.page.goto(BASE + "/lead-report"); await m.page.getByRole("heading", { name: "ผลงานรายพนักงาน" }).waitFor();
   assert.ok(!(await m.page.locator("main").innerText()).includes("ผู้ซื้อ ก")); // ตัวเลขรวมเท่านั้น ไม่มีชื่อลูกค้า
+  for (const pth of ["/developers", "/sale-developer"]) { await m.page.goto(BASE + pth); await m.page.waitForURL(BASE + "/"); }
   for (const pth of ["/buyer-leads", "/seller-leads"]) { await m.page.goto(BASE + pth); await m.page.waitForURL(BASE + "/"); } // Marketing ไม่มีสิทธิ์ข้อมูลลูกค้า → กลับหน้าแรก
   const pr = await fetch(BASE + "/api/leads", { method: "PATCH", headers: { cookie: `authjs.session-token=${await cookie("marketing@example.com")}`, "sec-fetch-site": "same-origin", "content-type": "application/json" }, body: JSON.stringify({ lead_id: "B1", field: "call_status", value: "จอง" }) });
   assert.equal(pr.status, 403);

@@ -18,6 +18,7 @@ const EXPECT: Record<string, string[] | "public" | Record<string, string[]>> = {
   "src/app/api/import/plan/route.ts": ["admin", "marketing"], "src/app/api/import/commit/route.ts": ["admin", "marketing"], "src/app/api/import/history/route.ts": ["admin", "marketing"],
   "src/app/api/line-oa/route.ts": ["admin", "marketing"],
   "src/app/api/leads/route.ts": ["admin", "sales"],
+  "src/app/api/developers/route.ts": ["admin", "sales"], // Developer มีเบอร์/Line ผู้ติดต่อ
   "src/app/api/sales/plan/route.ts": ["admin", "sales"], "src/app/api/sales/commit/route.ts": ["admin", "sales"], "src/app/api/sales/history/route.ts": ["admin", "sales"],
   "src/app/api/export/sales-transactions/route.ts": ["admin", "sales"],
   "src/app/api/export/[dataset]/route.ts": ["admin", "marketing", "sales"], // สิทธิ์รายชุดข้อมูลบังคับใน service (ตรวจในข้อ 3)
@@ -40,7 +41,7 @@ ok(`API Route ${routes.length} ไฟล์: ทุก handler ตรวจ Sess
 
 console.log("2) หน้าจอและการล็อกอิน");
 const layout = read("src/app/(app)/layout.tsx"); assert.ok(layout.includes("auth()") && layout.includes('redirect("/login")') && /!role/.test(layout)); ok("Layout ของทุกหน้าในระบบ: ไม่ได้ล็อกอิน/ไม่มี Role → ส่งไปหน้า login");
-const guardedPages = ["import", "facebook-page", "facebook-ads", "google-ads", "line-oa", "leads", "sales", "sales/import", "settings", "settings/targets"];
+const guardedPages = ["import", "facebook-page", "facebook-ads", "google-ads", "line-oa", "leads", "sales", "sales/import", "settings", "settings/targets", "developers", "sale-developer"];
 for (const p of guardedPages) { const s = read(`src/app/(app)/${p}/page.tsx`); assert.ok(s.includes("auth()") && s.includes('redirect("/")'), `${p}: ต้องตรวจ Role ฝั่ง Server`); }
 const pageRoles = (p: string) => (read(`src/app/(app)/${p}/page.tsx`).match(/role !== "(\w+)"/g) ?? []).map((x) => x.match(/"(\w+)"/)![1]).sort();
 assert.deepEqual(pageRoles("leads"), ["admin", "sales"]); assert.deepEqual(pageRoles("sales"), ["admin", "sales"]); assert.deepEqual(pageRoles("sales/import"), ["admin", "sales"]); assert.deepEqual(pageRoles("import"), ["admin", "marketing"]); assert.deepEqual(pageRoles("line-oa"), ["admin", "marketing"]); assert.deepEqual(pageRoles("facebook-ads"), ["admin", "marketing"]); assert.deepEqual(pageRoles("settings"), ["admin"]);

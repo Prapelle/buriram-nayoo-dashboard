@@ -21,6 +21,8 @@ export const NAV: NavItem[] = [
   { href: "/seller-leads", label: "Seller Leads", roles: SALES },
   { href: "/buyer-leads", label: "Buyer Leads", roles: SALES },
   { href: "/lead-report", label: "รายงาน Lead", roles: ALL },
+  { href: "/developers", label: "Developer", roles: SALES },
+  { href: "/sale-developer", label: "Sale developer", roles: SALES },
   { href: "/sales", label: "Sales", roles: SALES },
   { href: "/export", label: "ส่งออกข้อมูล", roles: ALL },
   // ตั้งค่า: เมนูย่อย — ตั้งค่าระบบ (Admin) · คู่มือนำเข้าข้อมูล และ คำอธิบายตัวเลข (ทุก Role)

@@ -1043,3 +1043,31 @@ Users 17,443 · Page Views 42,450 · PV/User 2.43 · Duration 1 นาที 0 �
 - ค่าที่ใส่ใน Branding: Homepage = https://buriram-nayoo-dashboard.jsuparkit.workers.dev · Privacy policy = https://buriram-nayoo-dashboard.jsuparkit.workers.dev/privacy · Authorized domain = jsuparkit.workers.dev
 - Test Results: 418/418 ผ่าน (+1 /privacy ไม่ต้องล็อกอิน) · Cloudflare build ผ่าน · Data/Schema: ไม่มี
 
+## 39) Developer + Sale developer (Kanban) (31/10/2026)
+
+### สิ่งที่ทำ
+- **หน้า Developer** (Admin/Sales — มีเบอร์/Line ผู้ติดต่อ) รูปแบบเหมือนหน้า Leads: ชื่อบริษัท, โครงการหลัก, โครงการรอง 1–2, ชื่อผู้ติดต่อ, เบอร์, Line, Tier (A–E), Nayoo URL, Staff, Status, ติดต่อล่าสุด, ติดต่อครั้งถัดไป, Remark, Note · รหัส DV-#### · ค้นหา/กรอง · เตือนซ้ำ (ชื่อบริษัท / โครงการรวมโครงการรอง / เบอร์ / Line) · ลบได้ (ยืนยัน 2 ขั้น)
+  - **Product ที่ใช้อยู่:** เลือกชนิด (Top ads, Super Topads, + เพิ่มชนิดเองได้) + วันเริ่ม + วันหมดอายุ + ราคา · หลายตัวพร้อมกันได้ · **Product ที่เคยใช้** = ที่หมดอายุแล้ว (อัตโนมัติ)
+  - ติดตาม เลยกำหนด / วันนี้ / ค้างเกิน 3 วัน · สรุปรายเดือนต่อ Staff · Product ที่จะหมดอายุใน 60 วัน · นำเข้ารายชื่อจากไฟล์ .csv/.xlsx (ตรวจก่อน, ข้ามรายการซ้ำ, ไฟล์ตัวอย่าง)
+- **หน้า Sale developer:** Kanban 8 คอลัมน์ตามลำดับที่กำหนด · ลากการ์ดหรือใช้เมนูบนการ์ด · กรอง Staff/Tier/ค้นหา
+  - ย้ายไป **เข้าพบแล้ว** → ติดต่อล่าสุด = วันนี้ · **ปิดการขาย** = Win (บันทึกวันที่) และค้างไว้จนกว่า Product จะเริ่ม
+  - **สิ้นเดือน:** มีแผนเข้าพบ / เข้าพบแล้ว ที่ตั้งก่อนเดือนนี้ → กลับไป เข้าร่วมแล้ว (มีแผนเข้าพบ นับเป็น นัดไม่สำเร็จ ของเดือนที่ตั้ง) — ทำตอนเปิดหน้าครั้งแรกของเดือน ไม่ต้องตั้งเวลา
+  - **กำลังใช้ Product / ใกล้หมดสัญญา** ระบบตั้งเองจาก Product (≤ 30 วันก่อนหมดอายุ = ใกล้หมดสัญญา, หมดทุกตัว = เข้าร่วมแล้ว) · ลากเข้าเองไม่ได้ และการ์ดที่มี Product ใช้อยู่ถูกล็อก
+- **ประวัติ Status** (แท็บ DEVELOPER_STATUS_LOG) ทุกการเปลี่ยน ใช้ทำรายงาน · ประวัติอัตโนมัติมีรหัสคงที่ และรายงานนับครั้งเดียวต่อรหัส (เปิดหน้าพร้อมกันหลายคนไม่นับซ้ำ)
+- คำอธิบายตัวเลข: เพิ่มหัวข้อ 6. Developer / Sale developer
+
+### พบและแก้ระหว่างทดสอบ
+- หน้า Developer พังตอนโหลดครั้งแรก (คำนวณรายการติดตามก่อนมีวันที่วันนี้) → แก้แล้ว
+- รายงานรายเดือนอาจนับ นัดไม่สำเร็จ ซ้ำ ถ้าเปิดหน้าพร้อมกันตอนต้นเดือน → นับครั้งเดียวต่อรหัสประวัติ
+
+### ไฟล์ที่เปลี่ยน
+ใหม่: `src/lib/{developers,developers-service}.ts`, `src/app/api/developers/route.ts`, `src/app/(app)/{developers,sale-developer}/page.tsx`, `src/components/{DevelopersManager,DevBoard}.tsx`, `tests/developers.test.ts` · แก้: `src/lib/{schema,roles}.ts`, `src/lib/guides/metrics.ts` · tests: security, e2e, integration/browser-import.mjs, run-all.sh
+
+### Data / Schema Impact
+- **แท็บใหม่ DEVELOPERS, DEVELOPER_PRODUCTS, DEVELOPER_STATUS_LOG → Admin กด ตั้งค่า → ตั้งค่าระบบ → เตรียม Google Sheet** · ชนิด Product เก็บใน APP_CONFIG (developer_products) · ไม่แตะแท็บเดิม
+
+### Test Results
+**Passed:** 433/433 (รันทั้งชุด 2 รอบติดกัน) — developers 7 (กติกา Status/Product/สิ้นเดือน/รายงาน/นับซ้ำ/ก่อนโหลดข้อมูล), e2e +6 (บันทึก/ซ้ำ/สถานะ/Product/สิ้นเดือนเปิดพร้อมกัน 2 คน/นำเข้า/ลบ ผ่าน Sheets จำลอง), security (สิทธิ์ API + หน้า), เบราว์เซอร์จริง +2 (เพิ่ม Developer ครบทุกช่อง + Product → กำลังใช้ Product; บอร์ด 8 คอลัมน์, การ์ดล็อก, เมนู + ลาก → เข้าพบแล้ว; Marketing เข้าไม่ได้) · TypeScript + Cloudflare build ผ่าน
+**Failed:** 0
+**Not Tested:** บนเว็บที่ deploy จริง/Google Sheet จริง
+

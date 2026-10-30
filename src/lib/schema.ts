@@ -2,6 +2,7 @@ export type TabDef = { name: string; group: "system" | "marketing" | "manual"; h
 
 import { SPECS, headersFromSpec } from "./import/specs";
 import { SALES_LOG_COLUMNS, SALES_TX_COLUMNS } from "./sales/model";
+import { DEV_COLUMNS, LOG_COLUMNS, PRODUCT_COLUMNS } from "./developers";
 
 // แท็บ Google Ads รายละเอียดสร้างจาก spec เดียวกับตัว Import เพื่อให้คอลัมน์ตรงกันเสมอ
 const gads = (id: string): TabDef => {
@@ -23,6 +24,10 @@ export const TABS: TabDef[] = [
     "metric_date","metric_scope","duration_sec","caption_type","is_crosspost","is_share","languages","custom_labels","funded_content_status","data_comment"] },
   // Facebook Page ระดับเพจ รายวัน (Viewers / Link clicks) แบบยาว: หนึ่งแถว = ตัวชี้วัด × วัน (เพิ่ม 28/10/2026)
   // เป้าหมายรายเดือน (เพิ่ม 30/10/2026): หนึ่งแถวต่อเดือน แก้ได้ทุกเดือนที่หน้า ตั้งค่า → เป้าหมายรายเดือน
+  // Developer (ลูกค้าโครงการหมู่บ้านที่ซื้อโฆษณา) — เพิ่ม 31/10/2026
+  { name: "DEVELOPERS", group: "manual", headers: DEV_COLUMNS },
+  { name: "DEVELOPER_PRODUCTS", group: "manual", headers: PRODUCT_COLUMNS },
+  { name: "DEVELOPER_STATUS_LOG", group: "manual", headers: LOG_COLUMNS },
   { name: "MONTHLY_TARGETS", group: "manual", headers: ["month","ad_budget_thb","lead_target","notes","updated_by","updated_at"] },
   { name: "FB_PAGE_INSIGHTS", group: "marketing", headers: ["record_id","metric","metric_date","value","row_key","raw_json","source_batch_id","source_filename","imported_at"] },
   { name: "META_ADS", group: "marketing", headers: ["record_id","report_start","report_end","ad_name","ad_delivery","attribution_setting","results","result_indicator","cost_per_results","ad_set_budget","ad_set_budget_type","amount_spent_thb","impressions","reach","facebook_likes","ends","bid","bid_type","last_significant_edit","quality_ranking","engagement_rate_ranking","conversion_rate_ranking","ad_set_name","results_initial","results_initial_indicator","area","row_key","raw_json","source_batch_id","imported_at"] },

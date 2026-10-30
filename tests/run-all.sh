@@ -12,6 +12,7 @@ echo "== seller-leads"; npx tsx tests/sellerleads.test.ts
 echo "== seller-leads-service"; npx tsx tests/sellerleads-service.test.mts
 echo "== callstatus-kpi"; npx tsx tests/callstatus-kpi.test.ts
 echo "== insights";    npx tsx tests/insights.test.ts
+echo "== developers";  npx tsx tests/developers.test.ts
 if ls "$FIX"/Page.csv >/dev/null 2>&1; then
   echo "== import";    npx tsx tests/import.test.ts
   echo "== dashboard"; npx tsx tests/dashboard.test.ts

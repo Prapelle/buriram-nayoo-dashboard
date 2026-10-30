@@ -8,7 +8,7 @@
 ## 1. สรุปสถานะ (Definition of Done)
 
 สถานะ: ✅ ผ่าน · ⚠️ ผ่านบางส่วน/มีเงื่อนไข · ⛔ ไม่ได้ทำ (ระบุเหตุผล)
-"เว็บจริง" = ผู้ใช้ตรวจบนเว็บที่ deploy แล้ว · "อัตโนมัติ" = ชุดทดสอบ 417 รายการ (รวม HTTP Integration กับ production build)
+"เว็บจริง" = ผู้ใช้ตรวจบนเว็บที่ deploy แล้ว · "อัตโนมัติ" = ชุดทดสอบ 433 รายการ (รวม HTTP Integration กับ production build)
 
 | ข้อกำหนด | สถานะ | หลักฐาน |
 |---|---|---|
@@ -74,6 +74,7 @@
 | `WEBSITE_DIMENSIONS` | marketing | 21 | **แท็บใหม่ (Phase 5)** · +users, sessions (28/10/2026) |
 | `FB_PAGE_INSIGHTS` | marketing | 9 | **แท็บใหม่ (28/10/2026)** Viewers / Link clicks รายวันระดับเพจ (metric × วัน) |
 | `MONTHLY_TARGETS` | manual | 6 | **แท็บใหม่ (30/10/2026)** งบโฆษณา + เป้า Lead หนึ่งแถวต่อเดือน |
+| `DEVELOPERS` / `DEVELOPER_PRODUCTS` / `DEVELOPER_STATUS_LOG` | manual | — | **แท็บใหม่ (31/10/2026)** ลูกค้าโครงการหมู่บ้าน · Product ที่ขาย · ประวัติ Status สำหรับรายงาน |
 
 | ไฟล์ส่งออก | กลุ่ม | ระดับข้อมูล (grain) | สิทธิ์ |
 |---|---|---|---|
@@ -145,6 +146,9 @@
 - เปลี่ยน Need ข้ามกลุ่ม (เช่น ขาย → ซื้อ) ระบบถามยืนยันก่อนล้างสถานะเดิม และบันทึกค่าเดิมใน Audit Log
 - ระบบคำนวณขั้น Pipeline ให้เอง: Qualified = Hot, Warm, Close, นัดทำสัญญา, ทำสัญญา, เซ็นสัญญา, สัญญาเปิด, เป็นนายหน้า, ขายแล้ว · Won = Close, ขายแล้ว · Lost = Archive, ยกเลิก, บ้านไม่พร้อมขาย
 
+### 4.2b Developer / Sale developer (Admin / Sales)
+- หน้า **Developer**: เพิ่ม/แก้ไขบริษัท–โครงการ, Product ที่ใช้อยู่ (วันเริ่ม–หมดอายุ–ราคา), นำเข้ารายชื่อจากไฟล์, สรุปรายเดือนต่อ Staff · หน้า **Sale developer**: Kanban ลากเปลี่ยน Status — สิ้นเดือน มีแผนเข้าพบ/เข้าพบแล้ว กลับไป เข้าร่วมแล้ว เอง · กำลังใช้ Product / ใกล้หมดสัญญา ระบบตั้งเองจาก Product
+
 ### 4.3 Dashboard
 - **ภาพรวม:** การ์ด ติดตามลูกค้า (Admin/Sales) · เป้าหมายเดือนนี้ (ตั้งที่ ตั้งค่า → เป้าหมายรายเดือน) · Checklist ข้อมูลเดือนก่อน/เดือนนี้ (Admin/Marketing)
 - **รายงาน Lead:** ผลงานรายพนักงาน + เหตุผลที่ไม่สำเร็จ แยกช่องทาง
@@ -211,7 +215,7 @@
 - **ก่อน deploy ทุกครั้ง:** `npx opennextjs-cloudflare build` แล้ว `bash tests/run-all.sh` (วางไฟล์ตัวอย่างใน `tests/fixtures` ตาม README ในโฟลเดอร์นั้น)
 
 ## 8. ชุดทดสอบ
-`bash tests/run-all.sh` — 417 รายการ (security, sales, import, dashboard, overview, fbactions, performance, yoy, kpicard, website, fbpage, e2e, http-integration, browser-website)
+`bash tests/run-all.sh` — 433 รายการ (security, sales, import, dashboard, overview, fbactions, performance, yoy, kpicard, website, fbpage, e2e, http-integration, browser-website)
 - `tests/e2e.test.mts`: ทุกโมดูลผ่าน service + Google Sheets จำลอง
 - `tests/integration/run.mjs`: เปิด production build จริง ล็อกอินด้วยคุกกี้เซสชันจริงตาม Role แล้วเรียกหน้าเว็บ/API (ต้อง build ก่อน)
 - `tests/integration/browser-website.mjs`: เปิดหน้า Website ใน Chromium จริง อัปโหลดไฟล์จริง 9 ไฟล์ (รวม Reports snapshot) นำเข้า กรอกยอดผู้ใช้ แล้วตรวจหน้า Performance ต.ค. และ ก.ย. (ต้องมี Playwright)
