@@ -126,6 +126,7 @@ export function StatusBoard({ kind }: { kind: "seller" | "buyer" }) {
                         className={`rounded-md border border-slate-200 bg-white p-2.5 text-sm shadow-sm ${b ? "opacity-50" : "cursor-grab active:cursor-grabbing"} ${dragId === r.lead_id ? "opacity-40" : ""}`}>
                         <div className="font-medium leading-snug">{r.customer_name}</div>
                         <div className="mt-0.5 text-xs text-slate-500">{[r.phone, r.property_type, r.price_range].filter(Boolean).join(" · ") || <span className="text-slate-300">—</span>}</div>
+                        {r.interest && <div className="mt-0.5 line-clamp-2 text-xs text-slate-600" title={r.interest}>สนใจ: {r.interest}</div>}
                         {kind === "buyer" && <div className="mt-1 flex gap-1 text-[11px]"><span className="rounded bg-slate-100 px-1.5 py-0.5">{r.need}</span>{r.buy_status && <span className="rounded bg-slate-100 px-1.5 py-0.5">{r.buy_status}</span>}</div>}
                         <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
                           <span className="font-mono">{r.lead_code}</span>

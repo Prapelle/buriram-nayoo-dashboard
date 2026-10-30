@@ -3,12 +3,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { CHANNELS } from "@/lib/dashboard";
 import { CALL_DEFAULT, normCall } from "@/lib/lead-options";
 import {
-  AREA_OPTIONS, BUY_STATUS, CALL_STATUS, CONDITIONS, EDITABLE, NEEDS, PRICE_RANGES, PROPERTY_TYPES, SELL_STATUS,
+  areaLabel, BUY_STATUS, CALL_STATUS, CONDITIONS, EDITABLE, NEEDS, PRICE_RANGES, PROPERTY_TYPES, SELL_STATUS,
   filterLeads, leadStatusOf, statusFieldOf, statusOptionsOf, todayBkk, type DupMatch, type Lead,
 } from "@/lib/leads";
 
 const PAGE = 25;
-const AREA_TH = Object.fromEntries(AREA_OPTIONS);
 const dmy = (iso: string) => (/^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "");
 const STATUS_COLOR: Record<string, string> = {
   Hot: "bg-red-100", Warm: "bg-amber-100", Cold: "bg-sky-100", Archive: "bg-slate-200", Close: "bg-green-100",
@@ -17,13 +16,13 @@ const STATUS_COLOR: Record<string, string> = {
 };
 const CALL_COLOR: Record<string, string> = { รอติดต่อ: "bg-slate-100", ติดต่อได้แล้ว: "bg-green-50", รอเข้าชม: "bg-yellow-50", เข้าชมแล้ว: "bg-sky-50", จอง: "bg-violet-100", ซื้อสำเร็จ: "bg-emerald-100", กู้ไม่ผ่าน: "bg-orange-100", ติดต่อไม่ได้: "bg-red-50", ไม่สนใจ: "bg-amber-50" };
 const CLOSED = ["Close", "Archive", "ขายแล้ว", "ยกเลิก", "บ้านไม่พร้อมขาย"];
-const emptyForm = (): Lead => ({ ...Object.fromEntries(EDITABLE.map((k) => [k, ""])), received_at: todayBkk(), area: "unknown", call_status: CALL_DEFAULT });
+const emptyForm = (): Lead => ({ ...Object.fromEntries(EDITABLE.map((k) => [k, ""])), received_at: todayBkk(), area: "", call_status: CALL_DEFAULT });
 const EMPTY_F = { q: "", from: "", to: "", channel: "", need: "", status: "", callStatus: "", staff: "", area: "", service: "" };
 const statusLabel = (need: string) => (statusFieldOf(need) === "buy_status" ? "Buy Status" : statusFieldOf(need) === "sell_status" ? "Sell Status" : "Status");
 type Conflict = { field: string; value: string };
 
 export function LeadsManager() {
-  const [data, setData] = useState<{ state: "loading" | "ok" | "error"; rows: Lead[]; staff: string[]; error?: string }>({ state: "loading", rows: [], staff: [] });
+  const [data, setData] = useState<{ state: "loading" | "ok" | "error"; rows: Lead[]; staff: string[]; areas: string[]; error?: string }>({ state: "loading", rows: [], staff: [], areas: [] });
   const [f, setF] = useState(EMPTY_F);
   const [page, setPage] = useState(1);
   const [form, setForm] = useState<Lead | null>(null);
@@ -42,8 +41,8 @@ export function LeadsManager() {
     try {
       const r = await fetch("/api/leads"); const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
-      setData({ state: "ok", rows: j.rows, staff: j.staff ?? [] });
-    } catch (e) { setData({ state: "error", rows: [], staff: [], error: e instanceof Error ? e.message : "error" }); }
+      setData({ state: "ok", rows: j.rows, staff: j.staff ?? [], areas: j.areas ?? [] });
+    } catch (e) { setData({ state: "error", rows: [], staff: [], areas: [], error: e instanceof Error ? e.message : "error" }); }
   }, []);
   useEffect(() => { load(); }, [load]);
 
@@ -59,7 +58,7 @@ export function LeadsManager() {
   }
   const closeForm = () => { setForm(null); setEditing(null); setErrors({}); setDups(null); setNeedAsk(null); setDelAsk(false); };
   const openForm = (r: Lead | null) => {
-    setForm(r ? { ...emptyForm(), ...Object.fromEntries(EDITABLE.map((k) => [k, r[k] ?? ""])), call_status: normCall(r.call_status) || CALL_DEFAULT } : emptyForm());
+    setForm(r ? { ...emptyForm(), ...Object.fromEntries(EDITABLE.map((k) => [k, r[k] ?? ""])), call_status: normCall(r.call_status) || CALL_DEFAULT, area: areaLabel(r.area) } : emptyForm());
     setEditing(r); setViewing(null); setErrors({}); setDups(null); setNeedAsk(null); setDelAsk(false); setMsg(null);
     setMore(!!r && ["campaign_name", "next_follow_up_at", "last_contacted_at", "lost_reason"].some((k) => r[k]));
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -150,7 +149,8 @@ export function LeadsManager() {
             {([
               ["วันที่รับ Lead", dmy(viewing.received_at)], ["Channel", viewing.source_channel], ["Name", viewing.customer_name], ["Phone", viewing.phone],
               ["Need", viewing.need], [statusLabel(viewing.need), leadStatusOf(viewing)], ["Type", viewing.property_type], ["Condition", viewing.property_condition],
-              ["Price", viewing.price_range], ["Call Status", viewing.call_status], ["Staff", viewing.staff], ["พื้นที่", AREA_TH[viewing.area || "unknown"]],
+              ["Price", viewing.price_range], ["Call Status", viewing.call_status], ["Staff", viewing.staff], ["พื้นที่", areaLabel(viewing.area)],
+              ["ความสนใจ", viewing.interest],
               ["Line", viewing.line_id], ["Campaign", viewing.campaign_name],
               ["ติดตามครั้งถัดไป", dmy(viewing.next_follow_up_at)], ["ขั้น Pipeline (คำนวณ)", viewing.status], ["สร้างโดย", `${viewing.created_by} · ${dmy(viewing.created_at)}`], ["แก้ไขล่าสุด", `${viewing.updated_by} · ${dmy(viewing.updated_at)}`],
             ] as [string, string][]).map(([k, v]) => <div key={k}><dt className="text-xs text-slate-500">{k}</dt><dd>{v || <span className="text-slate-300">—</span>}</dd></div>)}
@@ -177,10 +177,12 @@ export function LeadsManager() {
             {select("property_type", "Type", pair(PROPERTY_TYPES))}
             {select("property_condition", "Condition", pair(CONDITIONS))}
             {select("price_range", "Price", pair(PRICE_RANGES))}
+            {field("interest", "ความสนใจ")}
             {select("call_status", "Call Status", pair(CALL_STATUS))}
             {field("staff", "Staff", { list: "staff-list" })}
             <datalist id="staff-list">{data.staff.map((o) => <option key={o} value={o} />)}</datalist>
-            {select("area", "พื้นที่", AREA_OPTIONS)}
+            {field("area", "พื้นที่ (กรอกเองหรือเลือกจากรายการ)", { list: "area-list" })}
+            <datalist id="area-list">{data.areas.map((o) => <option key={o} value={o} />)}</datalist>
           </div>
           {prevOther && <p role="status" className="rounded-md bg-amber-50 p-2 text-sm text-amber-800">{statusFieldOf(editing!.need) === "buy_status" ? "Buy Status" : "Sell Status"} เดิม &quot;{prevOther}&quot; ใช้กับ Need &quot;{form.need}&quot; ไม่ได้ — ระบบจะถามยืนยันก่อนล้างค่าเดิมเมื่อกดบันทึก</p>}
           <div className="grid gap-3 md:grid-cols-2">
@@ -231,11 +233,11 @@ export function LeadsManager() {
 
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">ค้นหา</span>
-          <input value={f.q} onChange={(e) => { setF({ ...f, q: e.target.value }); setPage(1); }} placeholder="ชื่อ / เบอร์ / Line / รหัส / Remark" className="w-56 rounded-md border border-slate-300 px-2 py-1.5 text-sm" /></label>
+          <input value={f.q} onChange={(e) => { setF({ ...f, q: e.target.value }); setPage(1); }} placeholder="ชื่อ / เบอร์ / Line / ความสนใจ / Remark" className="w-56 rounded-md border border-slate-300 px-2 py-1.5 text-sm" /></label>
         {fdate("from", "รับตั้งแต่")}{fdate("to", "ถึง")}
         {fsel("channel", "Channel", pair(CHANNELS))}{fsel("need", "Need", pair(NEEDS))}{fsel("status", "Status", pair(statusOptsFilter))}
         {fsel("callStatus", "Call Status", pair(CALL_STATUS))}{fsel("staff", "Staff", pair(data.staff))}
-        {fsel("area", "พื้นที่", AREA_OPTIONS)}
+        {fsel("area", "พื้นที่", pair(data.areas))}
         {Object.values(f).some(Boolean) && <button onClick={() => { setF(EMPTY_F); setPage(1); }} className="py-1.5 text-sm underline">ล้าง</button>}
         <button onClick={() => openForm(null)} className="ml-auto rounded-md bg-slate-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-slate-700">+ เพิ่ม Lead</button>
       </div>

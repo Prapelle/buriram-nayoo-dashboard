@@ -2,6 +2,21 @@ import { CHANNELS, SERVICES } from "./dashboard";
 import { isIsoDate } from "./import/normalize";
 
 export const AREA_OPTIONS: [string, string][] = [["unknown", "ไม่ทราบ (Unknown)"], ["buriram", "บุรีรัมย์"], ["surin", "สุรินทร์"], ["multi_province", "หลายจังหวัด"]];
+/** พื้นที่ของ Lead กรอกเองได้ · ชื่อพื้นที่มาตรฐาน (บุรีรัมย์ / สุรินทร์ / หลายจังหวัด) เก็บเป็นรหัสเดิม เพื่อให้ตัวกรองพื้นที่ของ Dashboard/Export ใช้ต่อได้ */
+const AREA_BY_NAME: Record<string, string> = Object.fromEntries(AREA_OPTIONS.flatMap(([code, label]) => [[code, code], [label.toLowerCase(), code]]));
+AREA_BY_NAME["ไม่ทราบ"] = "unknown";
+export function areaCode(v: unknown): string {
+  const s = String(v ?? "").trim().replace(/\s+/g, " ");
+  const code = AREA_BY_NAME[s.toLowerCase()];
+  return code === "unknown" ? "" : code ?? s;
+}
+/** ค่าที่แสดง: รหัสมาตรฐาน → ชื่อไทย · ไม่ทราบ/ว่าง → "" · อื่น ๆ แสดงตามที่กรอก */
+export function areaLabel(v: unknown): string {
+  const s = String(v ?? "").trim();
+  if (!s || s === "unknown") return "";
+  return AREA_OPTIONS.find(([c]) => c === s)?.[1] ?? s;
+}
+export const AREA_SUGGEST = ["บุรีรัมย์", "สุรินทร์", "หลายจังหวัด"];
 import { CALL_DEFAULT, isContactedCall, normCall, NEEDS, BUY_NEEDS, SELL_NEEDS, BUY_STATUS, SELL_STATUS, CALL_STATUS, PROPERTY_TYPES, CONDITIONS, PRICE_RANGES } from "./lead-options";
 export { NEEDS, BUY_NEEDS, SELL_NEEDS, BUY_STATUS, SELL_STATUS, CALL_STATUS, PROPERTY_TYPES, CONDITIONS, PRICE_RANGES };
 
@@ -25,10 +40,10 @@ export function pipelineOf(r: Lead): "Won" | "Lost" | "Qualified" | "Contacted" 
 export const PIPELINE_MAP = { Qualified: [...QUALIFIED, ...WON], Won: WON, Lost: LOST };
 
 export const LEAD_COLUMNS = ["lead_id", "lead_code", "received_at", "customer_name", "company_name", "phone", "email", "source_channel", "campaign_name", "utm_source", "utm_medium", "utm_campaign", "area", "service_category", "service_interest", "need_description", "owner_email", "status", "contactable", "last_contacted_at", "next_follow_up_at", "qualified_at", "won_at", "lost_reason", "notes", "created_by", "created_at", "updated_by", "updated_at",
-  "need", "buy_status", "sell_status", "property_type", "property_condition", "price_range", "call_status", "staff", "line_id"];
+  "need", "buy_status", "sell_status", "property_type", "property_condition", "price_range", "call_status", "staff", "line_id", "interest"];
 /** status ไม่ได้กรอกเองแล้ว (คำนวณจาก Buy/Sell Status) · owner_email ไม่แสดงในฟอร์มแต่คงค่าเดิมไว้ */
 export const EDITABLE = ["received_at", "customer_name", "company_name", "phone", "email", "source_channel", "campaign_name", "utm_source", "utm_medium", "utm_campaign", "area", "service_category", "service_interest", "need_description", "owner_email", "contactable", "last_contacted_at", "next_follow_up_at", "lost_reason", "notes",
-  "need", "buy_status", "sell_status", "property_type", "property_condition", "price_range", "call_status", "staff", "line_id"];
+  "need", "buy_status", "sell_status", "property_type", "property_condition", "price_range", "call_status", "staff", "line_id", "interest"];
 export type Lead = Record<string, string>;
 
 /** คุยกับลูกค้าได้แล้ว (ติดต่อได้แล้วขึ้นไป หรือ ไม่สนใจ) → contactable TRUE · ติดต่อไม่ได้ → FALSE · อื่น ๆ คงค่าเดิม */
@@ -50,8 +65,8 @@ export const normalizeEmail = (s: string) => String(s ?? "").trim().toLowerCase(
 /** Line ID เทียบแบบไม่สนตัวพิมพ์/ช่องว่าง/@ นำหน้า */
 export const normalizeLine = (s: string) => String(s ?? "").trim().replace(/^@/, "").replace(/\s+/g, "").toLowerCase();
 
-const LIMITS: Record<string, number> = { customer_name: 200, company_name: 200, campaign_name: 200, utm_source: 200, utm_medium: 200, utm_campaign: 200, service_interest: 300, need_description: 2000, owner_email: 200, lost_reason: 500, notes: 2000, phone: 40, email: 200, staff: 100, line_id: 100 };
-const LABEL: Record<string, string> = { customer_name: "ชื่อลูกค้า", company_name: "บริษัท", campaign_name: "Campaign", service_interest: "บริการที่สนใจ", need_description: "ความต้องการ", lost_reason: "เหตุผลที่ปิดไม่สำเร็จ", notes: "Note", staff: "Staff", line_id: "Line", phone: "โทรศัพท์", email: "อีเมล", owner_email: "ผู้รับผิดชอบ" };
+const LIMITS: Record<string, number> = { customer_name: 200, company_name: 200, campaign_name: 200, utm_source: 200, utm_medium: 200, utm_campaign: 200, service_interest: 300, need_description: 2000, owner_email: 200, lost_reason: 500, notes: 2000, phone: 40, email: 200, staff: 100, line_id: 100, interest: 500, area: 100 };
+const LABEL: Record<string, string> = { customer_name: "ชื่อลูกค้า", company_name: "บริษัท", campaign_name: "Campaign", service_interest: "บริการที่สนใจ", need_description: "ความต้องการ", lost_reason: "เหตุผลที่ปิดไม่สำเร็จ", notes: "Note", staff: "Staff", line_id: "Line", interest: "ความสนใจ", area: "พื้นที่", phone: "โทรศัพท์", email: "อีเมล", owner_email: "ผู้รับผิดชอบ" };
 
 export function validateLead(input: Record<string, unknown>): { ok: true; rec: Lead } | { ok: false; errors: Record<string, string> } {
   const errors: Record<string, string> = {};
@@ -73,7 +88,7 @@ export function validateLead(input: Record<string, unknown>): { ok: true; rec: L
   if (rec.property_type && !PROPERTY_TYPES.includes(rec.property_type)) errors.property_type = "Type ไม่ถูกต้อง";
   if (rec.property_condition && !CONDITIONS.includes(rec.property_condition)) errors.property_condition = "Condition ไม่ถูกต้อง";
   if (rec.price_range && !PRICE_RANGES.includes(rec.price_range)) errors.price_range = "Price ไม่ถูกต้อง";
-  if (!AREA_OPTIONS.some(([v]) => v === rec.area)) { if (rec.area === "") rec.area = "unknown"; else errors.area = "Area ไม่ถูกต้อง"; }
+  rec.area = areaCode(rec.area); // พื้นที่กรอกเอง (30/10/2026): ชื่อพื้นที่มาตรฐานเก็บเป็นรหัสเดิม ที่เหลือเก็บตามที่กรอก
   if (rec.phone) { const n = normalizePhone(rec.phone).length; if (n < 8 || n > 15) errors.phone = "เบอร์โทรไม่ถูกต้อง (ควรมี 8–15 หลัก)"; }
   if (rec.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rec.email)) errors.email = "รูปแบบอีเมลไม่ถูกต้อง";
   if (rec.owner_email && !/^[^\s@]+@[^\s@]+$/.test(rec.owner_email)) errors.owner_email = "ผู้รับผิดชอบต้องเป็นอีเมล";
@@ -133,7 +148,7 @@ export function filterLeads(rows: Lead[], f: LeadFilter): Lead[] {
   const q = f.q?.trim().toLowerCase(); const qd = q ? q.replace(/\D/g, "") : "";
   return rows.filter((r) => {
     if (f.channel && r.source_channel !== f.channel) return false;
-    if (f.area && (r.area || "unknown") !== f.area) return false;
+    if (f.area && areaLabel(r.area) !== f.area) return false;
     if (f.status && leadStatusOf(r) !== f.status) return false;
     if (f.need && r.need !== f.need) return false;
     if (f.callStatus && (normCall(r.call_status) || CALL_DEFAULT) !== f.callStatus) return false;
@@ -142,7 +157,7 @@ export function filterLeads(rows: Lead[], f: LeadFilter): Lead[] {
     if (f.to && (r.received_at ?? "").slice(0, 10) > f.to) return false;
     if (f.service && r.service_category !== f.service) return false;
     if (!q) return true;
-    if (["lead_code", "customer_name", "company_name", "email", "campaign_name", "phone", "line_id", "staff", "need_description", "notes"].some((k) => (r[k] ?? "").toLowerCase().includes(q))) return true;
+    if (["lead_code", "customer_name", "company_name", "email", "campaign_name", "phone", "line_id", "interest", "staff", "need_description", "notes"].some((k) => (r[k] ?? "").toLowerCase().includes(q))) return true;
     return qd.length >= 3 && normalizePhone(r.phone).includes(qd);
   });
 }

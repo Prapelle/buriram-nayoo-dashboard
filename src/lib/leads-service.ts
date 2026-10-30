@@ -1,6 +1,6 @@
 import { writeAudit } from "./audit";
 import { CALL_DEFAULT, CALL_STATUS, normCall, SELL_DEFAULT, SELL_STATUS } from "./lead-options";
-import { contactableFor, findDuplicates, LEAD_COLUMNS, leadStatusOf, nextLeadCode, normalizeEmail, normalizeLine, normalizePhone, pipelineOf, resolveNeedStatus, stampStatus, statusFieldOf, todayBkk, validateLead, type DupMatch, type Lead } from "./leads";
+import { areaLabel, AREA_SUGGEST, contactableFor, findDuplicates, LEAD_COLUMNS, leadStatusOf, nextLeadCode, normalizeEmail, normalizeLine, normalizePhone, pipelineOf, resolveNeedStatus, stampStatus, statusFieldOf, todayBkk, validateLead, type DupMatch, type Lead } from "./leads";
 import { appendRows, batchUpdateValues, colLetter, deleteRow, listTabs, readTabs, toRow } from "./sheets";
 import { readColumns } from "./tabdata";
 
@@ -20,7 +20,9 @@ export async function listLeads() {
   const owners = [...new Set(t.APP_USERS.rows.filter((u) => String(u.active).toUpperCase() === "TRUE" && ["admin", "sales"].includes(u.role)).map((u) => u.email))].sort();
   const rows = t.LEADS.rows.filter((r) => r.lead_id).map(pick)
     .sort((a, b) => b.received_at.localeCompare(a.received_at) || b.lead_code.localeCompare(a.lead_code));
-  return { rows, owners, staff };
+  // พื้นที่ที่เคยกรอก (ชื่อที่แสดง) ใช้เป็นตัวเลือกช่วยกรอกและตัวกรอง
+  const areas = [...new Set([...AREA_SUGGEST, ...rows.map((r) => areaLabel(r.area)).filter(Boolean)])];
+  return { rows, owners, staff, areas };
 }
 
 /** สร้าง/แก้ไข Lead: Lead Code สร้างฝั่ง Server, เตือนซ้ำจากเบอร์/อีเมลแต่ไม่ merge อัตโนมัติ */
@@ -31,7 +33,9 @@ export async function saveLead(input: Record<string, unknown>, actor: string) {
   const tab = t.LEADS;
   if (!tab.headers.includes("lead_id") || !tab.headers.includes("need")) throw new LeadError(409, "แท็บ LEADS ยังไม่พร้อม กรุณากด เตรียม Google Sheet", "SHEET_NOT_READY");
   // คอลัมน์ line_id เพิ่ม 30/10/2026: ยังไม่ได้เตรียม Sheet ก็บันทึก Lead ได้ตามเดิม แต่ถ้ากรอก Line ต้องมีคอลัมน์ก่อน (ไม่ทิ้งค่าเงียบ ๆ)
-  if (String(input.line_id ?? "").trim() && !tab.headers.includes("line_id")) throw new LeadError(409, "ยังไม่มีคอลัมน์ Line ในแท็บ LEADS — ให้ Admin กด ตั้งค่า → เตรียม Google Sheet ก่อน แล้วบันทึกอีกครั้ง", "SHEET_NOT_READY", { fields: { line_id: "ยังไม่มีคอลัมน์ Line ใน Sheet" } });
+  // คอลัมน์ interest เพิ่ม 30/10/2026 เช่นกัน
+  for (const [k, label] of [["line_id", "Line"], ["interest", "ความสนใจ"]] as const)
+    if (String(input[k] ?? "").trim() && !tab.headers.includes(k)) throw new LeadError(409, `ยังไม่มีคอลัมน์ ${label} ในแท็บ LEADS — ให้ Admin กด ตั้งค่า → เตรียม Google Sheet ก่อน แล้วบันทึกอีกครั้ง`, "SHEET_NOT_READY", { fields: { [k]: `ยังไม่มีคอลัมน์ ${label} ใน Sheet` } });
   const rows = tab.rows;
   const now = new Date().toISOString();
   const today = todayBkk();

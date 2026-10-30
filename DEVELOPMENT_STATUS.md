@@ -976,3 +976,27 @@ Users 17,443 · Page Views 42,450 · PV/User 2.43 · Duration 1 นาที 0 �
 **Failed:** 0
 **Not Tested:** บนเว็บที่ deploy จริง (เข้าถึงจากที่นี่ไม่ได้)
 
+## 33) หน้า Leads: ช่อง ความสนใจ + พื้นที่กรอกเอง (30/10/2026)
+- **ความสนใจ:** ช่องข้อความ (ถัดจาก Price) → คอลัมน์ใหม่ `interest` ต่อท้ายแท็บ LEADS · ค้นหาได้ · แสดงในหน้ารายละเอียดและบนการ์ด Seller/Buyer Leads
+- **พื้นที่:** จากรายการเลือก → ช่องกรอกเอง พร้อมรายการแนะนำ (บุรีรัมย์ / สุรินทร์ / หลายจังหวัด + พื้นที่ที่เคยกรอก)
+  - กรอก บุรีรัมย์ / สุรินทร์ / หลายจังหวัด → เก็บเป็นรหัสเดิม (buriram / surin / multi_province) เพื่อให้ตัวกรองพื้นที่ของ Dashboard และไฟล์ส่งออกใช้ต่อได้ · พื้นที่อื่นเก็บตามที่กรอก (ไม่เกิน 100 ตัวอักษร)
+  - ไม่กรอก = ว่าง (Dashboard ถือเป็น unknown เหมือนเดิม) · Lead เดิมที่เป็นรหัสแสดงเป็นชื่อไทย
+  - ตัวกรองพื้นที่ในหน้า Leads แสดงทุกพื้นที่ที่มี · ตัวกรองพื้นที่ของหน้าภาพรวม (ใช้กับโฆษณาด้วย) ยังเป็น 4 ค่าเดิม — Lead ที่พื้นที่กรอกเองนับเมื่อเลือก ทั้งหมด
+- ก่อนกด เตรียม Google Sheet บันทึก Lead ได้ตามปกติ · กรอก ความสนใจ / Line จะแจ้งให้เตรียม Sheet ก่อน
+
+## 34) ตั้งค่า: เมนูย่อย คู่มือนำเข้าข้อมูล + คำอธิบายตัวเลข (30/10/2026)
+- เมนู **ตั้งค่า** มีเมนูย่อย: ตั้งค่าระบบ (Admin) · **คู่มือนำเข้าข้อมูล** · **คำอธิบายตัวเลข** (ทุก Role — Marketing / Sales เห็นเมนู ตั้งค่า เฉพาะ 2 หน้านี้ และเข้า ตั้งค่าระบบ ไม่ได้)
+- คู่มือนำเข้าข้อมูล: 1.1 Facebook Page (Content → Export data: เพจ, เดือนก่อนหน้า, Published, Daily, Post Creation date) · 1.2 Viewers / Link clicks (Results → ตั้งวันที่ด้านบน → Export) · Facebook Ads (Ads Manager → Ads Reporting) · Google Ads · Website (GA4 Reports snapshot / Pages and screens + Search Console) · Sales (FlowAccount รายงานยอดขาย .xlsx) + ขั้นตอนนำเข้าหลังดาวน์โหลด · ลิงก์จากหน้า นำเข้า CSV
+- คำอธิบายตัวเลข: สถานะ (รอข้อมูล / N/A / ข้อมูลไม่ครบ / Missing Data / % เปรียบเทียบ) และทุกตัวเลขของ ภาพรวม, Marketing Performance (รวม Funnel และตารางช่องทาง), Leads (Call/Sell Status, Qualified, Site Visit, Pipeline), Sales — แต่ละตัวบอก ที่มา / สูตร / ใช้ทำอะไร · รายการสถานะ Qualified / Site Visit อ่านจากโค้ดโดยตรง (เปลี่ยนกฎแล้วคำอธิบายเปลี่ยนตาม)
+
+### ไฟล์ที่เปลี่ยน (33–34)
+`src/lib/{schema,leads,leads-service,roles}.ts`, `src/components/{LeadsManager,StatusBoard,Sidebar}.tsx`, `src/app/(app)/layout.tsx`, `src/app/(app)/import/page.tsx`, `src/app/(app)/settings/import-guide/page.tsx` (ใหม่), `src/app/(app)/settings/metrics/page.tsx` (ใหม่) · tests: e2e, security, integration/browser-import.mjs
+
+### Data / Schema Impact
+- **เพิ่มคอลัมน์ต่อท้าย `interest` (และ `line_id` จากข้อ 32 ถ้ายังไม่ได้กด) ในแท็บ LEADS → Admin กด ตั้งค่า → ตั้งค่าระบบ → เตรียม Google Sheet** · ไม่เปลี่ยนคอลัมน์/ข้อมูลเดิม
+
+### Test Results
+**Passed:** 402/402 (รันทั้งชุด 2 รอบติดกัน) — e2e +1 (ความสนใจ, พื้นที่มาตรฐาน→รหัส, พื้นที่กรอกเอง, ตัวกรอง, ความยาว, ตัวกรองพื้นที่ Dashboard), security +1 (เมนูตาม Role), เบราว์เซอร์จริง (ฟอร์ม Lead กรอก ความสนใจ / พื้นที่ ประโคนชัย → Sheet, ตัวกรองพื้นที่; Marketing เปิดคู่มือทั้ง 2 หน้าได้ เข้า ตั้งค่าระบบ ไม่ได้, มือถือไม่ล้น) · TypeScript + Cloudflare build ผ่าน
+**Failed:** 0
+**Not Tested:** บนเว็บที่ deploy จริง · ชื่อเมนูใน FlowAccount ตามเวอร์ชันจริง (คู่มือระบุคอลัมน์ที่ต้องมีไว้แทน)
+

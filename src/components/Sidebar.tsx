@@ -12,6 +12,24 @@ export function Sidebar({ items, email, role, signOutAction }: {
       <div className="text-lg font-bold">Buriram NAYOO</div>
       <nav aria-label="เมนูหลัก" className="flex flex-row flex-wrap gap-1 md:flex-col">
         {items.map((n) => {
+          if (n.children) {
+            // เมนูย่อย: ตรงพอดี หรือเป็นหน้าย่อยของเมนูนั้น (เมนูย่อยที่ยาวกว่าชนะ)
+            const hit = [...n.children].sort((a, b) => b.href.length - a.href.length).find((c) => path === c.href || path.startsWith(c.href + "/"));
+            return (
+              <div key={n.label} className="flex flex-col gap-1">
+                <span className={`rounded-md px-3 py-2 text-sm ${hit ? "font-semibold text-slate-900" : "text-slate-700"}`}>{n.label}</span>
+                {n.children.map((c) => {
+                  const active = hit?.href === c.href;
+                  return (
+                    <Link key={c.href} href={c.href} aria-current={active ? "page" : undefined}
+                      className={`ml-3 rounded-md px-3 py-1.5 text-sm ${active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}>
+                      {c.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            );
+          }
           const active = n.href === "/" ? path === "/" : path.startsWith(n.href);
           return (
             <Link key={n.href} href={n.href} aria-current={active ? "page" : undefined}

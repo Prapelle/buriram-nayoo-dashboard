@@ -98,17 +98,40 @@ try {
   const formT = await page.locator("section", { has: page.getByRole("heading", { name: "เพิ่ม Lead ใหม่" }) }).last().innerText();
   for (const gone of ["บริษัท", "อีเมล", "หมวดบริการ", "บริการที่สนใจ", "UTM source", "UTM medium", "UTM campaign"]) assert.ok(!formT.includes(gone), `ยังมีช่อง ${gone}`);
   assert.ok(formT.includes("Line") && formT.includes("Campaign") && formT.includes("ติดตามครั้งถัดไป"));
-  if (process.env.SHOT_DIR) await page.locator("section", { has: page.getByRole("heading", { name: "เพิ่ม Lead ใหม่" }) }).last().screenshot({ path: process.env.SHOT_DIR + "/lead-form.png" });
   await page.getByLabel("Name *").fill("ทดสอบไลน์"); await page.getByLabel("Need *").selectOption("ซื้อ"); await page.getByLabel("Line", { exact: true }).fill("@line.test");
   await page.getByLabel("Channel *").selectOption("LINE OA");
+  await page.getByLabel("ความสนใจ", { exact: true }).fill("ทาวน์โฮมใกล้โรงเรียน");
+  assert.equal(await page.getByLabel("พื้นที่ (กรอกเองหรือเลือกจากรายการ)").inputValue(), "");
+  assert.deepEqual(await page.locator("#area-list option").evaluateAll((o) => o.map((x) => x.value).slice(0, 3)), ["บุรีรัมย์", "สุรินทร์", "หลายจังหวัด"]);
+  await page.getByLabel("พื้นที่ (กรอกเองหรือเลือกจากรายการ)").fill("ประโคนชัย");
+  if (process.env.SHOT_DIR) await page.locator("section", { has: page.getByRole("heading", { name: "เพิ่ม Lead ใหม่" }) }).last().screenshot({ path: process.env.SHOT_DIR + "/lead-form.png" });
   await page.getByRole("button", { name: "บันทึก", exact: true }).click(); await page.getByText("ทดสอบไลน์").first().waitFor();
   lr = await tab("LEADS"); const row = lr.find((r) => r[lr[0].indexOf("customer_name")] === "ทดสอบไลน์");
-  assert.equal(row[lr[0].indexOf("line_id")], "@line.test");
+  assert.equal(row[lr[0].indexOf("line_id")], "@line.test"); assert.equal(row[lr[0].indexOf("interest")], "ทาวน์โฮมใกล้โรงเรียน"); assert.equal(row[lr[0].indexOf("area")], "ประโคนชัย");
+  const areaF = page.locator("label", { has: page.locator("span", { hasText: /^พื้นที่$/ }) }).locator("select");
+  await areaF.selectOption("ประโคนชัย"); await page.getByText("1 รายการ").first().waitFor(); assert.ok(await page.getByText("ทดสอบไลน์").first().isVisible());
   assert.equal(await page.getByRole("combobox", { name: "หมวดบริการ" }).count(), 0);
-  ok("หน้า Leads: ฟอร์มไม่มี บริษัท / อีเมล / หมวดบริการ / บริการที่สนใจ / UTM แล้ว · มีช่อง Line → บันทึก @line.test ลง Sheet · ตัวกรองหมวดบริการถูกตัดออก");
+  ok("หน้า Leads: ฟอร์มไม่มี บริษัท / อีเมล / หมวดบริการ / บริการที่สนใจ / UTM แล้ว · มีช่อง Line / ความสนใจ / พื้นที่กรอกเอง (มีรายการแนะนำ) → บันทึกลง Sheet ตามที่กรอก · ตัวกรองพื้นที่มีค่าที่กรอกเอง · ตัวกรองหมวดบริการถูกตัดออก");
   assert.deepEqual(errors, []);
 
   const m = await open("marketing@example.com");
+  // ---- ตั้งค่า → คู่มือนำเข้าข้อมูล / คำอธิบายตัวเลข (Marketing เปิดได้ · ตั้งค่าระบบไม่เห็น) ----
+  await m.page.goto(BASE + "/settings/import-guide"); await m.page.getByRole("heading", { name: "คู่มือนำเข้าข้อมูล" }).waitFor();
+  const nav = await m.page.getByRole("navigation", { name: "เมนูหลัก" }).innerText();
+  assert.ok(nav.includes("คู่มือนำเข้าข้อมูล") && nav.includes("คำอธิบายตัวเลข") && !nav.includes("ตั้งค่าระบบ"));
+  const ig = await m.page.locator("main").innerText();
+  for (const t of ["Facebook Page — สถิติโพสต์รายวัน", "Viewers และ Link clicks", "Ads Reporting", "Google Ads", "Reports snapshot", "Search Console", "FlowAccount"]) assert.ok(ig.includes(t), t);
+  if (process.env.SHOT_DIR) await m.page.screenshot({ path: process.env.SHOT_DIR + "/guide-import.png", fullPage: true });
+  assert.equal(await m.page.getByRole("link", { name: "คำอธิบายตัวเลข" }).getAttribute("href"), "/settings/metrics");
+  await m.page.goto(BASE + "/settings/metrics"); await m.page.getByRole("heading", { name: "คำอธิบายตัวเลข" }).waitFor();
+  const mg = await m.page.locator("main").innerText();
+  for (const t of ["Total Paid Media Spend", "Cost per Site Visit", "Customer Funnel", "รอเข้าชม / เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน", "Facebook Viewers (แทน Reach)", "ยอดขายสุทธิ"]) assert.ok(mg.includes(t), t);
+  if (process.env.SHOT_DIR) await m.page.screenshot({ path: process.env.SHOT_DIR + "/guide-metrics.png", fullPage: true });
+  await m.page.goto(BASE + "/settings"); await m.page.waitForURL(BASE + "/");
+  await m.page.setViewportSize({ width: 390, height: 844 }); await m.page.goto(BASE + "/settings/metrics");
+  assert.ok(await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth) <= 1, "มือถือล้นแนวนอน");
+  await m.page.setViewportSize({ width: 1280, height: 800 });
+  ok("ตั้งค่า (Marketing): เมนูย่อย คู่มือนำเข้าข้อมูล (Facebook Page, Viewers/Link clicks, Ads Reporting, Google Ads, GA4, Search Console, FlowAccount) และ คำอธิบายตัวเลข เปิดได้ · ตั้งค่าระบบไม่เห็นและเข้าไม่ได้ · มือถือไม่ล้น");
   for (const pth of ["/buyer-leads", "/seller-leads"]) { await m.page.goto(BASE + pth); await m.page.waitForURL(BASE + "/"); } // Marketing ไม่มีสิทธิ์ข้อมูลลูกค้า → กลับหน้าแรก
   const pr = await fetch(BASE + "/api/leads", { method: "PATCH", headers: { cookie: `authjs.session-token=${await cookie("marketing@example.com")}`, "sec-fetch-site": "same-origin", "content-type": "application/json" }, body: JSON.stringify({ lead_id: "B1", field: "call_status", value: "จอง" }) });
   assert.equal(pr.status, 403);

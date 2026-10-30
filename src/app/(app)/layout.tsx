@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth, signOut } from "@/auth";
-import { NAV } from "@/lib/roles";
+import { navFor } from "@/lib/roles";
 import { Sidebar } from "@/components/Sidebar";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
       <Sidebar
-        items={NAV.filter((n) => n.roles.includes(role))}
+        items={navFor(role)}
         email={session.user.email}
         role={role}
         signOutAction={async () => { "use server"; await signOut({ redirectTo: "/login" }); }}

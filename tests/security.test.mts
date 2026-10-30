@@ -98,4 +98,11 @@ const { csvSafe } = await import("../src/lib/csvsafe");
 for (const v of ["=1+1", "@SUM(A1)", "+cmd|' /C calc'!A0", "-2+3+cmd", "\tx"]) assert.ok(String(csvSafe(v)).startsWith("'"), v);
 for (const v of ["สมชาย", "+66 81 234 5678", "-500.25", "0812345678", "2026-09-01", "(02) 123-4567", ""]) assert.equal(csvSafe(v), v, v);
 assert.equal(csvSafe(5), 5); ok("ข้อความที่ขึ้นต้นด้วย = @ + - (ที่ไม่ใช่ตัวเลข/เบอร์โทร) ถูกป้องกันก่อนเปิดใน Excel; ตัวเลข วันที่ ชื่อไทย เบอร์โทร ไม่ถูกแก้");
+{
+  const { navFor } = await import("../src/lib/roles");
+  const kids = (r: "admin" | "marketing" | "sales") => navFor(r).find((n) => n.label === "ตั้งค่า")!;
+  assert.deepEqual(kids("admin").children!.map((c) => c.href), ["/settings", "/settings/import-guide", "/settings/metrics"]); assert.equal(kids("admin").href, "/settings");
+  for (const r of ["marketing", "sales"] as const) { assert.deepEqual(kids(r).children!.map((c) => c.href), ["/settings/import-guide", "/settings/metrics"]); assert.equal(kids(r).href, "/settings/import-guide"); }
+  ok("เมนู ตั้งค่า: Admin เห็น ตั้งค่าระบบ + คู่มือนำเข้าข้อมูล + คำอธิบายตัวเลข · Marketing / Sales เห็นเฉพาะคู่มือ 2 หน้า (ตั้งค่าระบบยังเป็น Admin เท่านั้น)");
+}
 console.log(`\nผ่านทั้งหมด ${pass} รายการ`);
