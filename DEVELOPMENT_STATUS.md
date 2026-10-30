@@ -1005,3 +1005,31 @@ Users 17,443 · Page Views 42,450 · PV/User 2.43 · Duration 1 นาที 0 �
 - เนื้อหาย้ายไป `src/lib/guides/{import-guide.tsx,metrics.ts}` (ใช้ร่วมกันระหว่างหน้าสารบัญและหน้าหัวข้อ) · เนื้อหาไม่เปลี่ยน
 - **Test Results — Passed:** 402/402 (2 รอบ) — เบราว์เซอร์จริงเปิดทุกหัวข้อ (6 + 5) ตรวจว่าหน้าแรกไม่มีเนื้อหา/ตาราง และเนื้อหารวมครบ · TypeScript + Cloudflare build ผ่าน · **Failed:** 0 · **Data/Schema:** ไม่มี
 
+## 36) ติดตามลูกค้า · Checklist ข้อมูลรายเดือน · ผลงานรายพนักงาน · เหตุผลที่ไม่สำเร็จ · เป้าหมายรายเดือน · สำรอง Sheet (30/10/2026)
+
+### สิ่งที่ทำ
+1. **ติดตามลูกค้า:** หน้า ภาพรวม (Admin/Sales) การ์ด เลยกำหนด / วันนี้ / ค้างเกิน 14 วัน (ไม่มีวันติดตามและไม่ได้แก้ไข) → กดแล้วเปิดหน้า Leads กรองรายการนั้น · หน้า Leads มีปุ่มกรองเดียวกัน · ไม่นับ Lead ที่จบแล้ว
+2. **Checklist ข้อมูลประจำเดือน:** หน้า ภาพรวม (Admin/Marketing) เดือนก่อน + เดือนนี้ (ถึงเมื่อวาน): Facebook โพสต์ / Viewers / Link clicks, Facebook Ads, Google Ads Campaign / Time series, GA4 snapshot, Search Console, LINE OA, ยอดขาย FlowAccount (Admin) — สถานะ ครบ / บางส่วน (ระบุวันที่ขาด) / ยังไม่มี · กดชื่อรายการไปหน้าคู่มือของรายการนั้น
+3. **รายงาน Lead (เมนูใหม่ ทุก Role — ตัวเลขรวมเท่านั้น):**
+   - ผลงานรายพนักงาน: Lead ที่รับ, Qualified, % Qualified, Site Visit, **Lead ต่อ 1 Site Visit**, สัญญา + ขายแล้ว (Sell Status เซ็นสัญญา / สัญญาเปิด / ขายแล้ว), **Lead ต่อ 1 สัญญา/ขาย**, ซื้อสำเร็จ + แถวรวม
+   - เหตุผลที่ไม่สำเร็จ: กู้ไม่ผ่าน / ไม่สนใจ / ติดต่อไม่ได้ / ยกเลิก (ขาย) / บ้านไม่พร้อมขาย / Archive — แยกตามช่องทาง + % ไม่สำเร็จ + ข้อความในช่อง เหตุผลที่ปิดไม่สำเร็จ
+4. **เป้าหมายรายเดือน (ตั้งค่า → เป้าหมายรายเดือน, Admin/Marketing):** งบโฆษณา + เป้า Lead แยกต่อเดือน แก้ได้ทุกเดือน (แท็บใหม่ MONTHLY_TARGETS หนึ่งแถวต่อเดือน, กันแก้ทับกัน, Audit) · หน้า ภาพรวม แสดง ค่าโฆษณา vs งบ และ Leads vs เป้า พร้อมเส้นสัดส่วนวันที่ผ่านไปของเดือน (ตัวกรองวันที่ = เดือนเต็ม → เดือนนั้น, อื่น ๆ → เดือนนี้)
+5. **สำรอง Google Sheet อัตโนมัติ (ตั้งค่าระบบ):** สคริปต์ Apps Script + ขั้นตอน — ทำสำเนาไฟล์ทั้งไฟล์ไป Google Drive ของเจ้าของไฟล์ทุกวันจันทร์ ตี 2 เก็บ 12 ชุดล่าสุด (เก่ากว่าย้ายไปถังขยะ กู้ได้ 30 วัน · KEEP = 0 = ไม่ลบ) · ใช้ Apps Script เพราะ Service Account ไม่มีพื้นที่ Drive
+6. Dashboard: ถ้าแท็บใหม่บางแท็บยังไม่ถูกสร้าง ตัดเฉพาะแท็บที่ขาด (ก่อนนี้ตัดทุกแท็บใหม่พร้อมกัน ทำให้ข้อมูล Website หายชั่วคราว)
+7. คำอธิบายตัวเลข: เพิ่มหัวข้อ 4. รายงาน Lead · ติดตาม · เป้าหมาย
+
+### ข้อสมมติที่ควรยืนยัน
+- "ทำสัญญา" ในผลงานรายพนักงาน = Sell Status **เซ็นสัญญา + สัญญาเปิด** (ไม่มีสถานะชื่อ ทำสัญญา แล้ว) · ตัวหารเป็น Lead ที่รับทั้งหมดของพนักงาน
+- ค้างนาน = 14 วัน · รายงาน Lead เปิดได้ทุก Role (ไม่มีชื่อ/เบอร์ลูกค้า)
+
+### ไฟล์ที่เปลี่ยน
+ใหม่: `src/lib/{lead-insights,data-checklist,targets,target-progress,backup-script}.ts`, `src/app/api/targets/route.ts`, `src/app/(app)/lead-report/page.tsx`, `src/app/(app)/settings/targets/page.tsx`, `src/components/{OverviewExtras,TargetsManager,BackupGuide}.tsx`, `tests/insights.test.ts` · แก้: `src/lib/{schema,dashboard,dashboard-data,roles}.ts`, `src/lib/guides/metrics.ts`, `src/components/LeadsManager.tsx`, `src/app/(app)/page.tsx`, `src/app/(app)/settings/page.tsx` · tests: security, e2e, integration/browser-import.mjs, run-all.sh
+
+### Data / Schema Impact
+- **แท็บใหม่ MONTHLY_TARGETS → Admin กด ตั้งค่า → ตั้งค่าระบบ → เตรียม Google Sheet** (ก่อนกด หน้าอื่นใช้งานได้ปกติ แค่ยังตั้งเป้าไม่ได้) · ไม่แตะแท็บ/คอลัมน์เดิม
+
+### Test Results
+**Passed:** 417/417 (รันทั้งชุด 2 รอบติดกัน) — insights ใหม่ 7, security (สิทธิ์ราย Method ของ /api/targets, เมนูตาม Role), e2e +3 (บันทึก/แก้/กันแก้ทับเป้า, เทียบงบจริงจาก Sheet, แท็บใหม่ยังไม่มีแล้ว Dashboard ไม่พัง), เบราว์เซอร์จริง +5 (ตั้งเป้าผ่านหน้าเว็บ, การ์ดติดตาม + เป้า + Checklist ในภาพรวม, กดเลยกำหนดไปหน้า Leads, รายงาน Lead, ส่วนสำรองข้อมูล; Marketing ไม่เห็นการ์ดติดตามและไม่มีชื่อลูกค้า) · สคริปต์สำรองจำลองการทำงาน (ตั้งซ้ำไม่ซ้อน, เก็บ 12 ชุดล่าสุด) · TypeScript + Cloudflare build ผ่าน
+**Failed:** 0
+**Not Tested:** บนเว็บที่ deploy จริง · สคริปต์สำรองบน Google Apps Script จริง (ทดสอบด้วยตัวจำลอง)
+

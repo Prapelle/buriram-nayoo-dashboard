@@ -22,6 +22,8 @@ export const TABS: TabDef[] = [
     // Phase 1: เพิ่มต่อท้ายเท่านั้น (ไม่เปลี่ยนลำดับ/ชื่อคอลัมน์เดิม)
     "metric_date","metric_scope","duration_sec","caption_type","is_crosspost","is_share","languages","custom_labels","funded_content_status","data_comment"] },
   // Facebook Page ระดับเพจ รายวัน (Viewers / Link clicks) แบบยาว: หนึ่งแถว = ตัวชี้วัด × วัน (เพิ่ม 28/10/2026)
+  // เป้าหมายรายเดือน (เพิ่ม 30/10/2026): หนึ่งแถวต่อเดือน แก้ได้ทุกเดือนที่หน้า ตั้งค่า → เป้าหมายรายเดือน
+  { name: "MONTHLY_TARGETS", group: "manual", headers: ["month","ad_budget_thb","lead_target","notes","updated_by","updated_at"] },
   { name: "FB_PAGE_INSIGHTS", group: "marketing", headers: ["record_id","metric","metric_date","value","row_key","raw_json","source_batch_id","source_filename","imported_at"] },
   { name: "META_ADS", group: "marketing", headers: ["record_id","report_start","report_end","ad_name","ad_delivery","attribution_setting","results","result_indicator","cost_per_results","ad_set_budget","ad_set_budget_type","amount_spent_thb","impressions","reach","facebook_likes","ends","bid","bid_type","last_significant_edit","quality_ranking","engagement_rate_ranking","conversion_rate_ranking","ad_set_name","results_initial","results_initial_indicator","area","row_key","raw_json","source_batch_id","imported_at"] },
   { name: "GOOGLE_ADS_CAMPAIGNS", group: "marketing", headers: ["record_id","report_start","report_end","campaign_name","campaign_group_name","campaign_status","cost_thb","clicks","ctr_pct","area","row_key","raw_json","source_batch_id","imported_at"] },

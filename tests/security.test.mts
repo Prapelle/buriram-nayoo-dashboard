@@ -12,7 +12,7 @@ let pass = 0; const ok = (m: string) => { pass++; console.log("  ✓", m); };
 
 console.log("1) ทุก API Route ต้องตรวจ Session และ Role");
 const routes = files.map(norm).filter((f) => /\/api\/.*route\.ts$/.test(f));
-const EXPECT: Record<string, string[] | "public"> = {
+const EXPECT: Record<string, string[] | "public" | Record<string, string[]>> = {
   "src/app/api/auth/[...nextauth]/route.ts": "public", // Auth.js จัดการเอง (login/callback)
   "src/app/api/init/route.ts": ["admin"], "src/app/api/health/route.ts": ["admin"], "src/app/api/users/route.ts": ["admin"], "src/app/api/website/route.ts": ["admin", "marketing"],
   "src/app/api/import/plan/route.ts": ["admin", "marketing"], "src/app/api/import/commit/route.ts": ["admin", "marketing"], "src/app/api/import/history/route.ts": ["admin", "marketing"],
@@ -21,6 +21,7 @@ const EXPECT: Record<string, string[] | "public"> = {
   "src/app/api/sales/plan/route.ts": ["admin", "sales"], "src/app/api/sales/commit/route.ts": ["admin", "sales"], "src/app/api/sales/history/route.ts": ["admin", "sales"],
   "src/app/api/export/sales-transactions/route.ts": ["admin", "sales"],
   "src/app/api/export/[dataset]/route.ts": ["admin", "marketing", "sales"], // สิทธิ์รายชุดข้อมูลบังคับใน service (ตรวจในข้อ 3)
+  "src/app/api/targets/route.ts": { GET: ["admin", "marketing", "sales"], POST: ["admin", "marketing"] }, // เป้าหมายรายเดือน: ดูได้ทุก Role · แก้ได้ Admin/Marketing
 };
 assert.deepEqual(routes.filter((r) => !(r in EXPECT)), [], "พบ API Route ใหม่ที่ยังไม่ได้กำหนดสิทธิ์ในเทสต์นี้ — ต้องตรวจสอบก่อน");
 for (const r of routes) {
@@ -29,13 +30,17 @@ for (const r of routes) {
   const handlers = [...src.matchAll(/export async function (GET|POST|PUT|PATCH|DELETE)\b/g)].length;
   const guards = [...src.matchAll(/requireRole\(\[([^\]]*)\]\)/g)];
   assert.equal(guards.length, handlers, `${r}: ทุก handler ต้องเรียก requireRole`);
-  for (const g of guards) assert.deepEqual([...g[1].matchAll(/"(\w+)"/g)].map((m) => m[1]).sort(), [...exp].sort(), `${r}: สิทธิ์ไม่ตรงที่กำหนด`);
+  if (Array.isArray(exp)) { for (const g of guards) assert.deepEqual([...g[1].matchAll(/"(\w+)"/g)].map((m) => m[1]).sort(), [...exp].sort(), `${r}: สิทธิ์ไม่ตรงที่กำหนด`); continue; }
+  // สิทธิ์แยกตาม Method: แต่ละ handler ต้องเรียก requireRole ของตัวเองด้วยสิทธิ์ที่กำหนด
+  const parts = src.split(/(?=export async function (?:GET|POST|PUT|PATCH|DELETE)\b)/).slice(1);
+  assert.deepEqual(parts.map((x) => x.match(/^export async function (\w+)/)![1]).sort(), Object.keys(exp).sort(), `${r}: Method ไม่ตรงที่กำหนด`);
+  for (const part of parts) { const m = part.match(/^export async function (\w+)/)![1]; const g = part.match(/requireRole\(\[([^\]]*)\]\)/)!; assert.deepEqual([...g[1].matchAll(/"(\w+)"/g)].map((x) => x[1]).sort(), [...exp[m]].sort(), `${r} ${m}: สิทธิ์ไม่ตรงที่กำหนด`); }
 }
 ok(`API Route ${routes.length} ไฟล์: ทุก handler ตรวจ Session+Role และสิทธิ์ตรงตามที่กำหนด (Leads/Sales/ยอดขาย = Admin+Sales เท่านั้น, ข้อมูลโฆษณา = Admin+Marketing)`);
 
 console.log("2) หน้าจอและการล็อกอิน");
 const layout = read("src/app/(app)/layout.tsx"); assert.ok(layout.includes("auth()") && layout.includes('redirect("/login")') && /!role/.test(layout)); ok("Layout ของทุกหน้าในระบบ: ไม่ได้ล็อกอิน/ไม่มี Role → ส่งไปหน้า login");
-const guardedPages = ["import", "facebook-page", "facebook-ads", "google-ads", "line-oa", "leads", "sales", "sales/import", "settings"];
+const guardedPages = ["import", "facebook-page", "facebook-ads", "google-ads", "line-oa", "leads", "sales", "sales/import", "settings", "settings/targets"];
 for (const p of guardedPages) { const s = read(`src/app/(app)/${p}/page.tsx`); assert.ok(s.includes("auth()") && s.includes('redirect("/")'), `${p}: ต้องตรวจ Role ฝั่ง Server`); }
 const pageRoles = (p: string) => (read(`src/app/(app)/${p}/page.tsx`).match(/role !== "(\w+)"/g) ?? []).map((x) => x.match(/"(\w+)"/)![1]).sort();
 assert.deepEqual(pageRoles("leads"), ["admin", "sales"]); assert.deepEqual(pageRoles("sales"), ["admin", "sales"]); assert.deepEqual(pageRoles("sales/import"), ["admin", "sales"]); assert.deepEqual(pageRoles("import"), ["admin", "marketing"]); assert.deepEqual(pageRoles("line-oa"), ["admin", "marketing"]); assert.deepEqual(pageRoles("facebook-ads"), ["admin", "marketing"]); assert.deepEqual(pageRoles("settings"), ["admin"]);
@@ -101,8 +106,8 @@ assert.equal(csvSafe(5), 5); ok("ข้อความที่ขึ้นต�
 {
   const { navFor } = await import("../src/lib/roles");
   const kids = (r: "admin" | "marketing" | "sales") => navFor(r).find((n) => n.label === "ตั้งค่า")!;
-  assert.deepEqual(kids("admin").children!.map((c) => c.href), ["/settings", "/settings/import-guide", "/settings/metrics"]); assert.equal(kids("admin").href, "/settings");
-  for (const r of ["marketing", "sales"] as const) { assert.deepEqual(kids(r).children!.map((c) => c.href), ["/settings/import-guide", "/settings/metrics"]); assert.equal(kids(r).href, "/settings/import-guide"); }
-  ok("เมนู ตั้งค่า: Admin เห็น ตั้งค่าระบบ + คู่มือนำเข้าข้อมูล + คำอธิบายตัวเลข · Marketing / Sales เห็นเฉพาะคู่มือ 2 หน้า (ตั้งค่าระบบยังเป็น Admin เท่านั้น)");
+  assert.deepEqual(kids("admin").children!.map((c) => c.href), ["/settings", "/settings/targets", "/settings/import-guide", "/settings/metrics"]); assert.deepEqual(kids("marketing").children!.map((c) => c.href), ["/settings/targets", "/settings/import-guide", "/settings/metrics"]); assert.equal(kids("admin").href, "/settings");
+  assert.deepEqual(kids("sales").children!.map((c) => c.href), ["/settings/import-guide", "/settings/metrics"]); assert.equal(kids("sales").href, "/settings/import-guide"); assert.equal(kids("marketing").href, "/settings/targets");
+  ok("เมนู ตั้งค่า: Admin เห็น ตั้งค่าระบบ + เป้าหมายรายเดือน + คู่มือ 2 หน้า · Marketing เห็น เป้าหมายรายเดือน + คู่มือ · Sales เห็นเฉพาะคู่มือ (ตั้งค่าระบบยังเป็น Admin เท่านั้น)");
 }
 console.log(`\nผ่านทั้งหมด ${pass} รายการ`);

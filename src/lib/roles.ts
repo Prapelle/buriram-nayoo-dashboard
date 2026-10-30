@@ -20,11 +20,13 @@ export const NAV: NavItem[] = [
   { href: "/leads", label: "Leads", roles: SALES },
   { href: "/seller-leads", label: "Seller Leads", roles: SALES },
   { href: "/buyer-leads", label: "Buyer Leads", roles: SALES },
+  { href: "/lead-report", label: "รายงาน Lead", roles: ALL },
   { href: "/sales", label: "Sales", roles: SALES },
   { href: "/export", label: "ส่งออกข้อมูล", roles: ALL },
   // ตั้งค่า: เมนูย่อย — ตั้งค่าระบบ (Admin) · คู่มือนำเข้าข้อมูล และ คำอธิบายตัวเลข (ทุก Role)
   { href: "/settings", label: "ตั้งค่า", roles: ALL, children: [
     { href: "/settings", label: "ตั้งค่าระบบ", roles: ["admin"] },
+    { href: "/settings/targets", label: "เป้าหมายรายเดือน", roles: MKT },
     { href: "/settings/import-guide", label: "คู่มือนำเข้าข้อมูล", roles: ALL },
     { href: "/settings/metrics", label: "คำอธิบายตัวเลข", roles: ALL },
   ] },

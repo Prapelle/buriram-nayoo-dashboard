@@ -8,7 +8,7 @@
 ## 1. สรุปสถานะ (Definition of Done)
 
 สถานะ: ✅ ผ่าน · ⚠️ ผ่านบางส่วน/มีเงื่อนไข · ⛔ ไม่ได้ทำ (ระบุเหตุผล)
-"เว็บจริง" = ผู้ใช้ตรวจบนเว็บที่ deploy แล้ว · "อัตโนมัติ" = ชุดทดสอบ 402 รายการ (รวม HTTP Integration กับ production build)
+"เว็บจริง" = ผู้ใช้ตรวจบนเว็บที่ deploy แล้ว · "อัตโนมัติ" = ชุดทดสอบ 417 รายการ (รวม HTTP Integration กับ production build)
 
 | ข้อกำหนด | สถานะ | หลักฐาน |
 |---|---|---|
@@ -73,6 +73,7 @@
 | `WEBSITE_ANALYTICS` | marketing | 26 | **แท็บใหม่ (Phase 5)** · +new_users, sessions (28/10/2026) |
 | `WEBSITE_DIMENSIONS` | marketing | 21 | **แท็บใหม่ (Phase 5)** · +users, sessions (28/10/2026) |
 | `FB_PAGE_INSIGHTS` | marketing | 9 | **แท็บใหม่ (28/10/2026)** Viewers / Link clicks รายวันระดับเพจ (metric × วัน) |
+| `MONTHLY_TARGETS` | manual | 6 | **แท็บใหม่ (30/10/2026)** งบโฆษณา + เป้า Lead หนึ่งแถวต่อเดือน |
 
 | ไฟล์ส่งออก | กลุ่ม | ระดับข้อมูล (grain) | สิทธิ์ |
 |---|---|---|---|
@@ -145,6 +146,8 @@
 - ระบบคำนวณขั้น Pipeline ให้เอง: Qualified = Hot, Warm, Close, นัดทำสัญญา, ทำสัญญา, เซ็นสัญญา, สัญญาเปิด, เป็นนายหน้า, ขายแล้ว · Won = Close, ขายแล้ว · Lost = Archive, ยกเลิก, บ้านไม่พร้อมขาย
 
 ### 4.3 Dashboard
+- **ภาพรวม:** การ์ด ติดตามลูกค้า (Admin/Sales) · เป้าหมายเดือนนี้ (ตั้งที่ ตั้งค่า → เป้าหมายรายเดือน) · Checklist ข้อมูลเดือนก่อน/เดือนนี้ (Admin/Marketing)
+- **รายงาน Lead:** ผลงานรายพนักงาน + เหตุผลที่ไม่สำเร็จ แยกช่องทาง
 - **ภาพรวมการตลาด:** Total Paid Media Spend, Total Leads (lead_id ไม่ซ้ำ), **Qualified Leads** (Call Status = ติดต่อได้แล้ว / เข้าชมโครงการแล้ว / ซื้อสำเร็จ + กราฟแยกตามช่องทาง), CPL จาก Ads / ทั้งหมด, Cost per Qualified Lead, **Cost per Site Visit** (ค่าโฆษณาทั้งหมด ÷ Lead ที่ Call Status = เข้าชมโครงการแล้ว), Facebook, LINE OA, กราฟ Lead ตาม Buy/Sell Status (ไม่มีการ์ดยอดขาย/การเงินแล้ว — ดูที่หน้า Sales) · ตัวกรอง วันที่/ช่องทาง/Campaign/พื้นที่/Service · **เปรียบเทียบ ปีก่อน/ช่วงก่อน** (ต้องเลือกวันที่ก่อน)
 - **Marketing Performance:** Google Ads Spend/Clicks/CPC, Meta Ads, Facebook Page (Organic), Website (รอข้อมูล) แยก Paid/Organic/Website · กราฟรายวัน/รายเดือน · ตารางตามแพลตฟอร์ม · สถานะความครบของข้อมูล · เปรียบเทียบ YoY
 - อ่านสถานะ: **รอข้อมูล** = ไม่มีข้อมูล (ไม่ใช่ 0) · **N/A** = หารด้วย 0 · **ข้อมูลไม่ครบ** = มีค่าแต่ช่วงข้อมูลไม่ครบ (อ่านเหตุผลบนการ์ด) · **Missing Data** = ไม่มีข้อมูลช่วงเปรียบเทียบ
@@ -189,6 +192,7 @@
 - Website Analytics บนเว็บที่ deploy จริง (ทดสอบในเบราว์เซอร์จริงกับ production build + Sheet จำลองแล้ว) · Looker Studio (นอกขอบเขต)
 
 ## 7. สำรองข้อมูลและการดูแลระบบ
+- **สำรอง Google Sheet อัตโนมัติ:** ตั้งค่า → ตั้งค่าระบบ → สำรองข้อมูล — คัดลอกสคริปต์ไปวางใน Apps Script ของ Sheet (บัญชีเจ้าของ) แล้วรัน installWeeklyBackup ครั้งเดียว
 
 **สำรองข้อมูล**
 - ทุกเดือน (หลังนำเข้าข้อมูลครบ): Google Sheet → File → **Make a copy** ตั้งชื่อ `NAYOO_backup_YYYY-MM` เก็บในโฟลเดอร์ที่จำกัดสิทธิ์
@@ -207,7 +211,7 @@
 - **ก่อน deploy ทุกครั้ง:** `npx opennextjs-cloudflare build` แล้ว `bash tests/run-all.sh` (วางไฟล์ตัวอย่างใน `tests/fixtures` ตาม README ในโฟลเดอร์นั้น)
 
 ## 8. ชุดทดสอบ
-`bash tests/run-all.sh` — 402 รายการ (security, sales, import, dashboard, overview, fbactions, performance, yoy, kpicard, website, fbpage, e2e, http-integration, browser-website)
+`bash tests/run-all.sh` — 417 รายการ (security, sales, import, dashboard, overview, fbactions, performance, yoy, kpicard, website, fbpage, e2e, http-integration, browser-website)
 - `tests/e2e.test.mts`: ทุกโมดูลผ่าน service + Google Sheets จำลอง
 - `tests/integration/run.mjs`: เปิด production build จริง ล็อกอินด้วยคุกกี้เซสชันจริงตาม Role แล้วเรียกหน้าเว็บ/API (ต้อง build ก่อน)
 - `tests/integration/browser-website.mjs`: เปิดหน้า Website ใน Chromium จริง อัปโหลดไฟล์จริง 9 ไฟล์ (รวม Reports snapshot) นำเข้า กรอกยอดผู้ใช้ แล้วตรวจหน้า Performance ต.ค. และ ก.ย. (ต้องมี Playwright)

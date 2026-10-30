@@ -11,6 +11,8 @@ export type DashData = {
   web?: Row[]; webTabMissing?: boolean;
   /** แท็บ FB_PAGE_INSIGHTS: Viewers / Link clicks รายวันระดับเพจ (metric, metric_date, value) */
   fbPage?: Row[];
+  /** แท็บ MONTHLY_TARGETS: งบ / เป้า Lead รายเดือน */
+  targets?: Row[];
 };
 export type Filters = { from?: string; to?: string; channel?: string; campaign?: string; area?: string; service?: string };
 

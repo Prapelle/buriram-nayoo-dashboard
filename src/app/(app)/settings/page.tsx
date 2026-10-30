@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { HealthCheck } from "@/components/HealthCheck";
 import { InitButton } from "@/components/InitButton";
 import { UsersManager } from "@/components/UsersManager";
+import { BackupGuide } from "@/components/BackupGuide";
 
 export default async function SettingsPage() {
   const s = await auth();
@@ -21,6 +22,11 @@ export default async function SettingsPage() {
           สร้างแท็บและ Header ที่ขาด เพิ่มผู้ใช้ Admin คนแรก และค่า Config เริ่มต้น โดยไม่ลบหรือแก้ข้อมูลเดิม
         </p>
         <InitButton />
+      </div>
+      <div className="rounded-lg border border-slate-200 bg-white p-5">
+        <h2 className="mb-1 font-semibold">สำรองข้อมูล Google Sheet อัตโนมัติ</h2>
+        <p className="mb-4 text-sm text-slate-600">ตั้งครั้งเดียว Google จะทำสำเนาไฟล์ฐานข้อมูลทั้งไฟล์ไว้ใน Google Drive ของเจ้าของไฟล์ทุกสัปดาห์ (ฟรี ไม่ต้องใช้เซิร์ฟเวอร์)</p>
+        <BackupGuide />
       </div>
       <div className="rounded-lg border border-slate-200 bg-white p-5">
         <h2 className="mb-1 font-semibold">ตรวจสอบระบบ</h2>

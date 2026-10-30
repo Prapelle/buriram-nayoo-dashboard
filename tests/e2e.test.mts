@@ -660,6 +660,31 @@ console.log("16b) Facebook Page ระดับเพจ: Viewers / Link clicks 
   await assert.rejects(exp("facebook_page_insights", {}, "sales"));
   ok("Export: สรุปรายเดือน ก.ย. fb_page_viewers_sum 806,272 / fb_page_link_clicks 6,443 (คอลัมน์ต่อท้าย) · facebook_page_insights.csv กรองวันที่ได้ · Sales ไม่มีสิทธิ์");
 }
+console.log("16c) เป้าหมายรายเดือน + Dashboard เมื่อแท็บใหม่ยังไม่ถูกสร้าง (30/10/2026)");
+{
+  const { saveTarget, listTargets, TargetError } = await import("../src/lib/targets");
+  const { targetProgress } = await import("../src/lib/target-progress");
+  assert.ok(tabs.has("MONTHLY_TARGETS"));
+  const c1 = await saveTarget({ month: "2026-09", ad_budget_thb: "70,000", lead_target: "20", notes: "เดือนแรก" }, "m@x.com"); assert.equal(c1.created, true);
+  await saveTarget({ month: "2026-10", ad_budget_thb: "50000", lead_target: "" }, "m@x.com");
+  const before = rowsOf("MONTHLY_TARGETS");
+  const cur = (await listTargets()).find((t) => t.month === "2026-09")!;
+  const u = await saveTarget({ month: "2026-09", ad_budget_thb: "66372.36", lead_target: "25", notes: "ปรับงบ", updated_at_seen: cur.updated_at }, "admin@example.com");
+  assert.equal(u.created, false); assert.equal(rowsOf("MONTHLY_TARGETS"), before); // แก้แถวเดิม ไม่เพิ่มแถว
+  await assert.rejects(saveTarget({ month: "2026-09", ad_budget_thb: "1", updated_at_seen: cur.updated_at }, "m@x.com"), (e: unknown) => e instanceof TargetError && e.code === "STALE");
+  const lt = await listTargets(); assert.deepEqual(lt.map((t) => t.month), ["2026-10", "2026-09"]); assert.equal(lt[1].ad_budget_thb, 66372.36); assert.equal(lt[1].lead_target, 25); assert.equal(lt[0].lead_target, null);
+  ok("บันทึกเป้า ก.ย. / ต.ค. · แก้เดือนเดิม = แก้แถวเดิม (ไม่เพิ่มแถว) · แก้ทับกันถูกกัน (STALE) · ว่าง = ไม่ตั้งเป้า");
+  const dd = await fetchDashboardData("marketing"); assert.equal(dd.targets!.length, 2);
+  const pg = targetProgress(dd, "2026-09", "2026-10-30", "marketing")!;
+  assert.equal(pg.budget, 66372.36); assert.equal(pg.spend, 66427.73); assert.equal(pg.spendPct, 100.1); assert.equal(pg.current, false); /* ส่วนที่ 3 แก้ Cost แคมเปญ +55.37 ไว้ → เกินงบเล็กน้อย */
+  ok(`ภาพรวม ก.ย.: ค่าโฆษณาจริง ${pg.spend!.toLocaleString()} เทียบงบ ${pg.budget!.toLocaleString()} = ${pg.spendPct}% · Lead ${pg.leads} / ${pg.leadTarget}`);
+  // ระบบที่อัปเดตแล้วแต่ยังไม่ได้กด เตรียม Google Sheet: แท็บ MONTHLY_TARGETS ยังไม่มี → ส่วนอื่น (Website / Facebook ระดับเพจ) ยังแสดงได้
+  const saved = tabs.get("MONTHLY_TARGETS")!; tabs.delete("MONTHLY_TARGETS");
+  const d3 = await fetchDashboardData("marketing");
+  assert.deepEqual(d3.targets, []); assert.equal(d3.webTabMissing, false); assert.ok(d3.web!.length > 0); assert.ok(d3.fbPage!.length > 0);
+  tabs.set("MONTHLY_TARGETS", saved);
+  ok("ยังไม่มีแท็บ MONTHLY_TARGETS: Dashboard โหลดได้ ข้อมูล Website / Viewers ยังอยู่ (ตัดเฉพาะแท็บที่ขาด)");
+}
 console.log("17) Phase 8 — Export: โครงสร้าง ชนิดข้อมูล และการไม่นับซ้ำ");
 const { columnType, valueMatches, normalizeExportValue } = await import("../src/lib/export/dictionary");
 const OLD_SUMMARY = ["month", "meta_ads_spend_thb", "google_ads_campaign_spend_thb", "total_paid_media_spend_thb", "ads_reports_span_months", "fb_posts_published", "fb_posts_reach_sum_lifetime", "fb_link_clicks", "line_new_friends", "line_inquiries", "line_leads", "leads_total", "leads_qualified", "won_deals", "deal_value_thb", "company_revenue_thb", "direct_cost_thb", "gross_profit_thb", "fb_daily_engagement", "fb_daily_seconds_viewed", "fb_daily_reach_sum", "fb_daily_link_clicks"];

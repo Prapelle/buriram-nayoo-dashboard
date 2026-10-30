@@ -6,6 +6,12 @@ import { CHANNELS, SERVICES, computeDashboardCompared, dmyS, type Dashboard, typ
 import type { CompareMode, DRange } from "@/lib/compare";
 import { KpiCard } from "@/components/KpiCard";
 import { BarList, LineChart, Pending, StackedMonths, dm, my } from "@/components/charts";
+import { ChecklistCard, FollowUpCard, TargetCard } from "@/components/OverviewExtras";
+import { buildChecklist, type Checklist } from "@/lib/data-checklist";
+import { followUps } from "@/lib/lead-insights";
+import { todayBkk } from "@/lib/leads";
+import { readColumns } from "@/lib/tabdata";
+import { progressMonth, targetProgress, type Progress } from "@/lib/target-progress";
 
 export const dynamic = "force-dynamic";
 
@@ -30,8 +36,20 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
 
   const mode = (["yoy", "prev"].includes(one(sp.compare)) ? one(sp.compare) : undefined) as CompareMode | undefined;
   let dash: Dashboard, campaigns: string[] = [], prevRange: DRange | null = null, cmpNote: string | undefined;
+  let progress: Progress | null = null, lists: Checklist[] = [], fu: { overdue: number; today: number; stale: number } | null = null;
+  const today = todayBkk();
   try {
-    const data = await fetchDashboardData(role);
+    const [data, salesDates] = await Promise.all([
+      fetchDashboardData(role),
+      // Checklist ของ Admin รวมยอดขาย FlowAccount (วันที่เอกสารเท่านั้น) · แท็บยังไม่มี = ข้าม
+      role === "admin" ? readColumns("SALES_TRANSACTIONS", { only: ["invoice_date"] }).then((t) => t.rows.map((r) => String(r.invoice_date ?? "").slice(0, 10))).catch(() => undefined) : Promise.resolve(undefined),
+    ]);
+    progress = targetProgress(data, progressMonth(f.from, f.to, today), today, role);
+    if (role !== "sales") {
+      const prevMonth = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 2, 1)).toISOString().slice(0, 7);
+      lists = [buildChecklist(data, prevMonth, today, { salesDates }), buildChecklist(data, today.slice(0, 7), today, { salesDates })].filter((x): x is Checklist => !!x);
+    }
+    if (role !== "marketing") { const x = followUps(data.leads, today); fu = { overdue: x.overdue.length, today: x.today.length, stale: x.stale.length }; }
     ({ dash, prevRange, note: cmpNote } = computeDashboardCompared(data, f, role, mode));
     campaigns = [...new Set([...data.google.map((r) => r.campaign_name), ...data.meta.map((r) => r.ad_set_name), ...data.leads.map((r) => r.campaign_name)].filter(Boolean))].sort();
   } catch (e) {
@@ -81,6 +99,9 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
           ยังไม่มีข้อมูลในระบบ — {role === "sales" ? "รอทีมการตลาดนำเข้าข้อมูล" : <>เริ่มจาก <Link href="/import" className="underline">นำเข้า CSV</Link></>}
         </div>
       )}
+      {fu && <FollowUpCard {...fu} />}
+      <TargetCard p={progress} canEdit={role !== "sales"} />
+      <ChecklistCard lists={lists} />
       {mode && cmpNote && <p role="status" className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">⚠ {cmpNote}</p>}
       {prevRange && <p className="text-sm text-slate-600">เทียบกับ{mode === "yoy" ? "ช่วงเดียวกันของปีก่อน" : "ช่วงก่อนหน้า"}: <b>{dmyS(prevRange.from)} – {dmyS(prevRange.to)}</b> (ตัวกรองอื่นเหมือนกัน) · % เปลี่ยนแปลง = (ปัจจุบัน − ค่าเปรียบเทียบ) ÷ ค่าเปรียบเทียบ × 100 · ค่าเปรียบเทียบ = 0 → N/A</p>}
       {dash.warnings.map((w, i) => <p key={i} role="alert" className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">⚠ {w}</p>)}

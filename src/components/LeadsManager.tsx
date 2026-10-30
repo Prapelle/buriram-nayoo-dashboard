@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CHANNELS } from "@/lib/dashboard";
 import { CALL_DEFAULT, normCall } from "@/lib/lead-options";
+import { followUps, STALE_DAYS } from "@/lib/lead-insights";
 import {
   areaLabel, BUY_STATUS, CALL_STATUS, CONDITIONS, EDITABLE, NEEDS, PRICE_RANGES, PROPERTY_TYPES, SELL_STATUS,
   filterLeads, leadStatusOf, statusFieldOf, statusOptionsOf, todayBkk, type DupMatch, type Lead,
@@ -46,7 +47,17 @@ export function LeadsManager() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const shown = useMemo(() => filterLeads(data.rows, f), [data.rows, f]);
+  // รายการติดตาม (เลยกำหนด / วันนี้ / ค้างนาน) · เปิดจากการ์ดหน้า ภาพรวม ด้วย ?follow=...
+  const [follow, setFollow] = useState<"" | "overdue" | "today" | "stale">("");
+  useEffect(() => { const v = new URLSearchParams(window.location.search).get("follow"); if (v === "overdue" || v === "today" || v === "stale") setFollow(v); }, []);
+  const fu = useMemo(() => followUps(data.rows, todayBkk()), [data.rows]);
+  const shown = useMemo(() => {
+    const base = filterLeads(data.rows, f);
+    if (!follow) return base;
+    const ids = new Set(fu[follow].map((r) => r.lead_id));
+    const order = new Map(fu[follow].map((r, i) => [r.lead_id, i]));
+    return base.filter((r) => ids.has(r.lead_id)).sort((a, b) => order.get(a.lead_id)! - order.get(b.lead_id)!);
+  }, [data.rows, f, follow, fu]);
   const pages = Math.max(1, Math.ceil(shown.length / PAGE));
   const cur = Math.min(page, pages);
   const slice = shown.slice((cur - 1) * PAGE, cur * PAGE);
@@ -231,6 +242,17 @@ export function LeadsManager() {
         </section>
       )}
 
+      {data.state === "ok" && (
+        <nav aria-label="รายการติดตาม" className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="text-xs text-slate-500">ติดตามลูกค้า:</span>
+          {([["overdue", "เลยกำหนด", fu.overdue.length, "bg-red-600"], ["today", "วันนี้", fu.today.length, "bg-amber-500"], ["stale", `ค้างเกิน ${STALE_DAYS} วัน`, fu.stale.length, "bg-slate-600"]] as const).map(([k, l, n, c]) => (
+            <button key={k} onClick={() => { setFollow(follow === k ? "" : k); setPage(1); }} aria-pressed={follow === k}
+              className={`rounded-full px-3 py-1 text-xs ${follow === k ? "bg-slate-900 text-white" : "bg-white ring-1 ring-slate-200 hover:bg-slate-100"}`}>
+              {l} <span className={`ml-1 rounded-full px-1.5 text-white ${n ? c : "bg-slate-300"}`}>{n}</span></button>))}
+          {follow && <button onClick={() => setFollow("")} className="text-xs underline">แสดงทั้งหมด</button>}
+          <span className="text-xs text-slate-400">ไม่นับ Lead ที่จบแล้ว (ซื้อสำเร็จ / กู้ไม่ผ่าน / ไม่สนใจ / ขายแล้ว / ยกเลิก / บ้านไม่พร้อมขาย / Archive / Close)</span>
+        </nav>
+      )}
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">ค้นหา</span>
           <input value={f.q} onChange={(e) => { setF({ ...f, q: e.target.value }); setPage(1); }} placeholder="ชื่อ / เบอร์ / Line / ความสนใจ / Remark" className="w-56 rounded-md border border-slate-300 px-2 py-1.5 text-sm" /></label>

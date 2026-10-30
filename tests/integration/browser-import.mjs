@@ -114,6 +114,37 @@ try {
   ok("หน้า Leads: ฟอร์มไม่มี บริษัท / อีเมล / หมวดบริการ / บริการที่สนใจ / UTM แล้ว · มีช่อง Line / ความสนใจ / พื้นที่กรอกเอง (มีรายการแนะนำ) → บันทึกลง Sheet ตามที่กรอก · ตัวกรองพื้นที่มีค่าที่กรอกเอง · ตัวกรองหมวดบริการถูกตัดออก");
   assert.deepEqual(errors, []);
 
+  // ---- เป้าหมายรายเดือน · Checklist · ติดตามลูกค้า · รายงาน Lead · สำรองข้อมูล (30/10/2026) ----
+  const today = new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10), month = today.slice(0, 7);
+  await page.goto(BASE + "/settings/targets"); await page.getByRole("heading", { name: "เป้าหมายรายเดือน" }).waitFor(); await page.getByText("ยังไม่ได้ตั้งเป้าหมาย").waitFor();
+  assert.equal(await page.getByLabel("เดือน").inputValue(), month);
+  await page.getByLabel("งบโฆษณา (บาท)").fill("50,000"); await page.getByLabel("เป้า Lead (ราย)").fill("10");
+  await page.getByRole("button", { name: "บันทึกเป้าหมาย" }).click(); await page.getByText(/บันทึกเป้าหมาย .* แล้ว/).waitFor();
+  await page.getByLabel("เป้า Lead (ราย)").fill("12"); await page.getByRole("button", { name: "บันทึกเป้าหมาย" }).click(); await page.getByText(/แก้ไขเป้าหมาย .* แล้ว/).waitFor();
+  const tg = await tab("MONTHLY_TARGETS"); assert.equal(tg.length - 1, 1); assert.equal(String(tg[1][tg[0].indexOf("lead_target")]), "12");
+  ok("ตั้งค่า → เป้าหมายรายเดือน: ตั้งงบ 50,000 + เป้า Lead 10 แล้วแก้เป็น 12 → Sheet มีแถวเดียวของเดือนนี้");
+  // Lead หนึ่งรายเลยกำหนดติดตาม
+  const lh = await tab("LEADS"); const ix = (c) => lh[0].indexOf(c);
+  const lrows = lh.slice(1).map((r) => { const x = [...r]; while (x.length < lh[0].length) x.push(""); if (x[ix("lead_id")] === "B1") x[ix("next_follow_up_at")] = "2026-01-15"; return x; });
+  await fetch(`http://127.0.0.1:${CTRL}/set`, { method: "POST", body: JSON.stringify({ name: "LEADS", rows: [lh[0], ...lrows] }) });
+  await page.goto(BASE + "/"); await page.getByRole("heading", { name: "ติดตามลูกค้า (ฝ่ายขาย)" }).waitFor();
+  const ov = (await page.locator("main").innerText()).replace(/\s+/g, " ");
+  assert.ok(/เลยกำหนดติดตาม 1/.test(ov), ov.slice(0, 400)); assert.ok(/Leads vs เป้า \d+ \/ 12/.test(ov) && /ค่าโฆษณา vs งบ/.test(ov)); assert.ok(/ข้อมูลเดือน .*: ครบ \d+\/10/.test(ov));
+  if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/overview-extras.png", clip: { x: 0, y: 0, width: 1280, height: 1100 } });
+  ok("ภาพรวม (Admin): การ์ดติดตามลูกค้า เลยกำหนด 1 · เป้าหมายเดือนนี้ (Leads / 12, ค่าโฆษณา vs งบ) · Checklist ข้อมูลประจำเดือน 10 รายการ (รวมยอดขาย)");
+  await page.goto(BASE + "/leads?follow=overdue"); await page.getByText("ผู้ซื้อ ก").first().waitFor(); await page.getByText("1 รายการ").first().waitFor();
+  assert.equal(await page.getByText("ผู้ขาย ก").count(), 0);
+  ok("ภาพรวม → เลยกำหนด เปิดหน้า Leads กรองเฉพาะ Lead ที่ต้องติดตาม (1 รายการ)");
+  await page.goto(BASE + "/lead-report"); await page.getByRole("heading", { name: "ผลงานรายพนักงาน" }).waitFor();
+  const rp = (await page.locator("main").innerText()).replace(/\s+/g, " ");
+  assert.ok(/\(ไม่ระบุ Staff\)/.test(rp) && /รวม \d+/.test(rp) && /Lead ต่อ 1 Site Visit/.test(rp) && /เหตุผลที่ไม่สำเร็จ/.test(rp), rp.slice(0, 600));
+  if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/lead-report.png", fullPage: true });
+  ok("รายงาน Lead: ตารางผลงานรายพนักงาน (รวม, Lead ต่อ 1 Site Visit, สัญญา+ขายแล้ว) + เหตุผลที่ไม่สำเร็จ");
+  await page.goto(BASE + "/settings"); await page.getByRole("heading", { name: "สำรองข้อมูล Google Sheet อัตโนมัติ" }).waitFor();
+  await page.getByRole("button", { name: "ดูสคริปต์" }).click(); assert.ok((await page.locator("pre").innerText()).includes("function installWeeklyBackup()"));
+  ok("ตั้งค่าระบบ: ส่วนสำรองข้อมูลอัตโนมัติ มีขั้นตอน + สคริปต์ Apps Script (installWeeklyBackup / backupNow)");
+  assert.deepEqual(errors, []);
+
   const m = await open("marketing@example.com");
   // ---- ตั้งค่า → คู่มือนำเข้าข้อมูล / คำอธิบายตัวเลข (Marketing เปิดได้ · ตั้งค่าระบบไม่เห็น) ----
   await m.page.goto(BASE + "/settings/import-guide"); await m.page.getByRole("heading", { name: "คู่มือนำเข้าข้อมูล" }).waitFor();
@@ -135,7 +166,7 @@ try {
   assert.equal(await m.page.getByRole("link", { name: "คำอธิบายตัวเลข" }).getAttribute("href"), "/settings/metrics");
   await m.page.goto(BASE + "/settings/metrics"); await m.page.getByRole("heading", { name: "คำอธิบายตัวเลข" }).waitFor();
   const mtoc = m.page.getByRole("navigation", { name: "สารบัญ" }).getByRole("link");
-  assert.equal(await mtoc.count(), 5); assert.equal(await m.page.locator("table").count(), 0);
+  assert.equal(await mtoc.count(), 6); assert.equal(await m.page.locator("table").count(), 0);
   if (process.env.SHOT_DIR) await m.page.screenshot({ path: process.env.SHOT_DIR + "/guide-metrics.png", fullPage: true });
   const mt = [];
   for (const a of await mtoc.all()) mt.push([await a.getAttribute("href"), (await a.locator("div").first().innerText()).trim()]);
@@ -150,6 +181,10 @@ try {
   assert.ok(await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth) <= 1, "มือถือล้นแนวนอน");
   await m.page.setViewportSize({ width: 1280, height: 800 });
   ok("ตั้งค่า (Marketing): คู่มือนำเข้าข้อมูล / คำอธิบายตัวเลข หน้าแรกเป็นสารบัญอย่างเดียว · กดแต่ละหัวข้อเปิดหน้าของหัวข้อนั้น (6 + 5 หน้า) เนื้อหาครบ · หัวข้อที่ไม่มี = 404 · ตั้งค่าระบบไม่เห็นและเข้าไม่ได้ · มือถือไม่ล้น");
+  await m.page.goto(BASE + "/"); await m.page.getByText(/ข้อมูลเดือน .*: ครบ \d+\/9/).first().waitFor(); // Marketing: ไม่มีแถวยอดขาย
+  assert.equal(await m.page.getByRole("heading", { name: "ติดตามลูกค้า (ฝ่ายขาย)" }).count(), 0); assert.ok(await m.page.getByText("แก้ไขเป้า").isVisible());
+  await m.page.goto(BASE + "/lead-report"); await m.page.getByRole("heading", { name: "ผลงานรายพนักงาน" }).waitFor();
+  assert.ok(!(await m.page.locator("main").innerText()).includes("ผู้ซื้อ ก")); // ตัวเลขรวมเท่านั้น ไม่มีชื่อลูกค้า
   for (const pth of ["/buyer-leads", "/seller-leads"]) { await m.page.goto(BASE + pth); await m.page.waitForURL(BASE + "/"); } // Marketing ไม่มีสิทธิ์ข้อมูลลูกค้า → กลับหน้าแรก
   const pr = await fetch(BASE + "/api/leads", { method: "PATCH", headers: { cookie: `authjs.session-token=${await cookie("marketing@example.com")}`, "sec-fetch-site": "same-origin", "content-type": "application/json" }, body: JSON.stringify({ lead_id: "B1", field: "call_status", value: "จอง" }) });
   assert.equal(pr.status, 403);
@@ -162,7 +197,7 @@ try {
   const wtxt = await m.page.locator("section", { has: m.page.getByRole("heading", { name: "ไฟล์เว็บไซต์ (GA4 / Search Console)" }) }).last().innerText();
   assert.ok(wtxt.includes("gsc_Devices.csv") && !wtxt.includes("Devices_2026"));
   assert.deepEqual(m.errors, []);
-  ok("Marketing: เข้า Seller/Buyer Leads ไม่ได้ และ PATCH /api/leads = 403 · ไฟล์ยอดขาย .xlsx ถูกปฏิเสธพร้อมเหตุผล (ไม่มีส่วน Sales) · Devices ของ Google Ads ไปขั้นตอนโฆษณา ส่วน Devices ของ Search Console ไปส่วน Website (ไม่สลับกัน)");
+  ok("Marketing: ภาพรวมมี Checklist 9 รายการ (ไม่มียอดขาย) ไม่มีการ์ดติดตามลูกค้า · รายงาน Lead ไม่มีชื่อลูกค้า · เข้า Seller/Buyer Leads ไม่ได้ และ PATCH /api/leads = 403 · ไฟล์ยอดขาย .xlsx ถูกปฏิเสธพร้อมเหตุผล (ไม่มีส่วน Sales) · Devices ของ Google Ads ไปขั้นตอนโฆษณา ส่วน Devices ของ Search Console ไปส่วน Website (ไม่สลับกัน)");
   await browser.close();
   console.log(`\nผ่านทั้งหมด ${pass} รายการ`);
 } catch (e) { if (process.env.SHOT_DIR) try { await browser?.contexts().at(-1)?.pages()[0]?.screenshot({ path: process.env.SHOT_DIR + "/fail-import.png", fullPage: true }); } catch { /* */ } console.error("\n✗ FAIL:", e?.message ?? e); console.error(log.split("\n").slice(-20).join("\n")); process.exitCode = 1; } finally { try { await browser?.close(); } catch { /* */ } stop(); process.exit(process.exitCode ?? 0); }

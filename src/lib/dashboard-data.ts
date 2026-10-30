@@ -1,4 +1,4 @@
-import { batchGet } from "./sheets";
+import { batchGet, listTabs } from "./sheets";
 import type { DashData, Row } from "./dashboard";
 import { DEFAULT_EXCLUDED_PAGES } from "./dashboard";
 import type { Role } from "./roles";
@@ -11,22 +11,25 @@ const wanted = (role: Role): Record<string, string[]> => ({
   GOOGLE_ADS_TIME_SERIES: ["date", "cost_thb", "imported_at", "clicks", "impressions"],
   FB_PAGE_POSTS: ["page_id", "post_id", "page_name", "publish_time", "metric_date", "metric_scope", "snapshot_date", "reach", "link_clicks", "reactions_comments_shares", "reactions", "comments", "shares", "seconds_viewed", "imported_at", "views"],
   LINE_OA_MONTHLY: ["report_month", "new_friends", "friends_end", "inquiries", "leads"],
-  LEADS: ["lead_id", "received_at", "source_channel", "campaign_name", "area", "service_category", "status", "qualified_at", "need", "buy_status", "sell_status", "call_status"],
+  LEADS: ["lead_id", "received_at", "source_channel", "campaign_name", "area", "service_category", "status", "qualified_at", "need", "buy_status", "sell_status", "call_status",
+    "staff", "next_follow_up_at", "updated_at", "created_at", "lost_reason"], // 30/10/2026: ติดตาม / ผลงานรายพนักงาน / เหตุผลที่ไม่สำเร็จ (ไม่มีชื่อ/เบอร์ลูกค้า)
   SALES: ["closing_date", "revenue_date", "service_category", "source_channel", "campaign_name", "payment_status", ...(role === "marketing" ? [] : FIN_COLS)],
   APP_CONFIG: ["config_key", "config_value"],
   FB_PAGE_INSIGHTS: ["metric", "metric_date", "value", "imported_at"],
+  MONTHLY_TARGETS: ["month", "ad_budget_thb", "lead_target", "notes"],
   WEBSITE_ANALYTICS: ["source", "property", "granularity", "report_start", "report_end", "website_users", "page_views", "user_engagement_sec", "avg_engagement_sec_per_user", "search_clicks", "search_impressions", "search_position", "imported_at", "new_users", "sessions"],
 });
 
-const OPTIONAL_TABS = ["WEBSITE_ANALYTICS", "FB_PAGE_INSIGHTS"];
+const OPTIONAL_TABS = ["WEBSITE_ANALYTICS", "FB_PAGE_INSIGHTS", "MONTHLY_TARGETS"];
 export async function fetchDashboardData(role: Role): Promise<DashData> {
   const spec = wanted(role);
   let tabs = Object.keys(spec);
   let headerRows: string[][][], webTabMissing = false;
   try { headerRows = await batchGet(tabs.map((t) => `'${t}'!1:1`)); }
   catch {
-    // แท็บใหม่ (Website / Facebook ระดับเพจ) ยังไม่ถูกสร้าง (ยังไม่ได้กด เตรียม Google Sheet หลังอัปเดต) → Dashboard ส่วนอื่นยังใช้งานได้
-    tabs = tabs.filter((t) => !OPTIONAL_TABS.includes(t)); webTabMissing = true;
+    // แท็บใหม่บางแท็บยังไม่ถูกสร้าง (ยังไม่ได้กด เตรียม Google Sheet หลังอัปเดต) → ตัดเฉพาะแท็บที่ไม่มี ส่วนอื่นยังใช้งานได้
+    const have = new Set((await listTabs()).map((t) => t.title));
+    tabs = tabs.filter((t) => !OPTIONAL_TABS.includes(t) || have.has(t)); webTabMissing = !have.has("WEBSITE_ANALYTICS");
     headerRows = await batchGet(tabs.map((t) => `'${t}'!1:1`));
   }
   const ranges: { tab: string; col: string; range: string }[] = [];
@@ -54,6 +57,6 @@ export async function fetchDashboardData(role: Role): Promise<DashData> {
   return {
     meta: byTab.META_ADS, google: byTab.GOOGLE_ADS_CAMPAIGNS, gtime: byTab.GOOGLE_ADS_TIME_SERIES, posts: byTab.FB_PAGE_POSTS,
     line: byTab.LINE_OA_MONTHLY, leads: byTab.LEADS, sales: byTab.SALES, excludedPages, lastImport,
-    web: byTab.WEBSITE_ANALYTICS ?? [], webTabMissing, fbPage: byTab.FB_PAGE_INSIGHTS ?? [],
+    web: byTab.WEBSITE_ANALYTICS ?? [], webTabMissing, fbPage: byTab.FB_PAGE_INSIGHTS ?? [], targets: byTab.MONTHLY_TARGETS ?? [],
   };
 }
