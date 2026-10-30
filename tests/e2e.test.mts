@@ -233,7 +233,7 @@ assert.equal(filterLeads(all, { q: "081 234" }).length, 2); assert.equal(filterL
 assert.equal(filterLeads(all, { q: `LD-${year}-0002` }).length, 1); assert.equal(filterLeads(all, { area: "unknown", service: "Product" }).length, 3); assert.equal(normalizePhone("812345678"), "0812345678");
 ok("ค้นหา (ชื่อ/รหัส/เบอร์คนละรูปแบบ) และกรอง ช่องทาง/พื้นที่/สถานะ/บริการ ทำงานถูกต้อง");
 const dl = computeDashboard(await fetchDashboardData("admin"), {}, "admin"); const kl = Object.fromEntries(dl.groups.flatMap((g) => g.items).map((k) => [k.key, k]));
-assert.equal(kl.leads.value, 3); assert.equal(kl.qualified.value, 0); /* Qualified = Call Status ติดต่อได้แล้ว — Lead ในส่วนนี้ยังไม่มีใครติดต่อได้ */ assert.deepEqual(dl.charts.pipeline!.map((p) => p.label), ["New", "Qualified"]); assert.equal(dl.charts.leadsByChannel![0].label, "Facebook Ads");
+assert.equal(kl.leads.value, 3); assert.equal(kl.qualified.value, 0); /* Qualified = Call Status รอเข้าชม — Lead ในส่วนนี้ยังไม่มีใครติดต่อได้ */ assert.deepEqual(dl.charts.pipeline!.map((p) => p.label), ["New", "Qualified"]); assert.equal(dl.charts.leadsByChannel![0].label, "Facebook Ads");
 const ml = await fetchDashboardData("marketing"); assert.ok(ml.leads.every((r) => !("phone" in r) && !("email" in r) && !("customer_name" in r))); ok("Dashboard นับ Lead/Qualified/Pipeline ถูก และข้อมูล Marketing ไม่มี PII (ชื่อ/เบอร์/อีเมล)");
 assert.ok(col("AUDIT_LOG", "action").includes("lead_create") && col("AUDIT_LOG", "action").includes("lead_status_change")); ok("Audit Log: lead_create / lead_status_change");
 void validateLead; 
@@ -374,7 +374,7 @@ await assert.rejects(deleteLead("no-such", "x", "s@x.com"), isLead("NOT_FOUND"))
 const dB = await deleteLead(cB.lead_id, cB.updated_at, "admin@example.com"); assert.equal(dB.lead_code, cB.lead_code);
 const afterB = (await listLeads()).rows; assert.equal(rowsOf("LEADS"), nBefore - 1); assert.ok(!afterB.some((r) => r.lead_id === cB.lead_id)); assert.ok(afterB.some((r) => r.lead_id === cA.lead_id) && afterB.some((r) => r.lead_id === cC.lead_id));
 await assert.rejects(deleteLead(cB.lead_id, cB.updated_at, "admin@example.com"), isLead("NOT_FOUND"));
-const cCnow = afterB.find((r) => r.lead_id === cC.lead_id)!; const upd = await saveLead({ ...cCnow, call_status: "ติดต่อได้แล้ว", lead_id: cCnow.lead_id, updated_at_seen: cCnow.updated_at }, "s@x.com"); assert.equal(upd.lead.status, "Contacted"); assert.equal(rowsOf("LEADS"), nBefore - 1);
+const cCnow = afterB.find((r) => r.lead_id === cC.lead_id)!; const upd = await saveLead({ ...cCnow, call_status: "รอเข้าชม", lead_id: cCnow.lead_id, updated_at_seen: cCnow.updated_at }, "s@x.com"); assert.equal(upd.lead.status, "Contacted"); assert.equal(rowsOf("LEADS"), nBefore - 1);
 ok("ลบแถวกลาง: เหลือแถวอื่นครบ, ลบซ้ำ → NOT_FOUND, แก้ไข Lead ที่แถวเลื่อนขึ้นแล้วยังถูกแถว");
 const num = (c: string) => Number(c.split("-")[2]);
 const dC = await deleteLead(upd.lead.lead_id, upd.lead.updated_at, "admin@example.com"); const fresh = (await nl("ใหม่หลังลบ", "0811110009")).lead;
@@ -453,17 +453,17 @@ const lt = tabs.get("LEADS")!; assert.deepEqual(lt.rows[0].slice(0, OLD_LEAD_COL
 ok("Migration: แท็บ LEADS แบบเดิม → ยังไม่กด เตรียม Sheet จะบันทึกไม่ได้ (ไม่เขียนผิดคอลัมน์) · กดแล้วเพิ่ม 8 คอลัมน์ต่อท้าย คอลัมน์และข้อมูลเดิมไม่เปลี่ยน");
 const old0 = (await listLeads()).rows[0]; assert.equal(old0.need, ""); assert.equal(old0.status, "Proposal");
 let dash15 = Object.fromEntries(computeDashboard(await fetchDashboardData("admin"), {}, "admin").groups.flatMap((g) => g.items).map((k) => [k.key, k.value]));
-assert.equal(dash15.qualified, 0); ok("Lead เก่า (ไม่มี Need) ยังแสดงและนับใน Total Leads · Qualified นับตาม Call Status (ยังไม่มี ติดต่อได้แล้ว = 0)");
+assert.equal(dash15.qualified, 0); ok("Lead เก่า (ไม่มี Need) ยังแสดงและนับใน Total Leads · Qualified นับตาม Call Status (ยังไม่มี รอเข้าชม = 0)");
 await assert.rejects(saveLead({ ...old0, lead_id: old0.lead_id, updated_at_seen: old0.updated_at }, "s@x.com"), isLead("VALIDATION"));
 await new Promise((r) => setTimeout(r, 5));
 const mig = await saveLead({ ...old0, need: "ซื้อ", lead_id: old0.lead_id, updated_at_seen: old0.updated_at }, "s@x.com");
 assert.equal(mig.lead.status, "Proposal"); assert.equal(mig.lead.qualified_at, "2026-08-21"); assert.equal(mig.lead.owner_email, "old@x.com"); assert.equal(mig.lead.call_status, "รอติดต่อ"); assert.equal(mig.lead.need_description, "อยากได้บ้าน");
 ok("แก้ Lead เก่า: ต้องเลือก Need ก่อน · ใส่ Need อย่างเดียวไม่ลดขั้น Pipeline เดิม (Proposal), owner_email/Remark/qualified_at คงเดิม");
 
-const s1 = (await saveLead({ ...base, customer_name: "ผู้ขายบ้าน", phone: "0861111111", need: "ขาย", sell_status: "นัดทำสัญญา", buy_status: "Hot", property_type: "บ้านเดี่ยว", property_condition: "มือ 2", price_range: "1.5–2.5 m", call_status: "ติดต่อได้แล้ว", staff: "พี่เอ", need_description: "ขายด่วน", notes: "โทรหลัง 5 โมง" }, "s@x.com")).lead;
+const s1 = (await saveLead({ ...base, customer_name: "ผู้ขายบ้าน", phone: "0861111111", need: "ขาย", sell_status: "นัดทำสัญญา", buy_status: "Hot", property_type: "บ้านเดี่ยว", property_condition: "มือ 2", price_range: "1.5–2.5 m", call_status: "รอเข้าชม", staff: "พี่เอ", need_description: "ขายด่วน", notes: "โทรหลัง 5 โมง" }, "s@x.com")).lead;
 assert.equal(s1.sell_status, "นัดทำสัญญา"); assert.equal(s1.buy_status, ""); assert.equal(s1.status, "Qualified"); assert.equal(s1.contactable, "TRUE");
 assert.deepEqual([s1.property_type, s1.property_condition, s1.price_range, s1.staff], ["บ้านเดี่ยว", "มือ 2", "1.5–2.5 m", "พี่เอ"]);
-ok("Need = ขาย → ใช้ Sell Status (Buy Status ที่ส่งมาไม่ถูกเก็บ) · นัดทำสัญญา = Qualified · Call ติดต่อได้แล้ว → contactable TRUE · Type/Condition/Price/Staff บันทึกครบ");
+ok("Need = ขาย → ใช้ Sell Status (Buy Status ที่ส่งมาไม่ถูกเก็บ) · นัดทำสัญญา = Qualified · Call รอเข้าชม → contactable TRUE · Type/Condition/Price/Staff บันทึกครบ");
 await assert.rejects(saveLead({ ...base, customer_name: "ผิด", phone: "0862222222", need: "ขาย", sell_status: "Hot" }, "s@x.com"), isLead("VALIDATION"));
 await assert.rejects(saveLead({ ...base, customer_name: "ผิด", phone: "0862222223", need: "ซื้อ", buy_status: "ขายแล้ว" }, "s@x.com"), isLead("VALIDATION"));
 for (const [k, v] of [["call_status", "โทรแล้ว"], ["property_type", "โรงงาน"], ["property_condition", "มือ 3"], ["price_range", "10 m"]]) await assert.rejects(saveLead({ ...base, customer_name: "ผิด", phone: "0863333333", [k]: v }, "s@x.com"), isLead("VALIDATION"));
@@ -495,27 +495,27 @@ assert.equal(filterLeads(all15, { callStatus: "รอติดต่อ" }).leng
 assert.deepEqual((await listLeads()).staff, ["พี่บี", "พี่เอ"]);
 ok("กรองตาม Need / Status / Staff / Call Status / ช่วงวันที่ และค้นหาใน Remark ได้ · รายชื่อ Staff สำหรับเลือกซ้ำ");
 dash15 = Object.fromEntries(computeDashboard(await fetchDashboardData("admin"), {}, "admin").groups.flatMap((g) => g.items).map((k) => [k.key, k.value]));
-assert.equal(dash15.leads, all15.length); assert.equal(dash15.qualified, all15.filter((r) => r.call_status === "ติดต่อได้แล้ว").length); assert.equal(dash15.qualified, 1);
-ok("Dashboard: Total Leads = 6, Qualified Leads = 1 (Call Status = ติดต่อได้แล้ว)");
+assert.equal(dash15.leads, all15.length); assert.equal(dash15.qualified, all15.filter((r) => r.call_status === "รอเข้าชม").length); assert.equal(dash15.qualified, 1);
+ok("Dashboard: Total Leads = 6, Qualified Leads = 1 (Call Status = รอเข้าชม)");
 const lx = await exp("leads", {}, "admin"); assert.deepEqual(lx.headers.slice(-8), ["need", "buy_status", "sell_status", "property_type", "property_condition", "price_range", "call_status", "staff"]);
 assert.ok(lx.rows.some((r) => r.need === "ขาย" && r.sell_status === "ขายแล้ว")); ok("Export leads.csv: คอลัมน์ใหม่ 8 คอลัมน์ต่อท้าย ข้อมูลครบ");
-console.log("15b) คำขอเพิ่มเติม: Call Status ไม่สนใจ + Qualified Leads = ติดต่อได้แล้ว");
+console.log("15b) คำขอเพิ่มเติม: Call Status ไม่สนใจ + Qualified Leads = รอเข้าชม");
 const ni = (await saveLead({ ...base, customer_name: "ไม่สนใจ", phone: "0867777777", need: "ซื้อ", call_status: "ไม่สนใจ" }, "s@x.com")).lead;
 assert.equal(ni.call_status, "ไม่สนใจ"); assert.equal(ni.contactable, "TRUE");
 assert.equal(filterLeads((await listLeads()).rows, { callStatus: "ไม่สนใจ" }).length, 1);
 const dq = computeDashboard(await fetchDashboardData("marketing"), {}, "marketing"); const kq = Object.fromEntries(dq.groups.flatMap((g) => g.items).map((x) => [x.key, x]));
-const contactedNow = (await listLeads()).rows.filter((r) => r.call_status === "ติดต่อได้แล้ว");
+const contactedNow = (await listLeads()).rows.filter((r) => r.call_status === "รอเข้าชม");
 assert.equal(kq.qualified.value, contactedNow.length); assert.equal(dq.charts.leadQualByChannel!.reduce((t, x) => t + x.value, 0), contactedNow.length);
 assert.ok(!("won" in kq) && !("gp" in kq) && !("rate" in kq) && !("lead_qual" in kq));
-ok(`Call Status "ไม่สนใจ" บันทึกได้ (contactable TRUE) และกรองได้ · Qualified Leads = ${contactedNow.length} (เฉพาะ ติดต่อได้แล้ว) รวมทุกช่องทางในกราฟเท่ากัน · ไม่มีการ์ด Won/Gross Profit/Lead-to-Sale`);
+ok(`Call Status "ไม่สนใจ" บันทึกได้ (contactable TRUE) และกรองได้ · Qualified Leads = ${contactedNow.length} (เฉพาะ รอเข้าชม) รวมทุกช่องทางในกราฟเท่ากัน · ไม่มีการ์ด Won/Gross Profit/Lead-to-Sale`);
 {
   const vs = (await saveLead({ ...base, customer_name: "เข้าชมแล้ว", phone: "0868888881", need: "ซื้อ", call_status: "เข้าชมแล้ว" }, "s@x.com")).lead;
   const sold = (await saveLead({ ...base, customer_name: "ซื้อแล้ว", phone: "0868888882", need: "ซื้อ", call_status: "ซื้อสำเร็จ" }, "s@x.com")).lead;
   assert.equal(vs.call_status, "เข้าชมแล้ว"); assert.equal(sold.call_status, "ซื้อสำเร็จ"); assert.equal(vs.contactable, "TRUE"); assert.equal(sold.contactable, "TRUE");
-  const rowsNow = (await listLeads()).rows; const qNow = rowsNow.filter((r) => ["ติดต่อได้แล้ว", "เข้าชมแล้ว", "ซื้อสำเร็จ"].includes(r.call_status)).length;
+  const rowsNow = (await listLeads()).rows; const qNow = rowsNow.filter((r) => ["รอเข้าชม", "เข้าชมแล้ว", "ซื้อสำเร็จ"].includes(r.call_status)).length;
   const d2 = computeDashboard(await fetchDashboardData("marketing"), {}, "marketing"); const k2 = Object.fromEntries(d2.groups.flatMap((g) => g.items).map((x) => [x.key, x]));
   assert.equal(k2.qualified.value, qNow); assert.ok(qNow >= contactedNow.length + 2); assert.ok("cpsv" in k2);
-  ok(`Call Status ใหม่ "เข้าชมแล้ว" / "ซื้อสำเร็จ" บันทึกลง Sheet ได้ (contactable TRUE) · Qualified Leads = ${qNow} (ติดต่อได้แล้ว + เข้าชม + ซื้อสำเร็จ) · มีการ์ด Cost per Site Visit`);
+  ok(`Call Status ใหม่ "เข้าชมแล้ว" / "ซื้อสำเร็จ" บันทึกลง Sheet ได้ (contactable TRUE) · Qualified Leads = ${qNow} (รอเข้าชม + เข้าชม + ซื้อสำเร็จ) · มีการ์ด Cost per Site Visit`);
 }
 console.log("15c) จัดการผู้ใช้ (หน้า ตั้งค่า)");
 const { listUsers, saveUser, UserError } = await import("../src/lib/users-service");

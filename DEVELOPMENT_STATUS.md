@@ -920,18 +920,19 @@ Users 17,443 · Page Views 42,450 · PV/User 2.43 · Duration 1 นาที 0 �
 | Sell Status ว่าง (Need = ขาย) | ว่าง | เริ่มที่ **รอติดต่อ** |
 | Pipeline | — | สนใจขาย = Qualified · รอติดต่อ ไม่นับ Qualified |
 | Call Status | ยังไม่ได้โทร, ติดต่อไม่ได้, ติดต่อได้แล้ว, เข้าชมโครงการแล้ว, ซื้อสำเร็จ, ไม่สนใจ | **รอติดต่อ** (แทน ยังไม่ได้โทร), ติดต่อได้แล้ว, **รอเข้าชม**, **เข้าชมแล้ว** (แทน เข้าชมโครงการแล้ว), **จอง**, ซื้อสำเร็จ, **กู้ไม่ผ่าน**, ติดต่อไม่ได้, ไม่สนใจ |
-| Qualified Leads | ติดต่อได้แล้ว / เข้าชมโครงการแล้ว / ซื้อสำเร็จ | ติดต่อได้แล้ว / รอเข้าชม / เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน (**ตั้งค่าเริ่มต้น รอผู้ใช้ยืนยัน**) |
-| Cost per Site Visit | นับเฉพาะ เข้าชมโครงการแล้ว | นับเฉพาะ **เข้าชมแล้ว** (ยังไม่รวม จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน — **รอผู้ใช้ยืนยัน**) |
+| Qualified Leads | ติดต่อได้แล้ว / เข้าชมโครงการแล้ว / ซื้อสำเร็จ | **รอเข้าชม / เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน** — "ติดต่อได้แล้ว" ยังไม่นับ (ผู้ใช้ยืนยัน 30/10/2026) |
+| Cost per Site Visit | นับเฉพาะ เข้าชมโครงการแล้ว | **เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน** (ผู้ใช้ยืนยัน 30/10/2026) · รอเข้าชมยังไม่ใช่การเข้าชม |
+| Pipeline "Contacted" และ contactable | = Qualified | = **ติดต่อได้แล้ว + Qualified** (ติดต่อได้แล้วยังเป็น Contacted / contactable TRUE แต่ไม่นับเป็น Qualified Lead) |
 
 - **Lead เก่า** ที่ยังเป็นชื่อเดิมใน Sheet (ยังไม่ได้โทร / เข้าชมโครงการแล้ว) ถูกแปลงเป็นชื่อใหม่ตอนอ่าน (Dashboard, ตัวกรอง, บอร์ด) และเขียนเป็นชื่อใหม่เมื่อมีการบันทึก — ไม่ต้อง migrate ข้อมูล · ไฟล์ Export ของแถวที่ยังไม่ถูกบันทึกจะยังแสดงชื่อเดิม
 - Buyer Leads ไม่แสดง Lead เก่าที่ยังไม่ระบุ Need (บอร์ดแจ้งจำนวน) — ไปกำหนด Need ที่หน้า Leads
 
 ### ไฟล์ที่เปลี่ยน
-`src/lib/lead-options.ts`, `src/lib/leads.ts`, `src/lib/leads-service.ts`, `src/app/api/leads/route.ts`, `src/lib/dashboard.ts`, `src/lib/performance.ts`, `src/lib/export/*` (ข้อความนิยาม), `src/lib/roles.ts`, `src/components/StatusBoard.tsx` (ใหม่), `src/components/LeadsManager.tsx`, `src/app/(app)/seller-leads/page.tsx`, `src/app/(app)/buyer-leads/page.tsx` (ใหม่), `src/app/(app)/page.tsx` (ข้อความ), `tests/sellerleads.test.ts`, `tests/sellerleads-service.test.mts` (ใหม่), `tests/run-all.sh`
+`src/lib/lead-options.ts` (QUALIFIED_CALL / CONTACTED_CALL / SITE_VISIT_CALL), `src/lib/leads.ts`, `src/lib/leads-service.ts`, `src/app/api/leads/route.ts`, `src/lib/dashboard.ts`, `src/lib/performance.ts`, `src/lib/export/*` (ข้อความนิยาม), `src/lib/roles.ts`, `src/components/StatusBoard.tsx` (ใหม่), `src/components/LeadsManager.tsx`, `src/app/(app)/seller-leads/page.tsx`, `src/app/(app)/buyer-leads/page.tsx` (ใหม่), `src/app/(app)/page.tsx` (ข้อความ), `tests/sellerleads.test.ts`, `tests/sellerleads-service.test.mts`, `tests/callstatus-kpi.test.ts` (ใหม่), `tests/run-all.sh`
 
 ### Data / Schema Impact
 - ไม่มี (ใช้คอลัมน์ `sell_status`, `call_status` เดิม · ไม่ต้องกดเตรียม Google Sheet)
 
 ### Test Results
-**Passed:** เทสต์ใหม่ 28 รายการ (sellerleads 14 + sellerleads-service 14 กับ Google Sheets จำลอง) · security 12 · sales 18 · kpicard 8 · `tsc --noEmit` · `next build`
-**Not Tested:** การลากวางในเบราว์เซอร์จริง · เทสต์ที่ต้องใช้ไฟล์ CSV ตัวอย่าง (dashboard / overview / yoy / fbactions / website / performance / fbpage / e2e / http-integration) — ปรับคำที่ใช้ในเทสต์เหล่านี้ให้ตรงชื่อสถานะใหม่แล้ว แต่ยังไม่ได้รัน
+**Passed:** เทสต์ใหม่ sellerleads 16 + sellerleads-service 15 + callstatus-kpi 5 (KPI Qualified / Cost per Site Visit ด้วยข้อมูลจำลอง) · security 12 · sales 18 · kpicard 8 · `tsc --noEmit` · `next build`
+**Not Tested:** การลากวางในเบราว์เซอร์จริง · เทสต์ที่ต้องใช้ไฟล์ CSV ตัวอย่าง (dashboard / overview / yoy / fbactions / website / performance / fbpage / e2e / http-integration) — ปรับข้อมูลและค่าคาดหวังให้ตรงนิยามใหม่แล้ว (เช่น Cost per Site Visit ใน overview = ค่าโฆษณา ÷ 3) แต่ยังไม่ได้รัน

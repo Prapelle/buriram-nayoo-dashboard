@@ -1,6 +1,6 @@
 // Seller Leads (หน้าบอร์ด Sell Status) — รัน: npx tsx tests/sellerleads.test.ts
 import assert from "node:assert/strict";
-import { CALL_DEFAULT, CALL_STATUS, isQualifiedCall, normCall, SELL_DEFAULT, SELL_STATUS } from "../src/lib/lead-options";
+import { CALL_DEFAULT, CALL_STATUS, isContactedCall, isQualifiedCall, isSiteVisitCall, normCall, SELL_DEFAULT, SELL_STATUS } from "../src/lib/lead-options";
 import { contactableFor, filterLeads, leadStatusOf, pipelineOf, validateLead, type Lead } from "../src/lib/leads";
 
 const t = (name: string, fn: () => void) => { fn(); console.log("  ✓", name); };
@@ -25,12 +25,21 @@ t("validateLead ยอมรับสถานะใหม่ และปฏิ
 const buyBase = { received_at: "2026-10-30", customer_name: "ผู้ซื้อ", source_channel: "Referral", need: "ซื้อ", area: "unknown" };
 t("Call Status เรียงตามคอลัมน์ Buyer Leads", () => assert.deepEqual(CALL_STATUS, ["รอติดต่อ", "ติดต่อได้แล้ว", "รอเข้าชม", "เข้าชมแล้ว", "จอง", "ซื้อสำเร็จ", "กู้ไม่ผ่าน", "ติดต่อไม่ได้", "ไม่สนใจ"]));
 t("ค่าเริ่มต้น = รอติดต่อ · ชื่อเดิมถูกแปลงเป็นชื่อใหม่", () => { assert.equal(CALL_DEFAULT, "รอติดต่อ"); assert.equal(normCall("ยังไม่ได้โทร"), "รอติดต่อ"); assert.equal(normCall("เข้าชมโครงการแล้ว"), "เข้าชมแล้ว"); assert.equal(normCall("จอง"), "จอง"); assert.equal(normCall(undefined), ""); });
-t("Qualified = ติดต่อได้แล้ว/รอเข้าชม/เข้าชมแล้ว/จอง/ซื้อสำเร็จ/กู้ไม่ผ่าน (รวมชื่อเดิม) · รอติดต่อ/ติดต่อไม่ได้/ไม่สนใจ ไม่นับ", () => {
-  for (const s of ["ติดต่อได้แล้ว", "รอเข้าชม", "เข้าชมแล้ว", "จอง", "ซื้อสำเร็จ", "กู้ไม่ผ่าน", "เข้าชมโครงการแล้ว"]) assert.ok(isQualifiedCall(s), s);
-  for (const s of ["รอติดต่อ", "ยังไม่ได้โทร", "ติดต่อไม่ได้", "ไม่สนใจ", ""]) assert.ok(!isQualifiedCall(s), s);
+t("Qualified = รอเข้าชม/เข้าชมแล้ว/จอง/ซื้อสำเร็จ/กู้ไม่ผ่าน (รวมชื่อเดิม) · ติดต่อได้แล้ว/รอติดต่อ/ติดต่อไม่ได้/ไม่สนใจ ไม่นับ", () => {
+  for (const s of ["รอเข้าชม", "เข้าชมแล้ว", "จอง", "ซื้อสำเร็จ", "กู้ไม่ผ่าน", "เข้าชมโครงการแล้ว"]) assert.ok(isQualifiedCall(s), s);
+  for (const s of ["ติดต่อได้แล้ว", "รอติดต่อ", "ยังไม่ได้โทร", "ติดต่อไม่ได้", "ไม่สนใจ", ""]) assert.ok(!isQualifiedCall(s), s);
+});
+t("Site Visit = เข้าชมแล้ว/จอง/ซื้อสำเร็จ/กู้ไม่ผ่าน (รอเข้าชมยังไม่ใช่การเข้าชม)", () => {
+  for (const s of ["เข้าชมแล้ว", "จอง", "ซื้อสำเร็จ", "กู้ไม่ผ่าน", "เข้าชมโครงการแล้ว"]) assert.ok(isSiteVisitCall(s), s);
+  for (const s of ["รอเข้าชม", "ติดต่อได้แล้ว", "รอติดต่อ", "ติดต่อไม่ได้", "ไม่สนใจ", ""]) assert.ok(!isSiteVisitCall(s), s);
+});
+t("Contacted (Pipeline / contactable) = ติดต่อได้แล้ว + Qualified · ยังไม่ใช่ Qualified", () => {
+  assert.ok(isContactedCall("ติดต่อได้แล้ว") && isContactedCall("จอง")); assert.ok(!isContactedCall("รอติดต่อ") && !isContactedCall("ติดต่อไม่ได้"));
+  assert.equal(pipelineOf({ need: "ซื้อ", buy_status: "Cold", call_status: "ติดต่อได้แล้ว" } as Lead), "Contacted");
+  assert.equal(pipelineOf({ need: "ซื้อ", buy_status: "Cold", call_status: "รอติดต่อ" } as Lead), "New");
 });
 t("contactable: คุยได้/ไม่สนใจ = TRUE · ติดต่อไม่ได้ = FALSE · รอติดต่อ คงค่าเดิม", () => {
-  assert.equal(contactableFor("จอง", ""), "TRUE"); assert.equal(contactableFor("ไม่สนใจ", ""), "TRUE"); assert.equal(contactableFor("ติดต่อไม่ได้", "TRUE"), "FALSE");
+  assert.equal(contactableFor("จอง", ""), "TRUE"); assert.equal(contactableFor("ติดต่อได้แล้ว", ""), "TRUE"); assert.equal(contactableFor("ไม่สนใจ", ""), "TRUE"); assert.equal(contactableFor("ติดต่อไม่ได้", "TRUE"), "FALSE");
   assert.equal(contactableFor("รอติดต่อ", "TRUE"), "TRUE"); assert.equal(contactableFor("รอติดต่อ", ""), "");
 });
 t("validateLead: ว่าง → รอติดต่อ · ชื่อเดิมถูกแปลง · ค่าไม่รู้จักถูกปฏิเสธ", () => {

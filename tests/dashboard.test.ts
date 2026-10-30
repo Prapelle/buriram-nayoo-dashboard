@@ -42,8 +42,8 @@ dd = computeDashboard(base, { from: "2026-10-01", to: "2026-10-31" }, "admin"); 
 
 console.log("3) Leads / Sales / สิทธิ์ (ข้อมูลสมมติ)");
 const leads: Row[] = [
-  { lead_id: "L1", call_status: "ติดต่อได้แล้ว", received_at: "2026-09-02", source_channel: "Facebook Ads", status: "Won", service_category: "Product", area: "buriram", campaign_name: "A", qualified_at: "2026-09-03" },
-  { lead_id: "L2", call_status: "ติดต่อได้แล้ว", received_at: "2026-09-05", source_channel: "Google Ads", status: "Qualified", service_category: "Project", area: "buriram", campaign_name: "B", qualified_at: "" },
+  { lead_id: "L1", call_status: "รอเข้าชม", received_at: "2026-09-02", source_channel: "Facebook Ads", status: "Won", service_category: "Product", area: "buriram", campaign_name: "A", qualified_at: "2026-09-03" },
+  { lead_id: "L2", call_status: "รอเข้าชม", received_at: "2026-09-05", source_channel: "Google Ads", status: "Qualified", service_category: "Project", area: "buriram", campaign_name: "B", qualified_at: "" },
   { lead_id: "L3", call_status: "ไม่สนใจ", received_at: "2026-09-06", source_channel: "Google Ads", status: "New", service_category: "Project", area: "surin", campaign_name: "B", qualified_at: "" },
   { lead_id: "L4", call_status: "ติดต่อไม่ได้", received_at: "2026-09-07", source_channel: "Referral", status: "Lost", service_category: "Event", area: "", campaign_name: "", qualified_at: "" },
 ];
@@ -56,7 +56,7 @@ const full = { ...base, leads, sales };
 x = kv(computeDashboard(full, {}, "admin"));
 assert.equal(x.leads.value, 4); assert.equal(x.qualified.value, 2); assert.equal(k.lead_qual, undefined);
 const lq = computeDashboard(full, {}, "admin").charts.leadQualByChannel!; assert.deepEqual(lq, [{ label: "Facebook Ads", value: 1 }, { label: "Google Ads", value: 1 }, { label: "Referral", value: 0 }]);
-ok("Leads 4 / Qualified 2 / Qualified Leads 2 (Call Status = ติดต่อได้แล้ว; ไม่สนใจ/ติดต่อไม่ได้ ไม่นับ) แยกช่องทาง: Facebook Ads 1, Google Ads 1, Referral 0");
+ok("Leads 4 / Qualified 2 / Qualified Leads 2 (Call Status = รอเข้าชม; ไม่สนใจ/ติดต่อไม่ได้ ไม่นับ) แยกช่องทาง: Facebook Ads 1, Google Ads 1, Referral 0");
 assert.equal(x.cpl.value, Math.round((66372.36 / 3) * 100) / 100); assert.equal(x.cplq.value, Math.round((66372.36 / 2) * 100) / 100); ok("CPL = ค่าโฆษณา ÷ Lead ช่องทางโฆษณา 3 ราย, Cost/Qualified ÷ 2");
 x = kv(computeDashboard(full, {}, "marketing")); assert.equal(x.leads.value, 4); assert.equal(x.qualified.value, 2); assert.ok(!Object.values(x).some((v) => v.state === "restricted")); ok("Marketing: นับ Lead / Qualified Leads ได้ (ไม่มีการ์ดการเงินแล้ว)");
 x = kv(computeDashboard(full, { service: "Project" }, "sales")); assert.equal(x.leads.value, 2); assert.equal(x.qualified.value, 1); ok("Service=Project: Leads 2, Qualified Leads 1");

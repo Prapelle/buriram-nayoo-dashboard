@@ -2,7 +2,7 @@ import { CHANNELS, SERVICES } from "./dashboard";
 import { isIsoDate } from "./import/normalize";
 
 export const AREA_OPTIONS: [string, string][] = [["unknown", "ไม่ทราบ (Unknown)"], ["buriram", "บุรีรัมย์"], ["surin", "สุรินทร์"], ["multi_province", "หลายจังหวัด"]];
-import { CALL_DEFAULT, isQualifiedCall, normCall, NEEDS, BUY_NEEDS, SELL_NEEDS, BUY_STATUS, SELL_STATUS, CALL_STATUS, PROPERTY_TYPES, CONDITIONS, PRICE_RANGES } from "./lead-options";
+import { CALL_DEFAULT, isContactedCall, normCall, NEEDS, BUY_NEEDS, SELL_NEEDS, BUY_STATUS, SELL_STATUS, CALL_STATUS, PROPERTY_TYPES, CONDITIONS, PRICE_RANGES } from "./lead-options";
 export { NEEDS, BUY_NEEDS, SELL_NEEDS, BUY_STATUS, SELL_STATUS, CALL_STATUS, PROPERTY_TYPES, CONDITIONS, PRICE_RANGES };
 
 /** ช่องสถานะที่ใช้กับ Need นั้น */
@@ -20,7 +20,7 @@ export function pipelineOf(r: Lead): "Won" | "Lost" | "Qualified" | "Contacted" 
   if (WON.includes(st)) return "Won";
   if (LOST.includes(st)) return "Lost";
   if (QUALIFIED.includes(st)) return "Qualified";
-  return isQualifiedCall(r.call_status) ? "Contacted" : "New";
+  return isContactedCall(r.call_status) ? "Contacted" : "New";
 }
 export const PIPELINE_MAP = { Qualified: [...QUALIFIED, ...WON], Won: WON, Lost: LOST };
 
@@ -31,9 +31,9 @@ export const EDITABLE = ["received_at", "customer_name", "company_name", "phone"
   "need", "buy_status", "sell_status", "property_type", "property_condition", "price_range", "call_status", "staff"];
 export type Lead = Record<string, string>;
 
-/** คุยกับลูกค้าได้แล้ว (Qualified หรือ ไม่สนใจ) → contactable TRUE · ติดต่อไม่ได้ → FALSE · อื่น ๆ คงค่าเดิม */
+/** คุยกับลูกค้าได้แล้ว (ติดต่อได้แล้วขึ้นไป หรือ ไม่สนใจ) → contactable TRUE · ติดต่อไม่ได้ → FALSE · อื่น ๆ คงค่าเดิม */
 export function contactableFor(call: string, current: string): string {
-  if (isQualifiedCall(call) || call === "ไม่สนใจ") return "TRUE";
+  if (isContactedCall(call) || call === "ไม่สนใจ") return "TRUE";
   if (call === "ติดต่อไม่ได้") return "FALSE";
   return current;
 }

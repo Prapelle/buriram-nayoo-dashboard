@@ -14,7 +14,7 @@ const rows = (file: string): Row[] => {
 const meta = rows("Facebookads.csv"), google = rows("Campaigns_2026_09_01-2026_09_30_.csv"), gtime = rows("Time_series_2026_09_01-2026_09_30_.csv");
 const L = (id: string, date: string, ch: string, extra: Row = {}): Row => ({ lead_id: id, received_at: date, source_channel: ch, status: "New", service_category: "Product", area: "", campaign_name: "", qualified_at: "", ...extra });
 const leads: Row[] = [
-  L("A1", "2026-09-02", "Facebook Ads", { status: "Qualified", call_status: "ติดต่อได้แล้ว" }), L("A2", "2026-09-12", "Facebook Ads"), L("A3", "2026-09-18", "Facebook Ads"),
+  L("A1", "2026-09-02", "Facebook Ads", { status: "Qualified", call_status: "รอเข้าชม" }), L("A2", "2026-09-12", "Facebook Ads"), L("A3", "2026-09-18", "Facebook Ads"),
   L("G1", "2026-09-25", "Google Ads", { service_category: "Project" }), L("R1", "2026-09-05", "Referral"), L("R2", "2026-09-29", "Referral"),
   L("X1", "2026-10-03", "Facebook Ads"), // นอกช่วงของรายงานโฆษณา (ก.ย.)
 ];
@@ -82,11 +82,11 @@ console.log("9) Call Status ใหม่ + Cost per Site Visit (คำขอ 28/
 {
   const ls = [...leads.slice(0, 6).map((x) => ({ ...x })), L("V1", "2026-09-10", "LINE OA", { call_status: "เข้าชมแล้ว" }), L("V2", "2026-09-11", "Facebook Ads", { call_status: "เข้าชมแล้ว" }), L("S1", "2026-09-12", "Referral", { call_status: "ซื้อสำเร็จ" })];
   const { k: k2, r: r9 } = run({ leads: ls });
-  assert.equal(k2.qualified.value, 4); // A1 ติดต่อได้แล้ว + V1 + V2 + S1
+  assert.equal(k2.qualified.value, 4); // A1 รอเข้าชม + V1 + V2 + S1
   assert.equal(r9.charts.leadQualByChannel!.reduce((s, x) => s + x.value, 0), 4);
-  ok("Qualified Leads = ติดต่อได้แล้ว 1 + เข้าชมแล้ว 2 + ซื้อสำเร็จ 1 = 4 (กราฟแยกช่องทางรวมเท่ากัน)");
-  assert.equal(k2.cpsv.value, r2(PAID / 2)); assert.match(k2.cpsv.note!, /เข้าชมแล้ว/);
-  ok(`Cost per Site Visit = ค่าโฆษณาทั้งหมด ${PAID.toLocaleString()} ÷ 2 Lead ที่เข้าชมแล้ว = ฿${r2(PAID / 2).toLocaleString()}`);
+  ok("Qualified Leads = รอเข้าชม 1 + เข้าชมแล้ว 2 + ซื้อสำเร็จ 1 = 4 (กราฟแยกช่องทางรวมเท่ากัน)");
+  assert.equal(k2.cpsv.value, r2(PAID / 3)); assert.match(k2.cpsv.note!, /เข้าชมแล้ว/); // V1 + V2 (เข้าชมแล้ว) + S1 (ซื้อสำเร็จ = เดินหน้าต่อจากการเข้าชม)
+  ok(`Cost per Site Visit = ค่าโฆษณาทั้งหมด ${PAID.toLocaleString()} ÷ 3 Lead (เข้าชมแล้ว 2 + ซื้อสำเร็จ 1) = ฿${r2(PAID / 3).toLocaleString()}`);
   const { k: k3 } = run();
   assert.equal(k3.cpsv.state, "na"); assert.equal(k3.cpsv.value, null);
   ok("ยังไม่มีใครเข้าชมโครงการ → Cost per Site Visit = N/A (หารด้วย 0 ไม่ได้) ไม่ใช่ 0");

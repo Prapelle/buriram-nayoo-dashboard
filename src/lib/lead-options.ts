@@ -13,11 +13,16 @@ export const CALL_DEFAULT = "รอติดต่อ";
 /** ชื่อเดิมที่เคยบันทึกไว้ใน Sheet → ชื่อปัจจุบัน (Lead เก่ายังนับและแสดงถูกต้อง · เขียนเป็นชื่อใหม่เมื่อมีการบันทึก) */
 const CALL_LEGACY: Record<string, string> = { "ยังไม่ได้โทร": "รอติดต่อ", "เข้าชมโครงการแล้ว": "เข้าชมแล้ว" };
 export const normCall = (s: unknown): string => { const v = String(s ?? "").trim(); return CALL_LEGACY[v] ?? v; };
-/** Call Status ที่นับเป็น Qualified Lead = คุยกับลูกค้าได้แล้วและเดินหน้าต่อ (ผู้ใช้กำหนด 28/10/2026 · ขยายตามสถานะใหม่ 30/10/2026) */
-export const QUALIFIED_CALL = ["ติดต่อได้แล้ว", "รอเข้าชม", "เข้าชมแล้ว", "จอง", "ซื้อสำเร็จ", "กู้ไม่ผ่าน"];
-export const CALL_SOLD = "ซื้อสำเร็จ";
-export const CALL_VISIT = "เข้าชมแล้ว";
+/** Qualified Lead = รอเข้าชม / เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน (ผู้ใช้กำหนด 30/10/2026 — "ติดต่อได้แล้ว" ยังไม่นับ) */
+export const QUALIFIED_CALL = ["รอเข้าชม", "เข้าชมแล้ว", "จอง", "ซื้อสำเร็จ", "กู้ไม่ผ่าน"];
 export const isQualifiedCall = (s: unknown) => QUALIFIED_CALL.includes(normCall(s));
+/** คุยกับลูกค้าได้แล้ว = ติดต่อได้แล้ว + Qualified · ใช้กับขั้น Pipeline "Contacted" และ contactable (ไม่ใช่ KPI Qualified) */
+export const CONTACTED_CALL = ["ติดต่อได้แล้ว", ...QUALIFIED_CALL];
+export const isContactedCall = (s: unknown) => CONTACTED_CALL.includes(normCall(s));
+/** Site Visit = เข้าชมแล้ว และสถานะที่เดินหน้าต่อจากการเข้าชม (จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน) (ผู้ใช้กำหนด 30/10/2026) */
+export const SITE_VISIT_CALL = ["เข้าชมแล้ว", "จอง", "ซื้อสำเร็จ", "กู้ไม่ผ่าน"];
+export const isSiteVisitCall = (s: unknown) => SITE_VISIT_CALL.includes(normCall(s));
+export const CALL_SOLD = "ซื้อสำเร็จ";
 export const PROPERTY_TYPES = ["บ้านเดี่ยว", "อาคารพาณิชย์", "ที่ดิน", "ทาวโฮม", "ทรัพย์ลงทุน", "คอนโด"];
 export const CONDITIONS = ["มือ 1", "มือ 2", "1 และ 2"];
 export const PRICE_RANGES = ["ต่ำกว่าล้าน", "1–1.5 m", "1.5–2.5 m", "2.5–3.5 m", "3.5–5 m", "5 up"];

@@ -103,7 +103,7 @@ console.log("8) Customer Funnel + ประสิทธิภาพแต่ล�
 {
   const Ld = (id: string, day: string, ch: string, call = ""): Row => ({ lead_id: id, received_at: day, source_channel: ch, call_status: call });
   const fl: Row[] = [Ld("F1", "2026-09-02", "Facebook Ads", "ซื้อสำเร็จ"), Ld("F2", "2026-09-03", "Facebook Ads", "เข้าชมแล้ว"), Ld("F3", "2026-09-04", "Facebook Ads", "ติดต่อไม่ได้"), Ld("F4", "2026-09-05", "Facebook Ads", "ไม่สนใจ"),
-    Ld("G1", "2026-09-06", "Google Ads", "ติดต่อได้แล้ว"), Ld("G2", "2026-09-07", "Google Ads"), Ld("L1", "2026-09-08", "LINE OA", "ซื้อสำเร็จ"), Ld("F1", "2026-09-09", "Facebook Ads", "ซื้อสำเร็จ") /* ซ้ำ */, Ld("X1", "2026-10-02", "LINE OA")];
+    Ld("G1", "2026-09-06", "Google Ads", "รอเข้าชม"), Ld("G2", "2026-09-07", "Google Ads"), Ld("L1", "2026-09-08", "LINE OA", "ซื้อสำเร็จ"), Ld("F1", "2026-09-09", "Facebook Ads", "ซื้อสำเร็จ") /* ซ้ำ */, Ld("X1", "2026-10-02", "LINE OA")];
   const web: Row[] = [{ source: "ga4_snapshot", granularity: "period", report_start: "2026-09-01", report_end: "2026-09-30", website_users: "17443", sessions: "22409", page_views: "42450", avg_engagement_sec_per_user: "60.042" }];
   const { p: fp, k: fk } = run({ leads: fl, web });
   const by = Object.fromEntries(fp.funnel!.map((x) => [x.key, x]));
@@ -111,7 +111,7 @@ console.log("8) Customer Funnel + ประสิทธิภาพแต่ล�
   assert.equal(by.visits.value, 22409); assert.match(by.visits.note, /Sessions/);
   assert.equal(by.leads.value, 7); assert.equal(by.qualified.value, 4); assert.equal(by.sold.value, 2);
   assert.equal(by.qualified.conv, r2(4 / 7 * 100)); assert.equal(by.sold.conv, 50); assert.equal(by.leads.change, undefined);
-  ok(`Funnel ก.ย.: Reach ${by.reach.value!.toLocaleString()} (Meta + Facebook Page) → เข้าเว็บ 22,409 Sessions → Leads 7 (ไม่นับซ้ำ/นอกช่วง) → Qualified 4 (ติดต่อได้แล้ว/เข้าชม/ซื้อสำเร็จ) → ขายได้ 2`);
+  ok(`Funnel ก.ย.: Reach ${by.reach.value!.toLocaleString()} (Meta + Facebook Page) → เข้าเว็บ 22,409 Sessions → Leads 7 (ไม่นับซ้ำ/นอกช่วง) → Qualified 4 (รอเข้าชม/เข้าชม/ซื้อสำเร็จ) → ขายได้ 2`);
   const ch = Object.fromEntries(fp.channels!.map((c) => [c.channel, c]));
   assert.equal(ch["Meta Ads"].leads, 4); assert.equal(ch["Meta Ads"].cpl, r2(37557.54 / 4)); assert.equal(ch["Meta Ads"].cpql, r2(37557.54 / 2)); assert.equal(ch["Meta Ads"].sold, 1);
   assert.equal(ch["Google Ads"].cpl, r2(28814.82 / 2)); assert.equal(ch["Google Ads"].qualified, 1);

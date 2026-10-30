@@ -149,11 +149,11 @@ try {
   ok("Overview", "CPL จาก Ads = 66,372.36 ÷ 2 = 33,186.18 · CPL ทั้งหมด ÷ 3 = 22,124.12 (Lead ต.ค. ไม่นับ) · หน้า Marketing ไม่มีเบอร์ลูกค้า");
   r = await call("/api/leads", { as: SALES }); assert.equal(r.json.rows.length, 4); assert.deepEqual(r.json.staff, ["พี่เอ"]);
   const toCall = r.json.rows.find((x) => x.source_channel === "Google Ads");
-  r = await call("/api/leads", { as: SALES, method: "POST", body: { ...toCall, call_status: "ติดต่อได้แล้ว", updated_at_seen: toCall.updated_at } }); assert.equal(r.status, 200, r.text);
+  r = await call("/api/leads", { as: SALES, method: "POST", body: { ...toCall, call_status: "รอเข้าชม", updated_at_seen: toCall.updated_at } }); assert.equal(r.status, 200, r.text);
   r = await call("/?from=2026-09-01&to=2026-09-30", { as: MKT });
   assert.ok(/Qualified Leads<\/div>[\s\S]{0,120}>1</.test(r.html), "Qualified Leads = 1"); assert.ok(r.html.includes("Qualified Leads แยกตามช่องทาง")); assert.ok(!r.html.includes("Lead Qualification"));
   for (const gone of ["Won Deals", "Deal Value", "Company Revenue", "Direct Cost", "Gross Profit", "Lead-to-Sale"]) assert.ok(!r.html.includes(gone), gone);
-  ok("Overview", "Qualified Leads = 1 (Call Status ติดต่อได้แล้ว) + กราฟแยกช่องทาง · ไม่มีการ์ด Won/Deal/Revenue/Cost/Gross Profit/Lead-to-Sale");
+  ok("Overview", "Qualified Leads = 1 (Call Status รอเข้าชม) + กราฟแยกช่องทาง · ไม่มีการ์ด Won/Deal/Revenue/Cost/Gross Profit/Lead-to-Sale");
   ok("Leads", "รายการ Lead 4 ราย · รายชื่อ Staff สำหรับเลือก");
 
   console.log("6) Website Analytics");

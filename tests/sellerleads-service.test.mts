@@ -46,6 +46,11 @@ await t("รอเข้าชม → Qualified Lead (Pipeline Contacted) + cont
   assert.ok((tabs.get("AUDIT_LOG")!.rows as string[][]).some((x) => x.join("|").includes("Call รอติดต่อ → รอเข้าชม")));
   cur = r.lead;
 });
+await t("ติดต่อได้แล้ว → Pipeline Contacted + contactable TRUE (ยังไม่ใช่ Qualified Lead)", async () => {
+  const c = (await saveLead({ ...base, customer_name: "ผู้ซื้อ C", phone: "0855555555", need: "ซื้อ", buy_status: "Cold" }, "sales@example.com")).lead;
+  await changeLeadStatus(c.lead_id, "call_status", "ติดต่อได้แล้ว", c.updated_at, "sales@example.com");
+  assert.equal(row(c.lead_id).status, "Contacted"); assert.equal(row(c.lead_id).contactable, "TRUE");
+});
 await t("ติดต่อไม่ได้ → contactable FALSE · จอง → TRUE", async () => {
   let r = await changeLeadStatus(cur.lead_id, "call_status", "ติดต่อไม่ได้", cur.updated_at, "sales@example.com"); assert.equal(row(cur.lead_id).contactable, "FALSE"); assert.equal(row(cur.lead_id).status, "New"); cur = r.lead;
   r = await changeLeadStatus(cur.lead_id, "call_status", "จอง", cur.updated_at, "sales@example.com"); assert.equal(row(cur.lead_id).contactable, "TRUE"); cur = r.lead;

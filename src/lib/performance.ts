@@ -291,7 +291,7 @@ export function computePerformance(d: DashData, f: PerfFilters): Performance {
     { key: "reach", label: "Reach (ทุก Social)", value: sumReach(M?.reachSum ?? null, fbReach), prev: pv(sumReach(Mp?.reachSum ?? null, fbReachP)), note: `Meta Ads Reach${M ? "" : " (ไม่มี)"} + ${PV ? `Facebook Page Viewers (${VIEWERS_REMARK})` : `Facebook Page Reach${fbReach === null ? " (ไม่มี)" : ""}`} · เป็นผลรวม คนเดียวกันอาจถูกนับซ้ำ ไม่ใช่ Unique Reach`, incomplete: both(M?.incomplete, PV ? PV.incomplete : F?.incomplete) },
     { key: "visits", label: "เข้าเว็บไซต์", value: visits(Wb), prev: pv(visits(Wp)), note: Wb.sessions !== null || Wb.users !== null ? `GA4 ${visitLabel} · ${Wb.cover}` : Wb.views !== null ? (Wb.usersWhy ?? noWeb) : noWeb, incomplete: Wb.incomplete },
     { key: "leads", label: "Leads", value: cnt(L.all), prev: pv(cnt(Lp?.all)), note: "นับ lead_id ไม่ซ้ำ ตามวันที่รับ Lead" },
-    { key: "qualified", label: "Qualified Leads", value: cnt(L.all, (r) => isQualifiedCall(r.call_status)), prev: pv(cnt(Lp?.all, (r) => isQualifiedCall(r.call_status))), note: "Call Status = ติดต่อได้แล้ว / รอเข้าชม / เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน" },
+    { key: "qualified", label: "Qualified Leads", value: cnt(L.all, (r) => isQualifiedCall(r.call_status)), prev: pv(cnt(Lp?.all, (r) => isQualifiedCall(r.call_status))), note: "Call Status = รอเข้าชม / เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน" },
     { key: "sold", label: "ขายได้ (ซื้อสำเร็จ)", value: cnt(L.all, (r) => r.call_status === CALL_SOLD), prev: pv(cnt(Lp?.all, (r) => r.call_status === CALL_SOLD)), note: "Call Status = ซื้อสำเร็จ" },
   ];
   const funnel: FunnelStep[] = steps.map((x, i) => {
