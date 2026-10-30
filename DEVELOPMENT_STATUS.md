@@ -936,3 +936,21 @@ Users 17,443 · Page Views 42,450 · PV/User 2.43 · Duration 1 นาที 0 �
 ### Test Results
 **Passed:** เทสต์ใหม่ sellerleads 16 + sellerleads-service 15 + callstatus-kpi 5 (KPI Qualified / Cost per Site Visit ด้วยข้อมูลจำลอง) · security 12 · sales 18 · kpicard 8 · `tsc --noEmit` · `next build`
 **Not Tested:** การลากวางในเบราว์เซอร์จริง · เทสต์ที่ต้องใช้ไฟล์ CSV ตัวอย่าง (dashboard / overview / yoy / fbactions / website / performance / fbpage / e2e / http-integration) — ปรับข้อมูลและค่าคาดหวังให้ตรงนิยามใหม่แล้ว (เช่น Cost per Site Visit ใน overview = ค่าโฆษณา ÷ 3) แต่ยังไม่ได้รัน
+
+## 31) ตรวจโค้ด Seller/Buyer Leads + Call Status ชุดใหม่ ก่อนขึ้นเว็บ (30/10/2026)
+
+### ผลตรวจโค้ด (commit ddc6ccf, 2b10116, 65482d3)
+- ตรรกะถูกต้อง: ชื่อ Call Status เดิมใน Sheet (ยังไม่ได้โทร, เข้าชมโครงการแล้ว) แปลงเป็นชื่อใหม่ทั้งตอนแสดงและตอนคำนวณ KPI · Sell Status เดิมที่ถูกตัด (ทำสัญญา, เป็นนายหน้า) แสดงในคอลัมน์ "ค่าเดิมที่ไม่รู้จัก" และย้ายออกได้ · กันแก้ทับกัน (updated_at) · PATCH เฉพาะ Admin/Sales · บันทึก Audit
+- ข้อสังเกต: Lead เดิมที่ยังเป็น ทำสัญญา / เป็นนายหน้า จะไม่นับเป็นขั้น Qualified ใน Pipeline จนกว่าจะย้ายไปสถานะใหม่ (ข้อมูลปัจจุบันเป็นม็อกอัป)
+- ชุดทดสอบเบราว์เซอร์ (ต้องใช้ไฟล์ข้อมูลจริง จึงไม่ได้รันในรอบที่ทำฟีเจอร์) ใช้ค่าคาดหวังตามกฎเดิม → ปรับเป็นกฎใหม่ (Qualified ไม่นับ ติดต่อได้แล้ว): Qualified 4, ขายได้ 50% ของขั้นก่อนหน้า
+- เพิ่มการทดสอบในเบราว์เซอร์จริงของบอร์ด Seller/Buyer Leads: ลากการ์ด + เมนูสถานะ → บันทึกลง Sheet, ขั้น Pipeline/contactable คำนวณใหม่, ค่าชื่อเดิมอยู่คอลัมน์ถูกต้อง, Marketing เข้าไม่ได้และ PATCH = 403
+
+### สถานะการขึ้นเว็บ
+- Cloudflare Workers Builds ของ ddc6ccf และ 2b10116 **ล้มเหลว** · 65482d3 ไม่มีการ build · เว็บจริงยังเป็นเวอร์ชัน fc0fc93 (28/10)
+- Build จาก clone ใหม่ (npm ci + opennextjs-cloudflare build) ผ่าน · ขนาด Worker 1.27 MiB (gzip) ต่ำกว่าเพดาน 3 MiB → push commit นี้เพื่อสั่ง build ใหม่
+
+### Test Results
+**Passed:** 396/396 (security, sales, seller-leads, seller-leads-service, callstatus-kpi, import, dashboard, overview, fbactions, performance, yoy, kpicard, website, fbpage, e2e, http-integration, browser-website, browser-import) · TypeScript + Cloudflare build ผ่าน
+**Failed:** 0
+**Not Tested:** บนเว็บที่ deploy จริง (เข้าถึงจากที่นี่ไม่ได้)
+

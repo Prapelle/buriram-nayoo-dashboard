@@ -64,7 +64,38 @@ try {
   await page.getByRole("button", { name: "ล้าง" }).count(); // หน้าไม่ค้าง
   assert.deepEqual(errors, []);
 
+  // ---- Seller / Buyer Leads (Kanban) ----
+  const head = (await tab("LEADS"))[0];
+  const L = (o) => head.map((h) => o[h] ?? "");
+  const base = { received_at: "2026-10-01", source_channel: "Facebook Ads", status: "New", updated_at: "2026-10-01T00:00:00.000Z", created_at: "2026-10-01T00:00:00.000Z", area: "buriram" };
+  await fetch(`http://127.0.0.1:${CTRL}/set`, { method: "POST", body: JSON.stringify({ name: "LEADS", rows: [head,
+    L({ ...base, lead_id: "S1", lead_code: "LD-2026-0001", customer_name: "ผู้ขาย ก", need: "ขาย", sell_status: "" }),
+    L({ ...base, lead_id: "S2", lead_code: "LD-2026-0002", customer_name: "ผู้ขาย ข", need: "ขาย", sell_status: "ทำสัญญา" }), // ค่าเดิมที่ถูกตัดออก
+    L({ ...base, lead_id: "B1", lead_code: "LD-2026-0003", customer_name: "ผู้ซื้อ ก", need: "ซื้อ", call_status: "ยังไม่ได้โทร" }), // ชื่อเดิม
+    L({ ...base, lead_id: "B2", lead_code: "LD-2026-0004", customer_name: "ผู้ซื้อ ข", need: "เช่า", call_status: "เข้าชมโครงการแล้ว" }), // ชื่อเดิม
+  ] }) });
+  const col = (pg, name) => pg.locator("div.w-64", { has: pg.locator("span", { hasText: new RegExp(`^${name}$`) }) });
+  await page.goto(BASE + "/seller-leads"); await page.getByText("ผู้ขาย ก").waitFor();
+  assert.ok(await col(page, "รอติดต่อ").getByText("ผู้ขาย ก").isVisible()); assert.ok(await col(page, "ค่าเดิมที่ไม่รู้จัก").getByText("ผู้ขาย ข").isVisible());
+  await page.getByText("ผู้ขาย ก").dragTo(col(page, "สนใจขาย")); await page.getByText("ผู้ขาย ก: รอติดต่อ → สนใจขาย").waitFor();
+  await page.getByLabel("เปลี่ยน Sell Status ผู้ขาย ข").selectOption("เซ็นสัญญา"); await page.getByText("ผู้ขาย ข: ค่าเดิม → เซ็นสัญญา").waitFor();
+  let lr = await tab("LEADS"); const H = lr[0], get = (id, c) => lr.find((r) => r[H.indexOf("lead_id")] === id)[H.indexOf(c)];
+  assert.equal(get("S1", "sell_status"), "สนใจขาย"); assert.equal(get("S1", "status"), "Qualified"); assert.equal(get("S2", "sell_status"), "เซ็นสัญญา"); assert.equal(get("S1", "updated_by"), "admin@example.com");
+  ok("Seller Leads: ลากการ์ด รอติดต่อ → สนใจขาย และเปลี่ยนด้วยเมนู (ค่าเดิม ทำสัญญา อยู่คอลัมน์ ค่าเดิมที่ไม่รู้จัก → เซ็นสัญญา) · บันทึกลง Sheet + ขั้น Pipeline = Qualified");
+  await page.goto(BASE + "/buyer-leads"); await page.getByText("ผู้ซื้อ ก").waitFor();
+  assert.ok(await col(page, "รอติดต่อ").getByText("ผู้ซื้อ ก").isVisible()); assert.ok(await col(page, "เข้าชมแล้ว").getByText("ผู้ซื้อ ข").isVisible());
+  assert.equal(await page.getByText("ผู้ขาย ก").count(), 0);
+  await page.getByText("ผู้ซื้อ ก").dragTo(col(page, "ติดต่อได้แล้ว")); await page.getByText("ผู้ซื้อ ก: รอติดต่อ → ติดต่อได้แล้ว").waitFor();
+  await page.getByLabel("เปลี่ยน Call Status ผู้ซื้อ ข").selectOption("จอง"); await page.getByText("ผู้ซื้อ ข: เข้าชมแล้ว → จอง").waitFor();
+  lr = await tab("LEADS");
+  assert.equal(get("B1", "call_status"), "ติดต่อได้แล้ว"); assert.equal(get("B1", "contactable"), "TRUE"); assert.equal(get("B2", "call_status"), "จอง");
+  ok("Buyer Leads: Call Status ชื่อเดิม (ยังไม่ได้โทร / เข้าชมโครงการแล้ว) อยู่คอลัมน์ใหม่ถูกต้อง · ลากไป ติดต่อได้แล้ว (contactable TRUE) · เมนูเปลี่ยนเป็น จอง · ไม่แสดง Lead ขาย");
+  assert.deepEqual(errors, []);
+
   const m = await open("marketing@example.com");
+  for (const pth of ["/buyer-leads", "/seller-leads"]) { await m.page.goto(BASE + pth); await m.page.waitForURL(BASE + "/"); } // Marketing ไม่มีสิทธิ์ข้อมูลลูกค้า → กลับหน้าแรก
+  const pr = await fetch(BASE + "/api/leads", { method: "PATCH", headers: { cookie: `authjs.session-token=${await cookie("marketing@example.com")}`, "sec-fetch-site": "same-origin", "content-type": "application/json" }, body: JSON.stringify({ lead_id: "B1", field: "call_status", value: "จอง" }) });
+  assert.equal(pr.status, 403);
   await m.page.goto(BASE + "/import"); await m.page.getByRole("cell", { name: "Campaigns_2026_09_01-2026_09_30_.csv" }).waitFor();
   await m.page.locator('input[type="file"]').first().setInputFiles([`${FX}/synthetic_SalesReport.xlsx`, `${FX}/website/gsc_Devices.csv`, `${FX}/Devices_2026_09_01-2026_09_30_.csv`]);
   await m.page.getByText(/ไฟล์รายงานยอดขาย \(\.xlsx\) นำเข้าได้เฉพาะ Admin หรือ Sales/).waitFor();
@@ -74,7 +105,7 @@ try {
   const wtxt = await m.page.locator("section", { has: m.page.getByRole("heading", { name: "ไฟล์เว็บไซต์ (GA4 / Search Console)" }) }).last().innerText();
   assert.ok(wtxt.includes("gsc_Devices.csv") && !wtxt.includes("Devices_2026"));
   assert.deepEqual(m.errors, []);
-  ok("Marketing: ไฟล์ยอดขาย .xlsx ถูกปฏิเสธพร้อมเหตุผล (ไม่มีส่วน Sales) · Devices ของ Google Ads ไปขั้นตอนโฆษณา ส่วน Devices ของ Search Console ไปส่วน Website (ไม่สลับกัน)");
+  ok("Marketing: เข้า Seller/Buyer Leads ไม่ได้ และ PATCH /api/leads = 403 · ไฟล์ยอดขาย .xlsx ถูกปฏิเสธพร้อมเหตุผล (ไม่มีส่วน Sales) · Devices ของ Google Ads ไปขั้นตอนโฆษณา ส่วน Devices ของ Search Console ไปส่วน Website (ไม่สลับกัน)");
   await browser.close();
   console.log(`\nผ่านทั้งหมด ${pass} รายการ`);
 } catch (e) { if (process.env.SHOT_DIR) try { await browser?.contexts().at(-1)?.pages()[0]?.screenshot({ path: process.env.SHOT_DIR + "/fail-import.png", fullPage: true }); } catch { /* */ } console.error("\n✗ FAIL:", e?.message ?? e); console.error(log.split("\n").slice(-20).join("\n")); process.exitCode = 1; } finally { try { await browser?.close(); } catch { /* */ } stop(); process.exit(process.exitCode ?? 0); }
