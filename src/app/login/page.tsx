@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import Link from "next/link";
 import { GoogleButton } from "@/components/GoogleButton";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         </p>
       )}
       <GoogleButton />
+      <p className="text-center text-xs text-slate-500"><Link href="/privacy" className="underline">นโยบายความเป็นส่วนตัว (Privacy Policy)</Link></p>
     </main>
   );
 }

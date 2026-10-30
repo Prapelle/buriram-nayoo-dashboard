@@ -28,6 +28,11 @@ try {
   const api = (p, body) => fetch(BASE + p, { method: "POST", headers: { cookie: `authjs.session-token=${adminC}`, "sec-fetch-site": "same-origin", "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
   assert.equal((await api("/api/init")).status, 200);
   assert.equal((await api("/api/users", { email: "marketing@example.com", display_name: "mkt", role: "marketing", active: "TRUE" })).status, 200);
+  // หน้าสาธารณะสำหรับ Google OAuth consent screen (Privacy policy URL) — เปิดได้โดยไม่ล็อกอิน
+  const pv = await fetch(BASE + "/privacy", { redirect: "manual" }); const pvt = await pv.text();
+  assert.equal(pv.status, 200); assert.ok(pvt.includes("นโยบายความเป็นส่วนตัว") && pvt.includes("Limited Use") && pvt.includes("openid"));
+  assert.ok((await (await fetch(BASE + "/login")).text()).includes('href="/privacy"'));
+  ok("หน้า /privacy เปิดได้โดยไม่ต้องล็อกอิน (ใช้เป็น Privacy policy URL ของ Google) · หน้า login มีลิงก์ไปหน้านี้");
   browser = await chromium.launch();
   const open = async (email) => { const ctx = await browser.newContext({ locale: "th-TH" }); await ctx.addCookies([{ name: "authjs.session-token", value: await cookie(email), domain: "127.0.0.1", path: "/", httpOnly: true, sameSite: "Lax" }]); const page = await ctx.newPage(); const errors = []; page.on("pageerror", (e) => errors.push(String(e))); return { page, errors }; };
   const { page, errors } = await open("admin@example.com");

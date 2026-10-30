@@ -1037,3 +1037,9 @@ Users 17,443 · Page Views 42,450 · PV/User 2.43 · Duration 1 นาที 0 �
 - Lead ที่ไม่มีวันติดตามและไม่ได้แก้ไขเกิน **3 วัน** ขึ้นในการ์ด/ปุ่ม "ค้างเกิน 3 วัน" (หน้า ภาพรวม, หน้า Leads) · ค่าเดียวใน `STALE_DAYS` (lib/lead-insights.ts) ใช้ทุกที่ รวมคำอธิบายตัวเลข
 - Test Results: 417/417 ผ่าน (insights ตรวจขอบ 3 วัน: แก้ไข 27/10 ยังไม่ค้าง, 26/10 ค้าง เมื่อวันนี้ 30/10) · Cloudflare build ผ่าน · Data/Schema: ไม่มี
 
+## 38) หน้า Privacy Policy สาธารณะ (สำหรับ Publish Google OAuth app) (30/10/2026)
+- Google ไม่ให้ Publish app (External → In production) ถ้า Branding ไม่มี Homepage URL + Privacy policy URL
+- เพิ่มหน้า `/privacy` (เปิดได้โดยไม่ล็อกอิน, static) ระบุว่าใช้เฉพาะ openid/email/profile เพื่อยืนยันตัวตน ไม่เข้าถึงข้อมูลอื่น ไม่ขาย/ไม่ส่งต่อ เป็นไปตาม Google API Services User Data Policy (Limited Use) + สรุปภาษาอังกฤษ · หน้า login มีลิงก์ไปหน้านี้
+- ค่าที่ใส่ใน Branding: Homepage = https://buriram-nayoo-dashboard.jsuparkit.workers.dev · Privacy policy = https://buriram-nayoo-dashboard.jsuparkit.workers.dev/privacy · Authorized domain = jsuparkit.workers.dev
+- Test Results: 418/418 ผ่าน (+1 /privacy ไม่ต้องล็อกอิน) · Cloudflare build ผ่าน · Data/Schema: ไม่มี
+
