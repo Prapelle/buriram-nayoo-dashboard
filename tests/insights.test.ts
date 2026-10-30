@@ -21,9 +21,10 @@ const rows: Row[] = [
   L("J", { buy_status: "Archive", updated_at: "2026-09-01T00:00:00Z" }),
 ];
 const fu = followUps(rows, TODAY);
-assert.deepEqual(fu.overdue.map((r) => r.lead_id), ["A", "H"]); assert.deepEqual(fu.today.map((r) => r.lead_id), ["B"]); assert.deepEqual(fu.stale.map((r) => r.lead_id), ["I", "E"]);
+assert.deepEqual(fu.overdue.map((r) => r.lead_id), ["A", "H"]); assert.deepEqual(fu.today.map((r) => r.lead_id), ["B"]); assert.deepEqual(fu.stale.map((r) => r.lead_id), ["I", "E", "F"]); // ค้างเกิน 3 วัน: แก้ไขล่าสุด 01/09, 01/10, 25/10 (วันนี้ 30/10)
+assert.deepEqual(followUps([L("K", { updated_at: "2026-10-27T10:00:00Z" }), L("M", { updated_at: "2026-10-26T23:00:00Z" })], TODAY).stale.map((r) => r.lead_id), ["M"]);
 assert.ok(isClosedLead(rows[3]) && isClosedLead(rows[6]) && isClosedLead(rows[9]) && !isClosedLead(rows[7]));
-ok("เลยกำหนด A, H (เรียงตามวัน) · วันนี้ B · ค้างเกิน 14 วัน I, E (ไม่มีวันติดตาม) · ไม่นับ Lead ที่จบแล้ว (ซื้อสำเร็จ / ขายแล้ว / Archive) · วันติดตามในอนาคตไม่ขึ้น");
+ok("เลยกำหนด A, H (เรียงตามวัน) · วันนี้ B · ค้างเกิน 3 วัน I, E, F (ไม่มีวันติดตาม · แก้ไขล่าสุด 27/10 ยังไม่ค้าง, 26/10 ค้าง) · ไม่นับ Lead ที่จบแล้ว (ซื้อสำเร็จ / ขายแล้ว / Archive) · วันติดตามในอนาคตไม่ขึ้น");
 
 console.log("2) ผลงานรายพนักงาน");
 const sp: Row[] = [

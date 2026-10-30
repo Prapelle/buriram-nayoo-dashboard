@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Checklist } from "@/lib/data-checklist";
 import type { Progress } from "@/lib/target-progress";
+import { STALE_DAYS } from "@/lib/lead-insights";
 
 // ส่วนเสริมของหน้า ภาพรวม (30/10/2026): ยอดจริงเทียบเป้า · Checklist ข้อมูลประจำเดือน · รายการติดตามของฝ่ายขาย
 const thb = (n: number) => `฿${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
@@ -71,7 +72,7 @@ export function FollowUpCard({ overdue, today, stale }: { overdue: number; today
       <div className="grid grid-cols-3 gap-3">
         {box(overdue, "เลยกำหนดติดตาม", "border-red-200 bg-red-50 text-red-900", "overdue")}
         {box(today, "ต้องติดตามวันนี้", "border-amber-200 bg-amber-50 text-amber-900", "today")}
-        {box(stale, "ค้างเกิน 14 วัน (ไม่มีวันติดตาม)", "border-slate-300 bg-slate-50 text-slate-800", "stale")}
+        {box(stale, `ค้างเกิน ${STALE_DAYS} วัน (ไม่มีวันติดตาม)`, "border-slate-300 bg-slate-50 text-slate-800", "stale")}
       </div>
     </div>
   );

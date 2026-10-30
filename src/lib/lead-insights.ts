@@ -19,14 +19,14 @@ export function isClosedLead(r: LeadRow): boolean {
 export const CONTRACT_SELL = ["เซ็นสัญญา", "สัญญาเปิด", "ขายแล้ว"];
 export const isContractOrSold = (r: LeadRow) => CONTRACT_SELL.includes(r.sell_status ?? "");
 
-export const STALE_DAYS = 14;
+export const STALE_DAYS = 3; // ผู้ใช้กำหนด 30/10/2026 (เดิม 14)
 const addDays = (d: string, n: number) => { const t = new Date(d + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
 
 export type FollowUp = { overdue: LeadRow[]; today: LeadRow[]; stale: LeadRow[] };
 /**
  * รายการติดตามของฝ่ายขาย (ไม่รวม Lead ที่จบแล้ว)
  * - เลยกำหนด: วันติดตามครั้งถัดไป < วันนี้ · วันนี้: = วันนี้
- * - ค้างนาน: ไม่มีวันติดตาม และไม่ได้แก้ไขเกิน 14 วัน
+ * - ค้างนาน: ไม่มีวันติดตาม และไม่ได้แก้ไขเกิน STALE_DAYS วัน
  */
 export function followUps(rows: LeadRow[], today: string): FollowUp {
   const open = rows.filter((r) => r.lead_id && !isClosedLead(r));
