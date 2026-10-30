@@ -119,19 +119,37 @@ try {
   await m.page.goto(BASE + "/settings/import-guide"); await m.page.getByRole("heading", { name: "คู่มือนำเข้าข้อมูล" }).waitFor();
   const nav = await m.page.getByRole("navigation", { name: "เมนูหลัก" }).innerText();
   assert.ok(nav.includes("คู่มือนำเข้าข้อมูล") && nav.includes("คำอธิบายตัวเลข") && !nav.includes("ตั้งค่าระบบ"));
-  const ig = await m.page.locator("main").innerText();
-  for (const t of ["Facebook Page — สถิติโพสต์รายวัน", "Viewers และ Link clicks", "Ads Reporting", "Google Ads", "Reports snapshot", "Search Console", "FlowAccount"]) assert.ok(ig.includes(t), t);
+  // หน้าแรกแสดงเฉพาะสารบัญ (ไม่มีขั้นตอนของแต่ละแพลตฟอร์ม) · กดหัวข้อแล้วเปิดหน้าของหัวข้อนั้น
+  const toc = m.page.getByRole("navigation", { name: "สารบัญ" }).getByRole("link");
+  assert.equal(await toc.count(), 6); assert.equal(await m.page.getByText("ดาวน์โหลดไฟล์ CSV").count(), 0);
   if (process.env.SHOT_DIR) await m.page.screenshot({ path: process.env.SHOT_DIR + "/guide-import.png", fullPage: true });
+  const topics = [];
+  for (const a of await toc.all()) topics.push([await a.getAttribute("href"), (await a.locator("div").first().innerText()).trim()]);
+  for (const [href, title] of topics) {
+    await m.page.goto(BASE + href); await m.page.getByRole("heading", { name: title, level: 1 }).waitFor();
+    assert.equal(await m.page.locator("article").count(), 1);
+  }
+  assert.ok((await m.page.locator("main").innerText()).includes("FlowAccount"));
+  await m.page.goto(BASE + "/settings/import-guide/fb-results"); await m.page.getByRole("heading", { name: /Viewers และ Link clicks/, level: 1 }).waitFor();
+  if (process.env.SHOT_DIR) await m.page.screenshot({ path: process.env.SHOT_DIR + "/guide-import-topic.png", fullPage: true });
   assert.equal(await m.page.getByRole("link", { name: "คำอธิบายตัวเลข" }).getAttribute("href"), "/settings/metrics");
   await m.page.goto(BASE + "/settings/metrics"); await m.page.getByRole("heading", { name: "คำอธิบายตัวเลข" }).waitFor();
-  const mg = await m.page.locator("main").innerText();
-  for (const t of ["Total Paid Media Spend", "Cost per Site Visit", "Customer Funnel", "รอเข้าชม / เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน", "Facebook Viewers (แทน Reach)", "ยอดขายสุทธิ"]) assert.ok(mg.includes(t), t);
+  const mtoc = m.page.getByRole("navigation", { name: "สารบัญ" }).getByRole("link");
+  assert.equal(await mtoc.count(), 5); assert.equal(await m.page.locator("table").count(), 0);
   if (process.env.SHOT_DIR) await m.page.screenshot({ path: process.env.SHOT_DIR + "/guide-metrics.png", fullPage: true });
+  const mt = [];
+  for (const a of await mtoc.all()) mt.push([await a.getAttribute("href"), (await a.locator("div").first().innerText()).trim()]);
+  let allText = "";
+  for (const [href, title] of mt) { await m.page.goto(BASE + href); await m.page.getByRole("heading", { name: title, level: 1 }).waitFor(); allText += await m.page.locator("main").innerText(); }
+  for (const t of ["Total Paid Media Spend", "Cost per Site Visit", "Customer Funnel", "รอเข้าชม / เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน", "Facebook Viewers (แทน Reach)", "ยอดขายสุทธิ", "Missing Data"]) assert.ok(allText.includes(t), t);
+  await m.page.goto(BASE + "/settings/metrics/overview"); await m.page.getByRole("heading", { name: /ภาพรวมการตลาด/, level: 1 }).waitFor();
+  if (process.env.SHOT_DIR) await m.page.screenshot({ path: process.env.SHOT_DIR + "/guide-metrics-topic.png", fullPage: true });
+  await m.page.goto(BASE + "/settings/metrics/xyz"); await m.page.waitForLoadState("networkidle"); assert.ok(/404|could not be found|ไม่พบ/i.test(await m.page.locator("body").innerText())); assert.equal(await m.page.locator("article").count(), 0);
   await m.page.goto(BASE + "/settings"); await m.page.waitForURL(BASE + "/");
-  await m.page.setViewportSize({ width: 390, height: 844 }); await m.page.goto(BASE + "/settings/metrics");
+  await m.page.setViewportSize({ width: 390, height: 844 }); await m.page.goto(BASE + "/settings/metrics/performance"); await m.page.getByRole("heading", { name: /Marketing Performance/, level: 1 }).waitFor();
   assert.ok(await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth) <= 1, "มือถือล้นแนวนอน");
   await m.page.setViewportSize({ width: 1280, height: 800 });
-  ok("ตั้งค่า (Marketing): เมนูย่อย คู่มือนำเข้าข้อมูล (Facebook Page, Viewers/Link clicks, Ads Reporting, Google Ads, GA4, Search Console, FlowAccount) และ คำอธิบายตัวเลข เปิดได้ · ตั้งค่าระบบไม่เห็นและเข้าไม่ได้ · มือถือไม่ล้น");
+  ok("ตั้งค่า (Marketing): คู่มือนำเข้าข้อมูล / คำอธิบายตัวเลข หน้าแรกเป็นสารบัญอย่างเดียว · กดแต่ละหัวข้อเปิดหน้าของหัวข้อนั้น (6 + 5 หน้า) เนื้อหาครบ · หัวข้อที่ไม่มี = 404 · ตั้งค่าระบบไม่เห็นและเข้าไม่ได้ · มือถือไม่ล้น");
   for (const pth of ["/buyer-leads", "/seller-leads"]) { await m.page.goto(BASE + pth); await m.page.waitForURL(BASE + "/"); } // Marketing ไม่มีสิทธิ์ข้อมูลลูกค้า → กลับหน้าแรก
   const pr = await fetch(BASE + "/api/leads", { method: "PATCH", headers: { cookie: `authjs.session-token=${await cookie("marketing@example.com")}`, "sec-fetch-site": "same-origin", "content-type": "application/json" }, body: JSON.stringify({ lead_id: "B1", field: "call_status", value: "จอง" }) });
   assert.equal(pr.status, 403);
