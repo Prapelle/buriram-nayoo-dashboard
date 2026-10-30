@@ -18,6 +18,7 @@ export const NAV: NavItem[] = [
   { href: "/line-oa", label: "LINE OA", roles: MKT },
   { href: "/website", label: "Website", roles: MKT },
   { href: "/leads", label: "Leads", roles: SALES },
+  { href: "/seller-leads", label: "Seller Leads", roles: SALES },
   { href: "/sales", label: "Sales", roles: SALES },
   { href: "/export", label: "ส่งออกข้อมูล", roles: ALL },
   { href: "/settings", label: "ตั้งค่า", roles: ["admin"] },

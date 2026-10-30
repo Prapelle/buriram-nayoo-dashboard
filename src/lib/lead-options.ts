@@ -3,7 +3,10 @@ export const NEEDS = ["ซื้อ", "ขาย", "เช่า", "สร้า
 export const BUY_NEEDS = ["ซื้อ", "เช่า", "สร้าง"]; // ใช้ Buy Status
 export const SELL_NEEDS = ["ขาย"]; // ใช้ Sell Status
 export const BUY_STATUS = ["Hot", "Warm", "Cold", "Archive", "Close"];
-export const SELL_STATUS = ["นัดทำสัญญา", "ทำสัญญา", "เซ็นสัญญา", "ยกเลิก", "เป็นนายหน้า", "บ้านไม่พร้อมขาย", "ขายแล้ว", "สัญญาเปิด"];
+// ลำดับนี้คือลำดับคอลัมน์บนหน้า Seller Leads (ผู้ใช้กำหนด 30/10/2026)
+export const SELL_STATUS = ["รอติดต่อ", "สนใจขาย", "นัดทำสัญญา", "เซ็นสัญญา", "สัญญาเปิด", "บ้านไม่พร้อมขาย", "ขายแล้ว", "ยกเลิก"];
+/** Lead ขายที่ยังไม่มี Sell Status ถือว่าอยู่ขั้นแรก */
+export const SELL_DEFAULT = "รอติดต่อ";
 export const CALL_STATUS = ["ยังไม่ได้โทร", "ติดต่อไม่ได้", "ติดต่อได้แล้ว", "เข้าชมโครงการแล้ว", "ซื้อสำเร็จ", "ไม่สนใจ"];
 /** Call Status ที่นับเป็น Qualified Lead (ผู้ใช้กำหนด 28/10/2026) */
 export const QUALIFIED_CALL = ["ติดต่อได้แล้ว", "เข้าชมโครงการแล้ว", "ซื้อสำเร็จ"];

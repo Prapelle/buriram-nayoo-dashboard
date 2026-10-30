@@ -11,7 +11,7 @@ const AREA_TH = Object.fromEntries(AREA_OPTIONS);
 const dmy = (iso: string) => (/^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "");
 const STATUS_COLOR: Record<string, string> = {
   Hot: "bg-red-100", Warm: "bg-amber-100", Cold: "bg-sky-100", Archive: "bg-slate-200", Close: "bg-green-100",
-  นัดทำสัญญา: "bg-amber-100", ทำสัญญา: "bg-indigo-100", เซ็นสัญญา: "bg-indigo-100", สัญญาเปิด: "bg-indigo-100", เป็นนายหน้า: "bg-violet-100",
+  รอติดต่อ: "bg-slate-100", สนใจขาย: "bg-sky-100", นัดทำสัญญา: "bg-amber-100", เซ็นสัญญา: "bg-indigo-100", สัญญาเปิด: "bg-violet-100",
   ขายแล้ว: "bg-green-100", ยกเลิก: "bg-slate-200", บ้านไม่พร้อมขาย: "bg-slate-200",
 };
 const CALL_COLOR: Record<string, string> = { ยังไม่ได้โทร: "bg-slate-100", ติดต่อไม่ได้: "bg-red-50", ติดต่อได้แล้ว: "bg-green-50", เข้าชมโครงการแล้ว: "bg-sky-50", ซื้อสำเร็จ: "bg-emerald-100", ไม่สนใจ: "bg-amber-50" };

@@ -8,6 +8,8 @@ FIX="${FIXTURE_DIR:-tests/fixtures}"
 echo "== security";  npx tsx tests/security.test.mts
 python3 tests/make-sales-fixture.py "$FIX/synthetic_SalesReport.xlsx"
 echo "== sales";     npx tsx tests/sales.test.mts
+echo "== seller-leads"; npx tsx tests/sellerleads.test.ts
+echo "== seller-leads-service"; npx tsx tests/sellerleads-service.test.mts
 if ls "$FIX"/Page.csv >/dev/null 2>&1; then
   echo "== import";    npx tsx tests/import.test.ts
   echo "== dashboard"; npx tsx tests/dashboard.test.ts

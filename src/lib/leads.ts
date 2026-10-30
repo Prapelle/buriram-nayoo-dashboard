@@ -14,7 +14,7 @@ export const leadStatusOf = (r: Lead) => { const k = statusFieldOf(r.need ?? "")
 /** แปลง Buy/Sell Status → ขั้น Pipeline เดิมที่ Dashboard ใช้ (ตามที่ผู้ใช้เลือก) */
 const WON = ["Close", "ขายแล้ว"];
 const LOST = ["Archive", "ยกเลิก", "บ้านไม่พร้อมขาย"];
-const QUALIFIED = ["Hot", "Warm", "นัดทำสัญญา", "ทำสัญญา", "เซ็นสัญญา", "สัญญาเปิด", "เป็นนายหน้า"];
+const QUALIFIED = ["Hot", "Warm", "สนใจขาย", "นัดทำสัญญา", "เซ็นสัญญา", "สัญญาเปิด"];
 export function pipelineOf(r: Lead): "Won" | "Lost" | "Qualified" | "Contacted" | "New" {
   const st = leadStatusOf(r);
   if (WON.includes(st)) return "Won";
