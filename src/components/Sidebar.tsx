@@ -118,7 +118,7 @@ export function AppShell({ items, email, role, signOutAction, children }: {
           </svg>
         </button>
         <Link href="/" prefetch={false} className="flex items-center gap-2.5 text-slate-900">
-          <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 font-bold text-white">N</span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}<img src="/logo.png" alt="" width={32} height={32} className="h-8 w-8" />
           <span className="text-[17px] font-bold">Buriram NAYOO</span>
         </Link>
         <div className="ml-auto flex items-center gap-2.5 text-sm text-slate-600">
