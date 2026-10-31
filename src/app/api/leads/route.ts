@@ -36,8 +36,8 @@ export async function PATCH(req: Request) {
   const g = await requireRole(["admin", "sales"]);
   if (!g.ok) return g.res;
   try {
-    const b = (await req.json()) as { lead_id?: string; field?: string; value?: string; updated_at_seen?: string };
+    const b = (await req.json()) as { lead_id?: string; field?: string; value?: string; updated_at_seen?: string; lost_reason?: string };
     if (b.field !== "sell_status" && b.field !== "call_status") throw new LeadError(400, "ไม่รองรับช่องนี้", "BAD_REQUEST");
-    return NextResponse.json(await changeLeadStatus(String(b.lead_id ?? ""), b.field, String(b.value ?? ""), String(b.updated_at_seen ?? ""), g.email));
+    return NextResponse.json(await changeLeadStatus(String(b.lead_id ?? ""), b.field, String(b.value ?? ""), String(b.updated_at_seen ?? ""), g.email, b.lost_reason === undefined ? undefined : String(b.lost_reason)));
   } catch (e) { return fail(e); }
 }

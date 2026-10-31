@@ -47,7 +47,8 @@ t("validateLead: ว่าง → รอติดต่อ · ชื่อเด
   const a = v(""); assert.ok(a.ok && a.rec.call_status === "รอติดต่อ");
   const b = v("เข้าชมโครงการแล้ว"); assert.ok(b.ok && b.rec.call_status === "เข้าชมแล้ว");
   const c = v("ยังไม่ได้โทร"); assert.ok(c.ok && c.rec.call_status === "รอติดต่อ");
-  const d = v("กู้ไม่ผ่าน"); assert.ok(d.ok && d.rec.call_status === "กู้ไม่ผ่าน");
+  const d = validateLead({ ...buyBase, call_status: "กู้ไม่ผ่าน", lost_reason: "รายได้ไม่พอ" }); assert.ok(d.ok && d.rec.call_status === "กู้ไม่ผ่าน");
+  const d2 = v("กู้ไม่ผ่าน"); assert.ok(!d2.ok && "lost_reason" in d2.errors); // 31/10/2026: กู้ไม่ผ่าน ต้องกรอกสาเหตุ
   const e = v("โทรแล้ว"); assert.ok(!e.ok && "call_status" in e.errors);
 });
 t("กรองตาม Call Status รวม Lead เก่าที่ยังเป็นชื่อเดิม", () => {

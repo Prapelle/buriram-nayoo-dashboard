@@ -1,4 +1,4 @@
-import { CHANNELS, SERVICES } from "./dashboard";
+import { ALL_CHANNELS, SERVICES } from "./dashboard";
 import { isIsoDate } from "./import/normalize";
 
 export const AREA_OPTIONS: [string, string][] = [["unknown", "ไม่ทราบ (Unknown)"], ["buriram", "บุรีรัมย์"], ["surin", "สุรินทร์"], ["multi_province", "หลายจังหวัด"]];
@@ -74,9 +74,11 @@ export function validateLead(input: Record<string, unknown>): { ok: true; rec: L
   for (const k of EDITABLE) rec[k] = String(input[k] ?? "").trim();
   if (!isIsoDate(rec.received_at)) errors.received_at = "กรุณาระบุวันที่รับ Lead";
   if (!rec.customer_name) errors.customer_name = "กรุณาระบุชื่อลูกค้า";
-  if (!CHANNELS.includes(rec.source_channel)) errors.source_channel = "กรุณาเลือกช่องทาง";
+  if (!ALL_CHANNELS.includes(rec.source_channel)) errors.source_channel = "กรุณาเลือกช่องทาง";
   if (rec.service_category && !SERVICES.includes(rec.service_category)) errors.service_category = "หมวดบริการไม่ถูกต้อง";
   if (!NEEDS.includes(rec.need)) errors.need = "กรุณาเลือกความต้องการ (Need)";
+  // Call Status กู้ไม่ผ่าน → ต้องกรอกสาเหตุที่กู้ไม่ผ่าน (ใช้ช่อง lost_reason เดิม) — 31/10/2026
+  if (normCall(rec.call_status) === "กู้ไม่ผ่าน" && !rec.lost_reason) errors.lost_reason = "กรุณากรอกสาเหตุที่กู้ไม่ผ่าน";
   const sf = statusFieldOf(rec.need);
   if (rec.buy_status && !BUY_STATUS.includes(rec.buy_status)) errors.buy_status = "Buy Status ไม่ถูกต้อง";
   if (rec.sell_status && !SELL_STATUS.includes(rec.sell_status)) errors.sell_status = "Sell Status ไม่ถูกต้อง";

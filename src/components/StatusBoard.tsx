@@ -4,6 +4,7 @@ import { Notice } from "@/components/Toast";
 import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
 import Link from "next/link";
 import { BoardScroller, BoardTabs } from "@/components/Board";
+import { useAsk } from "@/components/AskDialog";
 import { telHref } from "@/lib/contact-links";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BUY_NEEDS, CALL_DEFAULT, CALL_STATUS, normCall, SELL_DEFAULT, SELL_NEEDS, SELL_STATUS } from "@/lib/lead-options";
@@ -43,6 +44,7 @@ export function StatusBoard({ kind }: { kind: "seller" | "buyer" }) {
 
   const [state, setState] = useState<"loading" | "ok" | "error">("loading");
   const [tab, setTab] = useState(""); // มือถือ: คอลัมน์ที่แสดง
+  const [ask, askEl] = useAsk();
   const [all, setAll] = useState<Lead[]>([]);
   const [staff, setStaff] = useState<string[]>([]);
   const [q, setQ] = useState("");
@@ -75,10 +77,16 @@ export function StatusBoard({ kind }: { kind: "seller" | "buyer" }) {
     const row = all.find((r) => r.lead_id === id);
     if (!row || busy.has(id) || !statuses.includes(to) || colOf(row) === to) return;
     const before = row;
+    // กู้ไม่ผ่าน → ถามสาเหตุก่อน (บังคับกรอก) · ยกเลิก = ไม่ย้าย
+    let lost_reason: string | undefined;
+    if (cfg.field === "call_status" && to === "กู้ไม่ผ่าน") {
+      const why = await ask({ title: `${row.customer_name}: กู้ไม่ผ่าน`, label: "สาเหตุที่กู้ไม่ผ่าน", initial: row.lost_reason ?? "" });
+      if (why === null) return; lost_reason = why;
+    }
     setBusy((b) => new Set(b).add(id)); setMsg(null);
     setAll((rs) => rs.map((r) => (r.lead_id === id ? { ...r, [cfg.field]: to } : r))); // แสดงผลทันที
     try {
-      const r = await fetch("/api/leads", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ lead_id: id, field: cfg.field, value: to, updated_at_seen: before.updated_at }) });
+      const r = await fetch("/api/leads", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ lead_id: id, field: cfg.field, value: to, updated_at_seen: before.updated_at, lost_reason }) });
       const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? "เปลี่ยนสถานะไม่สำเร็จ");
       setAll((rs) => rs.map((x) => (x.lead_id === id ? (j.lead as Lead) : x)));
@@ -155,6 +163,7 @@ export function StatusBoard({ kind }: { kind: "seller" | "buyer" }) {
         </>
       )}
       <p className="text-xs text-slate-500">• {cfg.note} · ลากบนมือถือไม่สะดวก ใช้เมนูสถานะบนการ์ดแทน{noNeed > 0 && ` · มี ${noNeed} Lead ที่ยังไม่ระบุ Need ไม่แสดงบนบอร์ด (กำหนด Need ที่หน้า Leads)`}</p>
+      {askEl}
     </div>
   );
 }

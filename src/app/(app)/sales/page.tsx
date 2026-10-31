@@ -28,7 +28,7 @@ export default async function SalesDashboardPage({ searchParams }: { searchParam
   let all: TxRow[];
   try { all = (await readColumns("SALES_TRANSACTIONS", { exclude: ["raw_json", "record_id", "row_key", "source_batch_id"] })).rows; }
   catch (e) {
-    return <section><h1 className="mb-4 text-[26px] font-bold tracking-tight">Sales</h1><p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">โหลดข้อมูลไม่สำเร็จ: {e instanceof Error ? e.message.slice(0, 200) : "ไม่ทราบสาเหตุ"} — ลอง <Link href="/settings" className="underline">ตั้งค่า → เตรียม Google Sheet</Link></p></section>;
+    return <section><h1 className="mb-4 text-[26px] font-bold tracking-tight">Revenue</h1><p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">โหลดข้อมูลไม่สำเร็จ: {e instanceof Error ? e.message.slice(0, 200) : "ไม่ทราบสาเหตุ"} — ลอง <Link href="/settings" className="underline">ตั้งค่า → เตรียม Google Sheet</Link></p></section>;
   }
   const v = computeSales(all, f);
   const sort = one(sp.sort) || "invoice_date", dir = (one(sp.dir) || "desc") as "asc" | "desc";
@@ -53,7 +53,7 @@ export default async function SalesDashboardPage({ searchParams }: { searchParam
     <section className="max-w-7xl space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h1 className="text-[26px] font-bold tracking-tight">Sales — ยอดขายจากรายงานบัญชี</h1>
+          <h1 className="text-[26px] font-bold tracking-tight">Revenue — ยอดขายจากรายงานบัญชี</h1>
           <p className="text-sm text-slate-500">อัปเดตล่าสุด: {last ? thDateTime(last) : "ยังไม่มีข้อมูล"}</p>
         </div>
         <div className="flex gap-2 text-sm">

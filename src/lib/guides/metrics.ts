@@ -1,4 +1,4 @@
-import { CALL_STATUS, QUALIFIED_CALL, SELL_STATUS, SITE_VISIT_CALL } from "../lead-options";
+import { CALL_STATUS, QUALIFIED_CALL, SELL_QUALIFIED, SELL_STATUS, SITE_VISIT_CALL } from "../lead-options";
 import { STALE_DAYS } from "../lead-insights";
 
 // คำอธิบายที่มาและการใช้งานตัวเลขทั้งหมด (เมนูย่อยของ ตั้งค่า) — ทุก Role เปิดได้
@@ -22,11 +22,12 @@ export const SECTIONS: Sec[] = [
       { name: "Facebook Link Clicks", source: "Meta Business Suite → Results → Link clicks (ระดับเพจ รายวัน)", formula: "ผลรวมรายวันในช่วง (ถ้าไม่มีไฟล์ระดับเพจ ใช้ Link Clicks รายโพสต์)", use: "คนที่คลิกลิงก์จากเพจ" },
       { name: "LINE OA New Friends / Inquiries / Leads", source: "หน้า LINE OA (กรอกเองรายเดือน)", formula: "ผลรวมของเดือนในช่วง", use: "ผลของช่องทาง LINE" },
       { name: "Total Leads", source: "หน้า Leads", formula: "นับ lead_id ไม่ซ้ำ ตามวันที่รับ Lead ในช่วง", use: "จำนวนผู้สนใจทั้งหมด" },
-      { name: "Qualified Leads", source: "หน้า Leads / Buyer Leads — Call Status", formula: `นับ Lead ที่ Call Status = ${list(QUALIFIED_CALL)} (\"ติดต่อได้แล้ว\" ยังไม่นับ)`, use: "Lead ที่มีโอกาสซื้อจริง · กราฟแยกตามช่องทางของ Lead" },
+      { name: "Qualified Leads", source: "หน้า Leads — Call Status (คนต้องการซื้อ) / สถานะการขาย (คนต้องการขาย)", formula: `คนต้องการซื้อ / เช่า / สร้าง: Call Status = ${list(QUALIFIED_CALL)} (\"ติดต่อได้แล้ว\" ยังไม่นับ) · คนต้องการขาย: ${list(SELL_QUALIFIED)} · รวมทั้งสองฝั่ง`, use: "Lead ที่มีโอกาสสำเร็จจริง · กราฟแยกตามช่องทางของ Lead" },
+      { name: "CPL Facebook Ads / CPL Google Ads", source: "ค่าโฆษณาของแพลตฟอร์ม + Lead ช่องทางที่ตรงกัน", formula: "Meta Ads Spend ÷ Lead ช่องทาง Facebook Ads · Google Ads Spend ÷ Lead ช่องทาง Google Ads (ช่วงวันที่เดียวกัน)", use: "เทียบต้นทุนต่อ Lead ของแต่ละช่องทางโฆษณา — ไม่ใช่ ROI เชิงสาเหตุ" },
       { name: "CPL (Lead จากโฆษณา)", source: "Total Paid Media Spend + Leads ช่องทาง Facebook Ads / Google Ads", formula: "ค่าโฆษณา ÷ Lead จากโฆษณา (ช่วงวันที่เดียวกับรายงานโฆษณา)", use: "ต้นทุนต่อ Lead ที่มาจากโฆษณาโดยตรง" },
       { name: "CPL (Lead ทั้งหมด)", source: "Total Paid Media Spend + Leads ทุกช่องทาง", formula: "ค่าโฆษณา ÷ Lead ทุกช่องทาง", use: "ต้นทุนเฉลี่ยต่อ Lead ภาพรวม" },
       { name: "Cost per Qualified Lead", source: "Total Paid Media Spend + Qualified Lead จากโฆษณา", formula: `ค่าโฆษณา ÷ Lead จากโฆษณาที่ Call Status = ${list(QUALIFIED_CALL)}`, use: "ต้นทุนต่อ Lead คุณภาพ" },
-      { name: "Cost per Site Visit", source: "Total Paid Media Spend + Leads ทุกช่องทาง", formula: `ค่าโฆษณา ÷ Lead ที่ Call Status = ${list(SITE_VISIT_CALL)}`, use: "ต้นทุนต่อการพาลูกค้าเข้าชมโครงการ" },
+      { name: "Cost per Walk in", source: "Total Paid Media Spend + Leads คนต้องการซื้อ ทุกช่องทาง", formula: `ค่าโฆษณา ÷ Lead ที่ Call Status = ${list(SITE_VISIT_CALL)}`, use: "ต้นทุนต่อการพาลูกค้าเข้าชมโครงการ (Walk in เดิมชื่อ Site Visit)" },
     ],
   },
   {
@@ -50,13 +51,14 @@ export const SECTIONS: Sec[] = [
     ],
   },
   {
-    id: "leads", title: "3. Leads / Seller Leads / Buyer Leads", page: "/leads",
+    id: "leads", title: "3. Leads / คนต้องการขาย / คนต้องการซื้อ", page: "/leads",
     intro: "สถานะของ Lead ที่ใช้คำนวณตัวเลขในหน้าอื่น",
     items: [
-      { name: "Call Status (Buyer Leads)", source: "กรอกที่หน้า Leads หรือลากการ์ดที่หน้า Buyer Leads", formula: list(CALL_STATUS), use: "ขั้นการติดตามลูกค้าที่ต้องการ ซื้อ / เช่า / สร้าง" },
-      { name: "Sell Status (Seller Leads)", source: "กรอกที่หน้า Leads หรือลากการ์ดที่หน้า Seller Leads", formula: list(SELL_STATUS), use: "ขั้นของลูกค้าที่ต้องการขายบ้าน" },
-      { name: "Qualified Lead", source: "Call Status", formula: list(QUALIFIED_CALL), use: "ใช้ใน Qualified Leads, Cost per Qualified Lead, Funnel และตารางช่องทาง" },
-      { name: "Site Visit", source: "Call Status", formula: list(SITE_VISIT_CALL), use: "ใช้ใน Cost per Site Visit" },
+      { name: "Call Status (คนต้องการซื้อ)", source: "กรอกที่หน้า Leads หรือลากการ์ดที่หน้า คนต้องการซื้อ", formula: list(CALL_STATUS) + " · กู้ไม่ผ่าน ต้องกรอกสาเหตุ", use: "ขั้นการติดตามลูกค้าที่ต้องการ ซื้อ / เช่า / สร้าง" },
+      { name: "Sell Status (คนต้องการขาย)", source: "กรอกที่หน้า Leads หรือลากการ์ดที่หน้า คนต้องการขาย", formula: list(SELL_STATUS), use: "ขั้นของลูกค้าที่ต้องการขายบ้าน" },
+      { name: "Qualified Lead", source: "Call Status / สถานะการขาย", formula: `คนต้องการซื้อ: ${list(QUALIFIED_CALL)} · คนต้องการขาย: ${list(SELL_QUALIFIED)}`, use: "ใช้ใน Qualified Leads, Cost per Qualified Lead, Funnel และตารางช่องทาง" },
+      { name: "Walk in (เดิม Site Visit)", source: "Call Status (คนต้องการซื้อ)", formula: list(SITE_VISIT_CALL), use: "ใช้ใน Cost per Walk in และรายงาน Lead" },
+      { name: "ช่องทาง", source: "หน้า Leads", formula: "มาจากโฆษณา = Facebook Ads · ทักแชทเอง = Facebook Message · คอมเมนต์เอง = Facebook Comment · TikTok และ YouTube แยกกัน · Facebook Organic และ TikTok/YouTube เป็นค่าเดิม (แสดงในรายงาน แต่เลือกให้ Lead ใหม่ไม่ได้)", use: "ใช้แยกตัวเลขตามช่องทางทุกหน้า" },
       { name: "ขายได้", source: "Call Status", formula: "ซื้อสำเร็จ", use: "ขั้นสุดท้ายของ Funnel และคอลัมน์ ซื้อสำเร็จ ในตารางช่องทาง" },
       { name: "ขั้น Pipeline (คำนวณ)", source: "Buy / Sell Status + Call Status", formula: "Won = Close / ขายแล้ว · Lost = Archive / ยกเลิก / บ้านไม่พร้อมขาย · Qualified = Hot / Warm / สนใจขาย / นัดทำสัญญา / เซ็นสัญญา / สัญญาเปิด · Contacted = ติดต่อได้แล้วขึ้นไป · อื่น ๆ = New", use: "ใช้ในกราฟ Pipeline และไฟล์ส่งออก (ไม่ต้องกรอกเอง)" },
     ],
@@ -66,10 +68,11 @@ export const SECTIONS: Sec[] = [
     intro: "ผลงานรายพนักงาน เหตุผลที่ไม่สำเร็จ รายการติดตาม และยอดจริงเทียบเป้ารายเดือน",
     items: [
       { name: "Lead ที่รับ (รายพนักงาน)", source: "หน้า Leads — ช่อง Staff", formula: "นับ Lead ตามวันที่รับในช่วง แยกตาม Staff (ว่าง = ไม่ระบุ Staff)", use: "ปริมาณงานของแต่ละคน" },
-      { name: "% Qualified", source: "Call Status", formula: `Qualified (${list(QUALIFIED_CALL)}) ÷ Lead ที่รับ × 100`, use: "คุณภาพการติดตาม" },
-      { name: "Lead ต่อ 1 Site Visit", source: "Call Status", formula: `Lead ที่รับ ÷ จำนวน Site Visit (${list(SITE_VISIT_CALL)}) · ไม่มี Site Visit = —`, use: "ต้องได้ Lead กี่รายถึงพาเข้าชม 1 ราย (ยิ่งน้อยยิ่งดี)" },
-      { name: "Lead ต่อ 1 สัญญา / ขาย", source: "Sell Status", formula: "Lead ที่รับ ÷ จำนวน Lead ที่ Sell Status = เซ็นสัญญา / สัญญาเปิด / ขายแล้ว", use: "ต้องได้ Lead กี่รายถึงได้สัญญา 1 ราย (ยิ่งน้อยยิ่งดี)" },
-      { name: "เหตุผลที่ไม่สำเร็จ", source: "Call / Sell / Buy Status + ช่อง เหตุผลที่ปิดไม่สำเร็จ", formula: "กู้ไม่ผ่าน / ไม่สนใจ / ติดต่อไม่ได้ / ยกเลิก (ขาย) / บ้านไม่พร้อมขาย / Archive — Lead หนึ่งรายนับเหตุผลเดียว · % ไม่สำเร็จ = ไม่สำเร็จ ÷ Lead ของช่องทาง", use: "ดูว่าช่องทางไหนได้ Lead ไม่ตรงกลุ่ม" },
+      { name: "รายงานแยก 2 แท็บ", source: "หน้า รายงาน Lead", formula: "คนต้องการซื้อ (ซื้อ / เช่า / สร้าง) · คนต้องการขาย (ขาย)", use: "ดูผลงานของแต่ละฝั่งแยกกัน" },
+      { name: "% Qualified", source: "Call Status / สถานะการขาย", formula: `Qualified ÷ Lead ที่รับ × 100 (คนต้องการซื้อ: ${list(QUALIFIED_CALL)} · คนต้องการขาย: ${list(SELL_QUALIFIED)})`, use: "คุณภาพการติดตาม" },
+      { name: "Walk in", source: "Call Status (คนต้องการซื้อ)", formula: list(SITE_VISIT_CALL), use: "จำนวนลูกค้าที่เข้าชมโครงการ" },
+      { name: "%Conversion", source: "Call Status / สถานะการขาย", formula: "คนต้องการซื้อ: ซื้อสำเร็จ ÷ Lead ที่รับ × 100 · คนต้องการขาย: ขายแล้ว ÷ Lead ที่รับ × 100 · ไม่มี Lead = —", use: "สัดส่วน Lead ที่ปิดได้ (ยิ่งมากยิ่งดี)" },
+      { name: "เหตุผลที่ไม่สำเร็จ", source: "Call / Sell / Buy Status + ช่อง เหตุผลที่ปิดไม่สำเร็จ", formula: "กู้ไม่ผ่าน / ไม่สนใจ / ติดต่อไม่ได้ / ยกเลิก (ขาย) / บ้านไม่พร้อมขาย / Archive — Lead หนึ่งรายนับเหตุผลเดียว · % ไม่สำเร็จ = ไม่สำเร็จ ÷ Lead ของช่องทาง", use: "ดูว่าช่องทางไหนได้ Lead ไม่ตรงกลุ่ม · แท็บคนต้องการซื้อแสดงสาเหตุที่กู้ไม่ผ่านที่กรอกไว้" },
       { name: `เลยกำหนด / วันนี้ / ค้างเกิน ${STALE_DAYS} วัน`, source: "ช่อง ติดตามครั้งถัดไป + แก้ไขล่าสุด", formula: `เลยกำหนด = วันติดตาม < วันนี้ · วันนี้ = วันติดตามคือวันนี้ · ค้าง = ไม่มีวันติดตามและไม่ได้แก้ไขเกิน ${STALE_DAYS} วัน · ไม่นับ Lead ที่จบแล้ว`, use: "รายการที่ฝ่ายขายต้องโทรต่อ" },
       { name: "ค่าโฆษณา vs งบ / Leads vs เป้า", source: "ตั้งค่า → เป้าหมายรายเดือน + Total Paid Media Spend / Total Leads", formula: "ยอดจริงของเดือน ÷ เป้า × 100 · เส้นสีฟ้า = สัดส่วนวันที่ผ่านไปของเดือน (ถ้าแถบสั้นกว่าเส้น = ช้ากว่าแผน)", use: "ติดตามงบและเป้าระหว่างเดือน" },
       { name: "Checklist ข้อมูลประจำเดือน", source: "ข้อมูลที่นำเข้าแล้วทุกแหล่ง", formula: "ครบ = มีข้อมูลทุกวันของเดือน (เดือนปัจจุบันถึงเมื่อวาน) · บางส่วน = มีบางช่วง · ยังไม่มี = ยังไม่ได้นำเข้า", use: "รู้ว่าเดือนนี้ยังขาดไฟล์อะไร ก่อนอ่านตัวเลข" },
@@ -83,12 +86,17 @@ export const SECTIONS: Sec[] = [
       { name: "กำลังใช้ Product / ใกล้หมดสัญญา", source: "Product ที่ใช้อยู่ (วันเริ่ม–วันหมดอายุ)", formula: "มี Product ที่เริ่มแล้วและยังไม่หมดอายุ → กำลังใช้ Product · เหลือ ≤ 30 วัน → ใกล้หมดสัญญา · หมดทุกตัว → เข้าร่วมแล้ว · ปิดการขายแล้วแต่ Product ยังไม่เริ่ม → ค้างที่ ปิดการขาย", use: "ระบบย้ายให้เอง (ลากเข้าเองไม่ได้)" },
       { name: "นัดเข้าพบ / เข้าพบแล้ว / Win (ต่อ Staff ต่อเดือน)", source: "ประวัติการเปลี่ยน Status", formula: "นับครั้งที่ย้ายไป มีแผนเข้าพบ / เข้าพบแล้ว / ปิดการขาย ในเดือนนั้น (ประวัติไม่หายเมื่อการ์ดถูกย้ายกลับตอนสิ้นเดือน)", use: "ผลงานฝ่ายขาย Developer" },
       { name: "ไม่ให้เข้าพบ / นัดไม่สำเร็จ", source: "ประวัติการเปลี่ยน Status", formula: "ย้ายไป ไม่ให้เข้าพบ + มีแผนเข้าพบ ที่หมดเดือนโดยยังไม่ได้เข้าพบ", use: "อัตรานัดไม่สำเร็จ" },
-      { name: "ยอด Product ที่เริ่มเดือนนี้", source: "Product (ราคา)", formula: "ผลรวมราคา Product ที่วันเริ่มอยู่ในเดือนนั้น ตาม Staff ของโครงการ", use: "ยอดขายโฆษณาให้ Developer" },
-      { name: "Product ที่จะหมดอายุใน 60 วัน", source: "Product ที่ใช้อยู่", formula: "วันหมดอายุ ≤ 60 วันจากวันนี้ เรียงใกล้หมดก่อน", use: "รายการที่ต้องคุยต่อสัญญา" },
+      { name: "ยอด Product / Service / Event", source: "Product (ประเภท + ราคา)", formula: "ผลรวมราคาแยกตามประเภท นับเข้าเดือนที่ย้ายไป ปิดการขาย (ครั้งล่าสุดก่อนวันที่เพิ่ม Product) · ไม่มีการปิดการขาย = เดือนที่เพิ่ม Product · Product เดิมที่ไม่มีประเภท = Product", use: "ยอดขายโฆษณาให้ Developer แยกประเภท" },
+      { name: "โทร / Line / เจอหน้า", source: "ประวัติการติดต่อ", formula: "นับการติดต่อในเดือน: ย้ายการ์ดไป เข้าพบแล้ว (เลือกวิธี) + ปุ่ม บันทึกการติดต่อ", use: "ปริมาณการติดต่อของแต่ละ Staff" },
+      { name: "เข้าพบแล้ว / เพิ่ม Product", source: "ประวัติ Status + Product", formula: "จำนวนโครงการ (ไม่ซ้ำ) ที่ย้ายไป เข้าพบแล้ว ในเดือน / จำนวนโครงการที่มี Product นับเข้าเดือนนั้น · % = เพิ่ม Product ÷ เข้าพบแล้ว", use: "อัตราเปลี่ยนการเข้าพบเป็นยอดขาย" },
+      { name: "สถานะการเข้าพบ / ติดต่อครั้งถัดไป", source: "หน้า Developer", formula: "สถานะการเข้าพบ = วิธีติดต่อล่าสุด (โทร / Line / เจอหน้า) · ไม่ใส่ติดต่อครั้งถัดไป = ติดต่อล่าสุด + 30 วัน", use: "รู้ว่าคุยกันล่าสุดแบบไหน และไม่ลืมติดต่อซ้ำ" },
+      { name: "เลยกำหนด / ค้างเกิน 3 วัน (Developer)", source: "ติดต่อครั้งถัดไป + Status", formula: "เลยกำหนด = เลยวันติดต่อครั้งถัดไป 1–3 วัน · ค้างเกิน 3 วัน = เลยเกิน 3 วัน และ Status ไม่เปลี่ยนตั้งแต่วันนั้น · Status เปลี่ยนแล้ว = ไม่ขึ้น", use: "รายการที่ต้องติดต่อ" },
+      { name: "โครงการที่ปิดไม่ได้", source: "ประวัติ Status", formula: "นับเดือนที่ย้ายไป เข้าพบแล้ว แต่ไม่ได้ปิดการขายในเดือนนั้น (เดือนละ 1 ครั้ง · สะสม · เฉพาะเดือนที่จบแล้ว) · ครบ 3 ขึ้นไปแสดงในกรอบ · ปิดการขายแล้วเอาออกและเริ่มนับใหม่", use: "โครงการที่ควรเปลี่ยนวิธีขายหรือผู้ดูแล" },
+      { name: "Product ที่จะหมดอายุใน 30 วัน", source: "Product ที่ใช้อยู่", formula: "วันหมดอายุ ≤ 30 วันจากวันนี้ เรียงใกล้หมดก่อน", use: "รายการที่ต้องคุยต่อสัญญา" },
     ],
   },
   {
-    id: "sales", title: "5. Sales", page: "/sales",
+    id: "sales", title: "5. Revenue (ยอดขาย)", page: "/sales",
     intro: "จากรายงานยอดขาย FlowAccount (.xlsx) · เฉพาะ Admin / Sales",
     items: [
       { name: "ยอดขายสุทธิ", source: "FlowAccount — ยอดรวมสุทธิ", formula: "ผลรวมทุกเอกสารในช่วง (เอกสารยกเลิกรวมตามรายงานบัญชี — มีคำเตือน)", use: "รายได้ตามเอกสารขาย" },

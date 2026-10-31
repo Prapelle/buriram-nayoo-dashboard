@@ -8,7 +8,7 @@
 ## 1. สรุปสถานะ (Definition of Done)
 
 สถานะ: ✅ ผ่าน · ⚠️ ผ่านบางส่วน/มีเงื่อนไข · ⛔ ไม่ได้ทำ (ระบุเหตุผล)
-"เว็บจริง" = ผู้ใช้ตรวจบนเว็บที่ deploy แล้ว · "อัตโนมัติ" = ชุดทดสอบ 439 รายการ (รวม HTTP Integration กับ production build)
+"เว็บจริง" = ผู้ใช้ตรวจบนเว็บที่ deploy แล้ว · "อัตโนมัติ" = ชุดทดสอบ 444 รายการ (รวม HTTP Integration กับ production build)
 
 | ข้อกำหนด | สถานะ | หลักฐาน |
 |---|---|---|
@@ -215,7 +215,7 @@
 - **ก่อน deploy ทุกครั้ง:** `npx opennextjs-cloudflare build` แล้ว `bash tests/run-all.sh` (วางไฟล์ตัวอย่างใน `tests/fixtures` ตาม README ในโฟลเดอร์นั้น)
 
 ## 8. ชุดทดสอบ
-`bash tests/run-all.sh` — 439 รายการ (security, sales, import, dashboard, overview, fbactions, performance, yoy, kpicard, website, fbpage, e2e, http-integration, browser-website)
+`bash tests/run-all.sh` — 444 รายการ (security, sales, import, dashboard, overview, fbactions, performance, yoy, kpicard, website, fbpage, e2e, http-integration, browser-website)
 - `tests/e2e.test.mts`: ทุกโมดูลผ่าน service + Google Sheets จำลอง
 - `tests/integration/run.mjs`: เปิด production build จริง ล็อกอินด้วยคุกกี้เซสชันจริงตาม Role แล้วเรียกหน้าเว็บ/API (ต้อง build ก่อน)
 - `tests/integration/browser-website.mjs`: เปิดหน้า Website ใน Chromium จริง อัปโหลดไฟล์จริง 9 ไฟล์ (รวม Reports snapshot) นำเข้า กรอกยอดผู้ใช้ แล้วตรวจหน้า Performance ต.ค. และ ก.ย. (ต้องมี Playwright)

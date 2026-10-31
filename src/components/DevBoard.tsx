@@ -4,8 +4,9 @@ import { Notice } from "@/components/Toast";
 import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
 import Link from "next/link";
 import { BoardScroller, BoardTabs } from "@/components/Board";
+import { useAsk } from "@/components/AskDialog";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AUTO_STATUS, DEV_DEFAULT, DEV_STATUS, productState, TIERS, type Dev, type DevProduct } from "@/lib/developers";
+import { AUTO_STATUS, CONTACT_METHODS, DEV_DEFAULT, DEV_STATUS, productState, TIERS, type Dev, type DevProduct } from "@/lib/developers";
 
 /** บอร์ด Sale developer: คอลัมน์ตาม Status ของ Developer · กำลังใช้ Product / ใกล้หมดสัญญา ระบบตั้งเองจาก Product */
 const HEAD: Record<string, string> = {
@@ -19,6 +20,7 @@ export function DevBoard() {
   const [all, setAll] = useState<Dev[]>([]); const [products, setProducts] = useState<DevProduct[]>([]); const [staff, setStaff] = useState<string[]>([]); const [today, setToday] = useState("");
   const [state, setState] = useState<"loading" | "ok" | "error">("loading");
   const [tab, setTab] = useState(""); // มือถือ: คอลัมน์ที่แสดง
+  const [ask, askEl] = useAsk();
   const [msg, setMsg] = useState<{ type: "ok" | "error"; text: string; link?: string } | null>(null);
   const [q, setQ] = useState(""); const [staffF, setStaffF] = useState(""); const [tierF, setTierF] = useState("");
   const [busy, setBusy] = useState<Set<string>>(new Set()); const [dragId, setDragId] = useState(""); const [over, setOver] = useState("");
@@ -38,15 +40,18 @@ export function DevBoard() {
     const d = all.find((x) => x.developer_id === id);
     if (!d || busy.has(id) || (d.status || DEV_DEFAULT) === to || AUTO_STATUS.includes(to)) return;
     if (locked(d)) { setMsg({ type: "error", text: `${d.company_name || d.project_main}: มี Product ที่ใช้อยู่ — Status เปลี่ยนเองตามวันหมดอายุ` }); return; }
+    // เข้าพบแล้ว → ถามวิธี (โทร / Line / เจอหน้า) · ยกเลิก = ไม่ย้าย
+    let method: string | undefined;
+    if (to === "เข้าพบแล้ว") { const m = await ask({ title: `${d.company_name || d.project_main}: เข้าพบแล้ว`, label: "สถานะการเข้าพบ", options: CONTACT_METHODS, initial: d.last_contact_method || CONTACT_METHODS[0] }); if (m === null) return; method = m; }
     setBusy((b) => new Set(b).add(id)); setMsg(null);
     setAll((rs) => rs.map((x) => (x.developer_id === id ? { ...x, status: to } : x)));
     try {
-      const r = await fetch("/api/developers", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ developer_id: id, status: to, updated_at_seen: d.updated_at }) });
+      const r = await fetch("/api/developers", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ developer_id: id, status: to, updated_at_seen: d.updated_at, method }) });
       const j = await r.json(); if (!r.ok) throw new Error(j.error ?? "เปลี่ยนสถานะไม่สำเร็จ");
       setAll((rs) => rs.map((x) => (x.developer_id === id ? j.dev : x)));
       const name = d.company_name || d.project_main;
       setMsg(to === "ปิดการขาย" ? { type: "ok", text: `${name}: ปิดการขายแล้ว (นับเป็น Win) — เพิ่ม Product และวันหมดอายุได้เมื่อพร้อม การ์ดจะย้ายไป กำลังใช้ Product เองเมื่อถึงวันเริ่ม`, link: `/developers?view=${id}` }
-        : { type: "ok", text: `${name}: ${d.status || DEV_DEFAULT} → ${to}${to === "เข้าพบแล้ว" ? " · ติดต่อล่าสุด = วันนี้" : ""}` });
+        : { type: "ok", text: `${name}: ${d.status || DEV_DEFAULT} → ${to}${to === "เข้าพบแล้ว" ? ` (${method}) · ติดต่อล่าสุด = วันนี้` : ""}` });
     } catch (e) { setAll((rs) => rs.map((x) => (x.developer_id === id ? d : x))); setMsg({ type: "error", text: e instanceof Error ? e.message : "เกิดข้อผิดพลาด" }); load(); }
     finally { setBusy((b) => { const n = new Set(b); n.delete(id); return n; }); }
   }
@@ -104,6 +109,7 @@ export function DevBoard() {
         </>
       )}
       <p className="text-xs text-slate-500">• ลากการ์ดเพื่อเปลี่ยน Status (มือถือใช้เมนูบนการ์ด) · 🔒 = ระบบย้ายให้เองตามวันของ Product · ปิดการขาย = Win ของเดือนนั้น · ย้ายไป เข้าพบแล้ว → ติดต่อล่าสุด = วันนี้</p>
+      {askEl}
     </div>
   );
 }

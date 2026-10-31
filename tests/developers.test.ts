@@ -2,7 +2,7 @@
 // รัน: npx tsx tests/developers.test.ts
 import assert from "node:assert/strict";
 import {
-  autoChanges, devFollowUps, expiringProducts, findDevDuplicates, IMPORT_HEADERS, monthlyReport, nextDevCode, productDrivenStatus, productState, validateDev, validateProduct, type Dev, type DevProduct,
+  autoChanges, cantCloseProjects, devFollowUps, expiringProducts, productSaleMonth, findDevDuplicates, IMPORT_HEADERS, monthlyReport, nextDevCode, productDrivenStatus, productState, validateDev, validateProduct, type Dev, type DevProduct,
 } from "../src/lib/developers";
 
 let pass = 0; const ok = (m: string) => { pass++; console.log("  ✓", m); };
@@ -66,16 +66,48 @@ const logs: Record<string, string>[] = [
   { kind: "auto_product", to_status: "กำลังใช้ Product", staff: "เอ", changed_at: "2026-10-22T03:00:00Z" },
 ];
 const rep = monthlyReport(logs, [P("x", "2026-10-05", "2027-01-31", { price_thb: "25000" }), P("y", "2026-09-05", "2026-12-31")], [D("x", { staff: "เอ" }), D("y", { staff: "บี" })], "2026-10");
-assert.deepEqual(rep, [{ staff: "เอ", planned: 1, met: 2, noMeeting: 0, won: 1, productSales: 25000 }, { staff: "บี", planned: 0, met: 0, noMeeting: 2, won: 0, productSales: 0 }]);
+const core = (r: (typeof rep)[number]) => ({ staff: r.staff, planned: r.planned, met: r.met, noMeeting: r.noMeeting, won: r.won, productSales: r.productSales });
+assert.deepEqual(rep.map(core), [{ staff: "เอ", planned: 1, met: 2, noMeeting: 0, won: 1, productSales: 25000 }, { staff: "บี", planned: 0, met: 0, noMeeting: 2, won: 0, productSales: 0 }]);
+assert.deepEqual(rep[0].byCategory, { Product: 25000, Service: 0, Event: 0 }); // Product เดิมไม่มีประเภท = Product
 // เปิดหน้าพร้อมกัน 2 คนตอนต้นเดือน → ประวัติอัตโนมัติรหัสเดียวกันถูกบันทึก 2 แถว → รายงานต้องนับครั้งเดียว
 const dupAuto = { log_id: "auto:y:auto_month_end:มีแผนเข้าพบ>เข้าร่วมแล้ว:2026-10", kind: "auto_month_end", counts_as: "no_meeting", month: "2026-10", staff: "บี", changed_at: "2026-11-01T01:00:00Z" };
 assert.equal(monthlyReport([dupAuto, { ...dupAuto }], [], [], "2026-10")[0].noMeeting, 1);
-const fu = devFollowUps([D("a", { next_follow_up_at: "2026-10-30" }), D("b", { next_follow_up_at: "2026-10-31" }), D("c", { updated_at: "2026-10-27T03:00:00Z" }), D("d", { updated_at: "2026-10-29T03:00:00Z" }),
-  D("e", { status: "ไม่ให้เข้าพบ", next_follow_up_at: "2026-10-01" }), D("f", { status: "กำลังใช้ Product", updated_at: "2026-01-01T00:00:00Z" })], TODAY);
-assert.deepEqual([fu.overdue.map((d) => d.developer_id), fu.today.map((d) => d.developer_id), fu.stale.map((d) => d.developer_id)], [["a"], ["b"], ["c"]]);
+// ติดตาม (31/10/2026): เลยกำหนด 1–3 วัน · ค้าง = เลยเกิน 3 วันและ Status ไม่เปลี่ยนตั้งแต่วันนั้น · ไม่มีวันติดต่อครั้งถัดไป = ไม่ขึ้น
+const fu = devFollowUps([D("a", { next_follow_up_at: "2026-10-30" }), D("b", { next_follow_up_at: "2026-10-31" }), D("c", { updated_at: "2026-10-27T03:00:00Z" }),
+  D("d", { next_follow_up_at: "2026-10-20", status_changed_at: "2026-10-10T03:00:00Z" }), D("g", { next_follow_up_at: "2026-10-20", status_changed_at: "2026-10-25T03:00:00Z" }),
+  D("h", { next_follow_up_at: "2026-10-28" }), D("e", { status: "ไม่ให้เข้าพบ", next_follow_up_at: "2026-10-01" }), D("f", { status: "กำลังใช้ Product", next_follow_up_at: "2026-10-01" })], TODAY);
+assert.deepEqual([fu.overdue.map((d) => d.developer_id), fu.today.map((d) => d.developer_id), fu.stale.map((d) => d.developer_id)], [["h", "a"], ["b"], ["d"]]);
 const ex = expiringProducts([P("a", "2026-10-01", "2026-11-15"), P("b", "2026-10-01", "2027-06-30"), P("c", "2026-10-01", "2026-12-20"), P("zz", "2026-10-01", "2026-11-01")], [D("a"), D("b"), D("c")], TODAY);
-assert.deepEqual(ex.map((x) => [x.dev.developer_id, x.daysLeft]), [["a", 15], ["c", 50]]);
-ok("ประวัติอัตโนมัติที่บันทึกซ้ำ (เปิดหน้าพร้อมกัน) นับครั้งเดียว · ต่อ Staff: นัดเข้าพบ / เข้าพบแล้ว / ไม่ให้เข้าพบ (+ นัดที่หมดเดือน) / Win / ยอด Product ที่เริ่มเดือนนี้ · ติดตาม เลยกำหนด/วันนี้/ค้าง 3 วัน (ไม่นับ ไม่ให้เข้าพบ และที่ใช้ Product อยู่) · Product หมดใน 60 วัน เรียงใกล้สุดก่อน");
+assert.deepEqual(ex.map((x) => [x.dev.developer_id, x.daysLeft]), [["a", 15]]); // 30 วัน (เดิม 60)
+ok("ประวัติอัตโนมัติที่บันทึกซ้ำ (เปิดหน้าพร้อมกัน) นับครั้งเดียว · ต่อ Staff: นัดเข้าพบ / เข้าพบแล้ว / ไม่ให้เข้าพบ (+ นัดที่หมดเดือน) / Win / ยอด Product ที่เริ่มเดือนนี้ · ติดตาม เลยกำหนด/วันนี้/ค้าง 3 วัน (ไม่นับ ไม่ให้เข้าพบ และที่ใช้ Product อยู่) · Product หมดใน 30 วัน เรียงใกล้สุดก่อน · ค้าง = เลยวันติดต่อเกิน 3 วันและ Status ไม่เปลี่ยน");
+
+console.log("5b) คำขอ 31/10/2026: ติดต่อครั้งถัดไปอัตโนมัติ · เดือนที่นับยอด · ประเภท · โทร/Line/เจอหน้า · โครงการที่ปิดไม่ได้");
+{
+  const v1 = validateDev({ company_name: "x", last_contacted_at: "2026-10-05" }); assert.ok(v1.ok && v1.rec.next_follow_up_at === "2026-11-04");
+  const v2 = validateDev({ company_name: "x", last_contacted_at: "2026-10-05", next_follow_up_at: "2026-10-10" }); assert.ok(v2.ok && v2.rec.next_follow_up_at === "2026-10-10");
+  const v3 = validateDev({ company_name: "x" }); assert.ok(v3.ok && v3.rec.next_follow_up_at === "");
+  assert.ok(!validateDev({ company_name: "x", last_contact_method: "อีเมล" }).ok);
+  ok("ไม่ใส่ติดต่อครั้งถัดไป = ติดต่อล่าสุด + 30 วัน · ใส่เอง = ใช้ค่าที่ใส่ · ไม่มีติดต่อล่าสุด = ว่าง · สถานะการเข้าพบต้องเป็น โทร / Line / เจอหน้า");
+  const L = (dev: string, to: string, at: string, staff = "เอ") => ({ log_id: `${dev}${to}${at}`, developer_id: dev, kind: "manual", to_status: to, staff, changed_at: at });
+  const lg = [L("p", "ปิดการขาย", "2026-09-28T03:00:00Z", "บี"), L("p", "ปิดการขาย", "2026-10-03T03:00:00Z")];
+  const pr = (o: DevProduct) => ({ ...P("p", "2026-12-01", "2027-02-28"), ...o });
+  assert.deepEqual(productSaleMonth(pr({ created_at: "2026-10-05T03:00:00Z" }), lg), { month: "2026-10", staff: "เอ" }); // ปิดการขาย ต.ค. แต่ Product เริ่ม ธ.ค. → นับ ต.ค.
+  assert.deepEqual(productSaleMonth(pr({ created_at: "2026-09-29T03:00:00Z" }), lg), { month: "2026-09", staff: "บี" });
+  assert.deepEqual(productSaleMonth(pr({ created_at: "2026-08-15T03:00:00Z" }), lg), { month: "2026-08" }); // ก่อนปิดการขาย → เดือนที่เพิ่ม
+  assert.deepEqual(productSaleMonth({ ...P("q", "2026-07-10", "2026-12-31") }, lg), { month: "2026-07" }); // ข้อมูลเก่าไม่มีวันที่เพิ่ม → วันเริ่ม
+  const r2 = monthlyReport(lg, [pr({ created_at: "2026-10-05T03:00:00Z", category: "Event", price_thb: "9000" }), pr({ product_id: "p2", created_at: "2026-10-06T03:00:00Z", category: "Service", price_thb: "1000" })], [D("p", { staff: "เอ" })], "2026-10",
+    [{ contact_id: "1", staff: "เอ", method: "โทร", contacted_at: "2026-10-02" }, { contact_id: "1", staff: "เอ", method: "โทร", contacted_at: "2026-10-02" }, { contact_id: "2", staff: "เอ", method: "Line", contacted_at: "2026-10-03" }, { contact_id: "3", staff: "เอ", method: "เจอหน้า", contacted_at: "2026-09-30" }]);
+  assert.deepEqual([r2[0].byCategory, r2[0].productSales, r2[0].calls, r2[0].line, r2[0].meet, r2[0].productProjects, r2[0].metProjects, r2[0].productRatePct], [{ Product: 0, Service: 1000, Event: 9000 }, 10000, 1, 1, 0, 1, 0, null]);
+  ok("ยอด Product / Service / Event นับเข้าเดือนที่ปิดการขาย (ครั้งล่าสุดก่อนวันที่เพิ่ม) · ไม่มีการปิดการขาย = เดือนที่เพิ่ม · โทร / Line / เจอหน้า นับตามเดือน (รหัสซ้ำนับครั้งเดียว) · ไม่มีการเข้าพบ → % = —");
+  const met = (dev: string, at: string) => L(dev, "เข้าพบแล้ว", at);
+  const cl = [met("x", "2026-06-10T03:00:00Z"), met("x", "2026-07-02T03:00:00Z"), met("x", "2026-07-20T03:00:00Z"), met("x", "2026-08-05T03:00:00Z"), met("x", "2026-10-05T03:00:00Z"),
+    met("y", "2026-06-10T03:00:00Z"), met("y", "2026-07-10T03:00:00Z"), L("y", "ปิดการขาย", "2026-07-25T03:00:00Z"), met("y", "2026-08-10T03:00:00Z"), met("y", "2026-09-10T03:00:00Z"),
+    met("z", "2026-07-10T03:00:00Z"), met("z", "2026-08-10T03:00:00Z"), met("z", "2026-09-10T03:00:00Z"), met("w", "2026-07-10T03:00:00Z"), met("w", "2026-08-10T03:00:00Z"), met("w", "2026-09-10T03:00:00Z")];
+  const cc = cantCloseProjects(cl, [D("x"), D("y"), D("z"), D("w", { status: "ปิดการขาย" })], "2026-10-31");
+  assert.deepEqual(cc.map((c) => [c.dev.developer_id, c.count]), [["x", 3], ["z", 3]]);
+  assert.deepEqual(cc[0].months, ["2026-06", "2026-07", "2026-08"]);
+  ok("โครงการที่ปิดไม่ได้: เดือนละ 1 ครั้ง (ก.ค. เข้าพบ 2 รอบ = 1) · ไม่นับเดือนปัจจุบัน · ปิดการขายแล้วเริ่มนับใหม่ (y เหลือ 2) · Status ปัจจุบัน ปิดการขาย = ไม่แสดง · ครบ 3 ขึ้นไปจึงแสดง");
+}
 
 console.log("6) หัวคอลัมน์ไฟล์นำเข้า");
 for (const [h, k] of [["ชื่อบริษัท", "company_name"], ["โครงการหลัก", "project_main"], ["โครงการรอง 2", "project_sub2"], ["ชื่อผู้ติดต่อ", "contact_name"], ["เบอร์", "phone"], ["line", "line_id"], ["nayoo url", "nayoo_url"], ["ติดต่อครั้งถัดไป", "next_follow_up_at"], ["company_name", "company_name"]])

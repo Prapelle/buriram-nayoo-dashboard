@@ -2,6 +2,7 @@
 import { useIsMobile } from "@/lib/use-mobile";
 import { Skeleton } from "@/components/Skeleton";
 import { Notice } from "@/components/Toast";
+import { useAsk } from "@/components/AskDialog";
 import { lineHref, telHref } from "@/lib/contact-links";
 import { DateInput } from "@/components/DateInput";
 import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
@@ -9,11 +10,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { parseCsv, readTextFile, toCsv } from "@/lib/csv";
 import { readXlsx } from "@/lib/xlsx";
 import {
-  AUTO_STATUS, DEV_DEFAULT, DEV_EDITABLE, DEV_STATUS, devFollowUps, DEV_STALE_DAYS, expiringProducts, LABEL, monthlyReport, productState, TIERS,
+  AUTO_STATUS, CANT_CLOSE_MIN, cantCloseProjects, categoryOf, CONTACT_METHODS, DEV_DEFAULT, DEV_EDITABLE, DEV_STATUS, devFollowUps, DEV_STALE_DAYS, EXPIRING_DAYS, expiringProducts, LABEL, monthlyReport, NEXT_CONTACT_DAYS, PRODUCT_CATEGORIES, productState, TIERS,
   type Dev, type DevProduct,
 } from "@/lib/developers";
 
-type Data = { devs: Dev[]; products: DevProduct[]; logs: Record<string, string>[]; staff: string[]; productTypes: string[]; today: string };
+type Data = { devs: Dev[]; products: DevProduct[]; logs: Record<string, string>[]; contacts?: Record<string, string>[]; staff: string[]; productTypes: string[]; today: string };
 type Dup = { dev_code: string; company_name: string; project_main: string; matched: string[] };
 const dmy = (s?: string) => (s && /^\d{4}-\d{2}-\d{2}/.test(s) ? thDate(s) : "");
 const thb = (n: number) => `฿${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
@@ -23,7 +24,7 @@ const ST_COLOR: Record<string, string> = {
 };
 const MATCH_TH: Record<string, string> = { company: "ชื่อบริษัท", project: "ชื่อโครงการ", phone: "เบอร์", line: "Line" };
 const emptyForm = (): Dev => ({ ...Object.fromEntries(DEV_EDITABLE.map((k) => [k, ""])), status: DEV_DEFAULT });
-const emptyProd = (): DevProduct => ({ product: "", start_date: "", end_date: "", price_thb: "", notes: "" });
+const emptyProd = (): DevProduct => ({ category: "Product", product: "", start_date: "", end_date: "", price_thb: "", notes: "" });
 const TEMPLATE = [["ชื่อบริษัท", "โครงการหลัก", "โครงการรอง 1", "โครงการรอง 2", "ชื่อผู้ติดต่อ", "เบอร์", "Line", "Tier", "Nayoo URL", "Staff", "Status", "ติดต่อล่าสุด", "ติดต่อครั้งถัดไป", "Remark", "Note"],
   ["บริษัท ตัวอย่าง จำกัด", "หมู่บ้านตัวอย่าง", "", "", "คุณสมชาย", "0812345678", "@example", "A", "https://...", "พี่เอ", "เข้าร่วมแล้ว", "2026-10-01", "2026-11-05", "", ""]];
 
@@ -74,8 +75,18 @@ export function DevelopersManager() {
       && (!q || ["dev_code", "company_name", "project_main", "project_sub1", "project_sub2", "contact_name", "phone", "line_id", "remark", "notes"].some((k) => (d[k] ?? "").toLowerCase().includes(q))));
   }, [data, f, follow, fu, prodsOf]);
   const viewing = data?.devs.find((d) => d.developer_id === viewId) ?? null;
-  const report = useMemo(() => (data && month ? monthlyReport(data.logs, data.products, data.devs, month) : []), [data, month]);
-  const expiring = useMemo(() => (data ? expiringProducts(data.products, data.devs, data.today, 60) : []), [data]);
+  const report = useMemo(() => (data && month ? monthlyReport(data.logs, data.products, data.devs, month, data.contacts ?? []) : []), [data, month]);
+  const expiring = useMemo(() => (data ? expiringProducts(data.products, data.devs, data.today, EXPIRING_DAYS) : []), [data]);
+  const cantClose = useMemo(() => (data ? cantCloseProjects(data.logs, data.devs, data.today) : []), [data]);
+  const [ask, askEl] = useAsk();
+  /** บันทึกการติดต่อ (ไม่เปลี่ยน Status) — โทร / Line / เจอหน้า วันนี้ */
+  async function logContact(d: Dev) {
+    const m = await ask({ title: `บันทึกการติดต่อ: ${d.company_name || d.project_main}`, label: "ติดต่อวันนี้ด้วยวิธี", options: CONTACT_METHODS, initial: d.last_contact_method || CONTACT_METHODS[0] });
+    if (m === null) return;
+    setBusy(true);
+    try { await call("POST", { action: "contact", developer_id: d.developer_id, method: m, contacted_at: data!.today, updated_at_seen: d.updated_at }); setMsg({ type: "ok", text: `บันทึกการติดต่อ (${m}) แล้ว · ติดต่อล่าสุด = วันนี้` }); await load(); }
+    catch (e) { setMsg({ type: "error", text: e instanceof Error ? e.message : "บันทึกไม่สำเร็จ" }); } finally { setBusy(false); }
+  }
 
   const openForm = (d: Dev | null) => { setForm(d ? { ...emptyForm(), ...Object.fromEntries(DEV_EDITABLE.map((k) => [k, d[k] ?? ""])) } : emptyForm()); setEditing(d); setErrors({}); setDups(null); setDelAsk(false); setMsg(null); setViewId(""); window.scrollTo({ top: 0, behavior: "smooth" }); };
   async function save(opts: { confirmDuplicate?: boolean } = {}) {
@@ -163,9 +174,10 @@ export function DevelopersManager() {
             {lockedStatus ? <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">Status</span><input disabled value={editing!.status} className="w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm" /><span className="text-xs text-slate-500">เปลี่ยนเองตามวันของ Product</span></label>
               : sel("status", "Status", DEV_STATUS.filter((s) => !AUTO_STATUS.includes(s)), "")}
             {fld("last_contacted_at", LABEL.last_contacted_at, { type: "date" })}{fld("next_follow_up_at", LABEL.next_follow_up_at, { type: "date" })}
+            {sel("last_contact_method", form.status === "เข้าพบแล้ว" && (!editing || editing.status !== "เข้าพบแล้ว") ? "สถานะการเข้าพบ *" : "สถานะการเข้าพบ", CONTACT_METHODS)}
           </div>
           <div className="grid gap-3 md:grid-cols-2">{fld("remark", "Remark", { area: true })}{fld("notes", "Note (บันทึกภายใน)", { area: true })}</div>
-          <p className="text-xs text-slate-500">กรอกชื่อบริษัทหรือโครงการหลักอย่างน้อย 1 ช่อง · เปลี่ยน Status เป็น เข้าพบแล้ว → ติดต่อล่าสุด = วันนี้ · Product ที่ใช้อยู่ เพิ่มได้หลังบันทึก (กด ดู)</p>
+          <p className="text-xs text-slate-500">กรอกชื่อบริษัทหรือโครงการหลักอย่างน้อย 1 ช่อง · เปลี่ยน Status เป็น เข้าพบแล้ว → เลือกสถานะการเข้าพบ (โทร / Line / เจอหน้า) และติดต่อล่าสุด = วันนี้ · ไม่ใส่ติดต่อครั้งถัดไป = ติดต่อล่าสุด + {NEXT_CONTACT_DAYS} วัน · Product ที่ใช้อยู่ เพิ่มได้หลังบันทึก (กด ดู)</p>
           {dups && (
             <div role="alert" className="space-y-2 rounded-md bg-amber-50 p-3 text-sm text-amber-900">
               <p>พบรายการที่อาจซ้ำ:</p><ul className="list-disc pl-5">{dups.map((d) => <li key={d.dev_code}>{d.dev_code} · {d.company_name || d.project_main} · ซ้ำที่ {d.matched.map((m) => MATCH_TH[m]).join(", ")}</li>)}</ul>
@@ -183,7 +195,7 @@ export function DevelopersManager() {
       {viewing && !form && (
         <section className="space-y-4 rounded-lg border border-slate-300 bg-white p-5">
           <div className="flex items-center justify-between"><h2 className="font-semibold">{viewing.dev_code} · {viewing.company_name || viewing.project_main}</h2>
-            <span className="flex gap-4 text-sm"><button onClick={() => openForm(viewing)} className="underline">แก้ไข</button><button onClick={() => setViewId("")} className="underline">ปิด</button></span></div>
+            <span className="flex flex-wrap items-center gap-4 text-sm"><button onClick={() => logContact(viewing)} disabled={busy} className="h-9 rounded-lg border border-slate-300 bg-white px-3 font-medium hover:bg-slate-50">บันทึกการติดต่อ</button><button onClick={() => openForm(viewing)} className="underline">แก้ไข</button><button onClick={() => setViewId("")} className="underline">ปิด</button></span></div>
           <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
             {DEV_EDITABLE.filter((k) => !["remark", "notes"].includes(k)).map((k) => <div key={k}><dt className="text-xs text-slate-500">{LABEL[k]}</dt><dd className="break-words">{k === "nayoo_url" && viewing[k] ? <a href={viewing[k]} target="_blank" rel="noopener noreferrer" className="underline">{viewing[k]}</a> : k.endsWith("_at") ? dmy(viewing[k]) || "—" : viewing[k] || <span className="text-slate-300">—</span>}</dd></div>)}
           </dl>
@@ -195,7 +207,7 @@ export function DevelopersManager() {
               const cur = ps.filter((p) => productState(p, data.today) !== "expired").sort((a, b) => a.end_date.localeCompare(b.end_date)), old = ps.filter((p) => productState(p, data.today) === "expired").sort((a, b) => b.end_date.localeCompare(a.end_date));
               const line = (p: DevProduct, past = false) => (
                 <li key={p.product_id} className="flex flex-wrap items-center gap-x-3 border-b border-slate-100 py-1.5 text-sm">
-                  <b>{p.product}</b><span>{dmy(p.start_date)} – {dmy(p.end_date)}</span>{p.price_thb && <span className="tabular-nums">{thb(Number(p.price_thb))}</span>}
+                  <span className="rounded bg-brand-50 px-1.5 text-xs text-brand-800">{categoryOf(p)}</span><b>{p.product}</b><span>{dmy(p.start_date)} – {dmy(p.end_date)}</span>{p.price_thb && <span className="tabular-nums">{thb(Number(p.price_thb))}</span>}
                   {!past && <span className={`rounded px-1.5 text-xs ${productState(p, data.today) === "future" ? "bg-slate-100" : "bg-green-100"}`}>{productState(p, data.today) === "future" ? "ยังไม่เริ่ม" : `เหลือ ${Math.round((Date.parse(p.end_date) - Date.parse(data.today)) / 864e5)} วัน`}</span>}
                   {p.notes && <span className="text-xs text-slate-500">{p.notes}</span>}
                   <span className="ml-auto flex gap-3 text-xs"><button onClick={() => { setProd({ ...p }); setProdErr({}); }} className="underline">แก้ไข</button><button onClick={() => delProd(p)} className="text-red-700 underline">ลบ</button></span>
@@ -208,7 +220,8 @@ export function DevelopersManager() {
             })()}
             {prod && (
               <div className="space-y-2 rounded-md bg-slate-50 p-3">
-                <div className="grid gap-2 sm:grid-cols-5">
+                <div className="grid gap-2 sm:grid-cols-6">
+                  <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">ประเภท *</span><select aria-label="ประเภท" value={prod.category || "Product"} onChange={(e) => setProd({ ...prod, category: e.target.value })} className={inp("category", prodErr)}>{PRODUCT_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></label>
                   <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">Product *</span><select aria-label="Product" value={prod.product} onChange={(e) => setProd({ ...prod, product: e.target.value })} className={inp("product", prodErr)}><option value="">— เลือก —</option>{data.productTypes.map((t) => <option key={t}>{t}</option>)}</select></label>
                   <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">วันเริ่ม *</span><DateInput aria-label="วันเริ่ม" value={prod.start_date} onChange={(e) => setProd({ ...prod, start_date: e.target.value })} className={inp("start_date", prodErr)} /></label>
                   <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">วันหมดอายุ *</span><DateInput aria-label="วันหมดอายุ" value={prod.end_date} onChange={(e) => setProd({ ...prod, end_date: e.target.value })} className={inp("end_date", prodErr)} /></label>
@@ -284,16 +297,34 @@ export function DevelopersManager() {
         <div className="flex flex-wrap items-end justify-between gap-3"><h2 className="font-semibold">สรุปรายเดือน (ต่อ Staff)</h2>
           <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">เดือน</span><DateInput month aria-label="เดือนของสรุป" value={month} onChange={(e) => setMonth(e.target.value)} className="h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm" /></label></div>
         {report.length === 0 ? <p className="text-sm text-slate-500">ยังไม่มีการเปลี่ยน Status ในเดือนนี้</p> : (
-          <div className="overflow-x-auto"><table className="w-full min-w-[560px] text-sm">
-            <thead><tr className="border-b text-xs text-slate-500"><th className="py-1.5 text-left font-medium">Staff</th><th className="text-right font-medium">นัดเข้าพบ</th><th className="text-right font-medium">เข้าพบแล้ว</th><th className="text-right font-medium">ไม่ให้เข้าพบ / นัดไม่สำเร็จ</th><th className="text-right font-medium">Win (ปิดการขาย)</th><th className="text-right font-medium">ยอด Product ที่เริ่มเดือนนี้</th></tr></thead>
-            <tbody>{report.map((r) => <tr key={r.staff} className="border-b border-slate-100 tabular-nums"><td className="py-1.5">{r.staff}</td><td className="text-right">{r.planned}</td><td className="text-right">{r.met}</td><td className="text-right">{r.noMeeting}</td><td className="text-right font-semibold">{r.won}</td><td className="text-right">{r.productSales ? thb(r.productSales) : "—"}</td></tr>)}</tbody>
+          <div className="overflow-x-auto"><table className="w-full min-w-[1080px] text-sm">
+            <thead><tr className="border-b text-xs text-slate-500 [&>th]:px-1.5"><th className="py-1.5 !pl-0 text-left font-medium">Staff</th><th className="text-right font-medium">นัดเข้าพบ</th><th className="text-right font-medium">เข้าพบแล้ว</th><th className="text-right font-medium">ไม่ให้เข้าพบ / นัดไม่สำเร็จ</th><th className="text-right font-medium">Win (ปิดการขาย)</th>
+              <th className="text-right font-medium">โทร</th><th className="text-right font-medium">Line</th><th className="text-right font-medium">เจอหน้า</th><th className="text-right font-medium">เข้าพบแล้ว / เพิ่ม Product (โครงการ)</th>
+              {PRODUCT_CATEGORIES.map((c) => <th key={c} className="text-right font-medium">{c}</th>)}<th className="text-right font-medium">ยอดรวม</th></tr></thead>
+            <tbody>{report.map((r) => <tr key={r.staff} className="border-b border-slate-100 tabular-nums [&>td]:px-1.5"><td className="py-1.5 !pl-0">{r.staff}</td><td className="text-right">{r.planned}</td><td className="text-right">{r.met}</td><td className="text-right">{r.noMeeting}</td><td className="text-right font-semibold">{r.won}</td>
+              <td className="text-right">{r.calls}</td><td className="text-right">{r.line}</td><td className="text-right">{r.meet}</td>
+              <td className="text-right" data-sort={r.productRatePct ?? ""}>{r.metProjects} / {r.productProjects}{r.productRatePct !== null && <span className="text-slate-500"> ({r.productRatePct}%)</span>}</td>
+              {PRODUCT_CATEGORIES.map((c) => <td key={c} className="text-right">{r.byCategory[c] ? thb(r.byCategory[c]) : "—"}</td>)}<td className="text-right font-semibold">{r.productSales ? thb(r.productSales) : "—"}</td></tr>)}</tbody>
           </table></div>
         )}
-        <p className="text-xs text-slate-500">นับจากประวัติการเปลี่ยน Status (ไม่หายเมื่อการ์ดถูกย้ายกลับตอนสิ้นเดือน) · ไม่ให้เข้าพบ = ย้ายไป ไม่ให้เข้าพบ + มีแผนเข้าพบที่หมดเดือนโดยยังไม่ได้เข้าพบ</p>
-        <h3 className="pt-2 text-sm font-semibold">Product ที่จะหมดอายุใน 60 วัน</h3>
+        <p className="text-xs text-slate-500">นับจากประวัติการเปลี่ยน Status (ไม่หายเมื่อการ์ดถูกย้ายกลับตอนสิ้นเดือน) · ไม่ให้เข้าพบ = ย้ายไป ไม่ให้เข้าพบ + มีแผนเข้าพบที่หมดเดือนโดยยังไม่ได้เข้าพบ · โทร / Line / เจอหน้า = ประวัติการติดต่อ (ย้ายไปเข้าพบแล้ว + ปุ่มบันทึกการติดต่อ) · เข้าพบแล้ว / เพิ่ม Product = จำนวนโครงการไม่ซ้ำ · ยอด Product / Service / Event นับเข้าเดือนที่ย้ายไปปิดการขาย (ไม่มีการปิดการขาย = เดือนที่เพิ่ม Product)</p>
+        <h3 className="pt-2 text-sm font-semibold">Product ที่จะหมดอายุใน {EXPIRING_DAYS} วัน</h3>
         {expiring.length === 0 ? <p className="text-sm text-slate-500">ไม่มี</p> : (
-          <ul className="space-y-1 text-sm">{expiring.map((x) => <li key={x.p.product_id} className="flex flex-wrap gap-x-3"><span className={`w-20 font-semibold ${x.daysLeft <= 30 ? "text-orange-700" : "text-slate-700"}`}>อีก {x.daysLeft} วัน</span><button onClick={() => setViewId(x.dev.developer_id)} className="underline">{x.dev.company_name || x.dev.project_main}</button><span>{x.p.product} หมด {dmy(x.p.end_date)}</span><span className="text-slate-500">{x.dev.staff}</span></li>)}</ul>
+          <ul className="space-y-1 text-sm">{expiring.map((x) => <li key={x.p.product_id} className="flex flex-wrap gap-x-3"><span className={`w-20 font-semibold ${x.daysLeft <= 7 ? "text-red-700" : "text-orange-700"}`}>อีก {x.daysLeft} วัน</span><button onClick={() => setViewId(x.dev.developer_id)} className="underline">{x.dev.company_name || x.dev.project_main}</button><span>{x.p.product} หมด {dmy(x.p.end_date)}</span><span className="text-slate-500">{x.dev.staff}</span></li>)}</ul>
         )}
+      </section>
+
+      <section aria-labelledby="cant-close" className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+        <h2 id="cant-close" className="font-semibold">โครงการที่ปิดไม่ได้ <span className="font-normal text-slate-600">— เข้าพบแล้วแต่ยังไม่ปิดการขาย ครบ {CANT_CLOSE_MIN} เดือนขึ้นไป</span></h2>
+        {cantClose.length === 0 ? <p className="text-sm text-slate-600">ยังไม่มี</p> : (
+          <ul className="space-y-1 text-sm">{cantClose.map((x) => (
+            <li key={x.dev.developer_id} className="flex flex-wrap items-center gap-x-3">
+              <span className="w-16 rounded-full bg-amber-200 px-2 text-center font-semibold text-amber-900">{x.count} ครั้ง</span>
+              <button onClick={() => setViewId(x.dev.developer_id)} className="underline">{x.dev.company_name || x.dev.project_main}</button>
+              <span className="text-slate-600">{x.dev.status || DEV_DEFAULT}</span><span className="text-xs text-slate-500">เดือนที่เข้าพบ: {x.months.map((mo) => thMonth(mo)).join(", ")}</span><span className="text-slate-500">{x.dev.staff}</span>
+            </li>))}</ul>
+        )}
+        <p className="text-xs text-slate-600">นับจากประวัติ: เดือนที่ย้ายไป เข้าพบแล้ว แต่ไม่ได้ปิดการขายในเดือนนั้น (เดือนละ 1 ครั้ง · นับสะสม · นับเฉพาะเดือนที่จบแล้ว) · ปิดการขายแล้วเอาออก และเริ่มนับใหม่หลังจากนั้น</p>
       </section>
 
       <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
@@ -311,6 +342,7 @@ export function DevelopersManager() {
           </div>
         )}
       </section>
+      {askEl}
     </div>
   );
 }

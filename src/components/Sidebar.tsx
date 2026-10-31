@@ -100,8 +100,8 @@ export function AppShell({ items, email, role, signOutAction, children }: {
   // แถบเมนูด้านล่างบนมือถือ: ฝ่ายขาย/Admin = งานลูกค้า · Marketing = งานข้อมูล
   const flat = items.flatMap((n) => n.children ?? [n]);
   const BOTTOM: Record<string, [string, string][]> = {
-    sales: [["/", "ภาพรวม"], ["/leads", "Leads"], ["/buyer-leads", "Buyer"], ["/seller-leads", "Seller"], ["/lead-report", "รายงาน"]],
-    admin: [["/", "ภาพรวม"], ["/leads", "Leads"], ["/buyer-leads", "Buyer"], ["/seller-leads", "Seller"], ["/lead-report", "รายงาน"]],
+    sales: [["/", "ภาพรวม"], ["/leads", "Leads"], ["/buyer-leads", "ต้องการซื้อ"], ["/seller-leads", "ต้องการขาย"], ["/lead-report", "รายงาน"]],
+    admin: [["/", "ภาพรวม"], ["/leads", "Leads"], ["/buyer-leads", "ต้องการซื้อ"], ["/seller-leads", "ต้องการขาย"], ["/lead-report", "รายงาน"]],
     marketing: [["/", "ภาพรวม"], ["/performance", "Performance"], ["/import", "นำเข้า"], ["/lead-report", "รายงาน"]],
   };
   const bottom = (BOTTOM[role] ?? []).map(([h, short]) => { const n = flat.find((x) => x.href === h); return n ? { ...n, short } : null; }).filter((x): x is NavItem & { short: string } => !!x);

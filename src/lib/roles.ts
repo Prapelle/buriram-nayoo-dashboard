@@ -18,12 +18,12 @@ export const NAV: NavItem[] = [
   { href: "/line-oa", label: "LINE OA", roles: MKT, group: "การตลาด", icon: "chat" },
   { href: "/website", label: "Website", roles: MKT, group: "การตลาด", icon: "globe" },
   { href: "/leads", label: "Leads", roles: SALES, group: "ฝ่ายขาย", icon: "users" },
-  { href: "/seller-leads", label: "Seller Leads", roles: SALES, group: "ฝ่ายขาย", icon: "board" },
-  { href: "/buyer-leads", label: "Buyer Leads", roles: SALES, group: "ฝ่ายขาย", icon: "board" },
+  { href: "/seller-leads", label: "คนต้องการขาย", roles: SALES, group: "ฝ่ายขาย", icon: "board" },
+  { href: "/buyer-leads", label: "คนต้องการซื้อ", roles: SALES, group: "ฝ่ายขาย", icon: "board" },
   { href: "/lead-report", label: "รายงาน Lead", roles: ALL, group: "ฝ่ายขาย", icon: "report" },
-  { href: "/sales", label: "Sales", roles: SALES, group: "ฝ่ายขาย", icon: "money" },
   { href: "/developers", label: "Developer", roles: SALES, group: "โครงการหมู่บ้าน", icon: "building" },
   { href: "/sale-developer", label: "Sale developer", roles: SALES, group: "โครงการหมู่บ้าน", icon: "board" },
+  { href: "/sales", label: "Revenue", roles: SALES, group: "โครงการหมู่บ้าน", icon: "money" }, // ยอดขาย FlowAccount (มาจากโครงการหมู่บ้าน) — เปลี่ยนชื่อจาก Sales 31/10/2026
   { href: "/import", label: "นำเข้า CSV", roles: MKT, group: "ข้อมูล", icon: "upload" },
   { href: "/export", label: "ส่งออกข้อมูล", roles: ALL, group: "ข้อมูล", icon: "download" },
   // ตั้งค่า: เมนูย่อย — ตั้งค่าระบบ (Admin) · คู่มือนำเข้าข้อมูล และ คำอธิบายตัวเลข (ทุก Role)

@@ -7,7 +7,7 @@ import { Note } from "@/components/Note";
 import { PageHeader, btn } from "@/components/PageHeader";
 import { auth } from "@/auth";
 import { fetchDashboardData } from "@/lib/dashboard-data";
-import { CHANNELS, SERVICES, computeDashboardCompared, dmyS, type Dashboard, type Filters } from "@/lib/dashboard";
+import { ALL_CHANNELS, channelLabel, SERVICES, computeDashboardCompared, dmyS, type Dashboard, type Filters } from "@/lib/dashboard";
 import type { CompareMode, DRange } from "@/lib/compare";
 import { KpiCard } from "@/components/KpiCard";
 import { BarList, LineChart, Pending, StackedMonths, dm, my } from "@/components/charts";
@@ -97,7 +97,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
           </summary>
           <div className="mt-3 flex flex-wrap items-end gap-3">
         <label><span className="mb-1 block text-xs text-slate-500">ช่องทาง</span>
-          <select name="channel" defaultValue={f.channel ?? ""} className={inp}><option value="">ทั้งหมด</option>{CHANNELS.map((x) => <option key={x}>{x}</option>)}</select></label>
+          <select name="channel" defaultValue={f.channel ?? ""} className={inp}><option value="">ทั้งหมด</option>{ALL_CHANNELS.map((x) => <option key={x} value={x}>{channelLabel(x)}</option>)}</select></label>
         <label><span className="mb-1 block text-xs text-slate-500">Campaign / Ad set</span>
           <select name="campaign" defaultValue={f.campaign ?? ""} className={inp + " max-w-56"}><option value="">ทั้งหมด</option>{campaigns.map((x) => <option key={x}>{x}</option>)}</select></label>
         <label><span className="mb-1 block text-xs text-slate-500">พื้นที่</span>
@@ -136,7 +136,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
         <Card title="Leads แยกตามช่องทาง">{c.leadsByChannel ? <BarList items={c.leadsByChannel} title="Leads แยกตามช่องทาง" /> : <Pending href={imp} />}</Card>
         <Card title="Lead ซื้อ / เช่า / สร้าง แยกตาม Buy Status">{c.buyStatus ? <BarList items={c.buyStatus} title="Lead แยกตาม Buy Status" /> : <Pending text="ยังไม่มี Lead ที่ Need เป็น ซื้อ / เช่า / สร้าง" href={imp} />}</Card>
         <Card title="Lead ขาย แยกตาม Sell Status">{c.sellStatus ? <BarList items={c.sellStatus} title="Lead แยกตาม Sell Status" /> : <Pending text="ยังไม่มี Lead ที่ Need เป็น ขาย" href={imp} />}</Card>
-        <Card title="Qualified Leads แยกตามช่องทาง (รอเข้าชม / เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน)">{c.leadQualByChannel ? <BarList items={c.leadQualByChannel} title="Qualified Leads แยกตามช่องทาง" /> : <Pending text="ยังไม่มี Lead" href={imp} />}</Card>
+        <Card title="Qualified Leads แยกตามช่องทาง (ซื้อ: รอเข้าชมขึ้นไป · ขาย: สัญญา + ขายแล้ว)">{c.leadQualByChannel ? <BarList items={c.leadQualByChannel} title="Qualified Leads แยกตามช่องทาง" /> : <Pending text="ยังไม่มี Lead" href={imp} />}</Card>
         <Card title="Sales Pipeline (คำนวณจาก Buy/Sell Status)">{c.pipeline ? <BarList items={c.pipeline} title="Sales Pipeline" /> : <Pending href={imp} />}</Card>
         <Card title="LINE OA Growth (เพื่อนทั้งหมดสิ้นเดือน)">
           {c.lineGrowth && c.lineGrowth.some((r) => r.friendsEnd !== null)

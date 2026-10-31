@@ -23,6 +23,18 @@ export const isContactedCall = (s: unknown) => CONTACTED_CALL.includes(normCall(
 export const SITE_VISIT_CALL = ["เข้าชมแล้ว", "จอง", "ซื้อสำเร็จ", "กู้ไม่ผ่าน"];
 export const isSiteVisitCall = (s: unknown) => SITE_VISIT_CALL.includes(normCall(s));
 export const CALL_SOLD = "ซื้อสำเร็จ";
+/** คนต้องการขาย: Qualified = เซ็นสัญญา / สัญญาเปิด / ขายแล้ว (ผู้ใช้กำหนด 31/10/2026) */
+export const SELL_QUALIFIED = ["เซ็นสัญญา", "สัญญาเปิด", "ขายแล้ว"];
+export const SELL_SOLD = "ขายแล้ว";
+type LeadLike = { need?: string; call_status?: string; sell_status?: string };
+export const isSellerLead = (r: LeadLike) => SELL_NEEDS.includes(String(r.need ?? ""));
+/**
+ * Qualified Lead (31/10/2026): คนต้องการขาย นับจาก Sell Status (เซ็นสัญญา / สัญญาเปิด / ขายแล้ว) ไม่ใช้ Call Status
+ * คนต้องการซื้อ / เช่า / สร้าง และ Lead ที่ยังไม่ระบุ Need นับจาก Call Status เหมือนเดิม
+ */
+export const isQualifiedLead = (r: LeadLike) => (isSellerLead(r) ? SELL_QUALIFIED.includes(String(r.sell_status ?? "")) : isQualifiedCall(r.call_status));
+/** Walk in (เดิมชื่อ Site Visit) = เฉพาะคนต้องการซื้อ: Call Status เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน */
+export const isWalkIn = (r: LeadLike) => !isSellerLead(r) && isSiteVisitCall(r.call_status);
 export const PROPERTY_TYPES = ["บ้านเดี่ยว", "อาคารพาณิชย์", "ที่ดิน", "ทาวโฮม", "ทรัพย์ลงทุน", "คอนโด"];
 export const CONDITIONS = ["มือ 1", "มือ 2", "1 และ 2"];
 export const PRICE_RANGES = ["ต่ำกว่าล้าน", "1–1.5 m", "1.5–2.5 m", "2.5–3.5 m", "3.5–5 m", "5 up"];

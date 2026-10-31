@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/guard";
-import { addProductType, changeDevStatus, deleteDeveloper, deleteProduct, DevError, importDevelopers, listDevelopers, saveDeveloper, saveProduct } from "@/lib/developers-service";
+import { addProductType, changeDevStatus, recordContact, deleteDeveloper, deleteProduct, DevError, importDevelopers, listDevelopers, saveDeveloper, saveProduct } from "@/lib/developers-service";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +16,7 @@ export async function GET() {
   try { return NextResponse.json(await listDevelopers()); } catch (e) { return fail(e); }
 }
 
-/** action: save (ค่าเริ่มต้น) · product · product_type · import_plan · import_commit */
+/** action: save (ค่าเริ่มต้น) · product · product_type · contact (บันทึกการติดต่อ) · import_plan · import_commit */
 export async function POST(req: Request) {
   const g = await requireRole(["admin", "sales"]);
   if (!g.ok) return g.res;
@@ -24,6 +24,7 @@ export async function POST(req: Request) {
     const b = (await req.json()) as Record<string, unknown>;
     switch (b.action) {
       case "product": return NextResponse.json(await saveProduct(b, g.email));
+      case "contact": return NextResponse.json(await recordContact(String(b.developer_id ?? ""), String(b.method ?? ""), String(b.contacted_at ?? ""), String(b.note ?? ""), String(b.updated_at_seen ?? ""), g.email));
       case "product_type": return NextResponse.json(await addProductType(String(b.name ?? ""), g.email));
       case "import_plan": return NextResponse.json(await importDevelopers(b.grid, false, g.email));
       case "import_commit": return NextResponse.json(await importDevelopers(b.grid, true, g.email));
@@ -37,8 +38,8 @@ export async function PATCH(req: Request) {
   const g = await requireRole(["admin", "sales"]);
   if (!g.ok) return g.res;
   try {
-    const b = (await req.json()) as { developer_id?: string; status?: string; updated_at_seen?: string };
-    return NextResponse.json(await changeDevStatus(String(b.developer_id ?? ""), String(b.status ?? ""), String(b.updated_at_seen ?? ""), g.email));
+    const b = (await req.json()) as { developer_id?: string; status?: string; updated_at_seen?: string; method?: string };
+    return NextResponse.json(await changeDevStatus(String(b.developer_id ?? ""), String(b.status ?? ""), String(b.updated_at_seen ?? ""), g.email, b.method === undefined ? undefined : String(b.method)));
   } catch (e) { return fail(e); }
 }
 

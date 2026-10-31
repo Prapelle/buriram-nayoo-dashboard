@@ -11,7 +11,7 @@ import { addDays, dmyS, fmtGaps, gapsIn, mergeSpans, num, type DashData, type Kp
 import { excludePages, metricDateOf, pageMetric, scopeOf, summarizeFb, VIEWERS_REMARK } from "./fbmetrics";
 import { actionLabels } from "./fbactions";
 import { changePct, COMPARE_LABEL, compareRange, previousRange, type CompareMode } from "./compare";
-import { CALL_SOLD, isQualifiedCall } from "./lead-options";
+import { CALL_SOLD, isQualifiedLead } from "./lead-options";
 export { previousRange };
 
 export type PerfFilters = { from?: string; to?: string; compare?: CompareMode; gran?: "day" | "month" };
@@ -291,7 +291,7 @@ export function computePerformance(d: DashData, f: PerfFilters): Performance {
     { key: "reach", label: "Reach (ทุก Social)", value: sumReach(M?.reachSum ?? null, fbReach), prev: pv(sumReach(Mp?.reachSum ?? null, fbReachP)), note: `Meta Ads Reach${M ? "" : " (ไม่มี)"} + ${PV ? `Facebook Page Viewers (${VIEWERS_REMARK})` : `Facebook Page Reach${fbReach === null ? " (ไม่มี)" : ""}`} · เป็นผลรวม คนเดียวกันอาจถูกนับซ้ำ ไม่ใช่ Unique Reach`, incomplete: both(M?.incomplete, PV ? PV.incomplete : F?.incomplete) },
     { key: "visits", label: "เข้าเว็บไซต์", value: visits(Wb), prev: pv(visits(Wp)), note: Wb.sessions !== null || Wb.users !== null ? `GA4 ${visitLabel} · ${Wb.cover}` : Wb.views !== null ? (Wb.usersWhy ?? noWeb) : noWeb, incomplete: Wb.incomplete },
     { key: "leads", label: "Leads", value: cnt(L.all), prev: pv(cnt(Lp?.all)), note: "นับ lead_id ไม่ซ้ำ ตามวันที่รับ Lead" },
-    { key: "qualified", label: "Qualified Leads", value: cnt(L.all, (r) => isQualifiedCall(r.call_status)), prev: pv(cnt(Lp?.all, (r) => isQualifiedCall(r.call_status))), note: "Call Status = รอเข้าชม / เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน" },
+    { key: "qualified", label: "Qualified Leads", value: cnt(L.all, (r) => isQualifiedLead(r)), prev: pv(cnt(Lp?.all, (r) => isQualifiedLead(r))), note: "Call Status = รอเข้าชม / เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน" },
     { key: "sold", label: "ขายได้ (ซื้อสำเร็จ)", value: cnt(L.all, (r) => r.call_status === CALL_SOLD), prev: pv(cnt(Lp?.all, (r) => r.call_status === CALL_SOLD)), note: "Call Status = ซื้อสำเร็จ" },
   ];
   const funnel: FunnelStep[] = steps.map((x, i) => {
@@ -299,7 +299,7 @@ export function computePerformance(d: DashData, f: PerfFilters): Performance {
     return { ...x, change: x.prev === undefined ? undefined : changePct(x.value, x.prev ?? null).pct, conv: i && before && x.value !== null ? r2((x.value / before) * 100) : null };
   });
   const chRow = (channel: string, kind: ChannelRow["kind"], leadCh: string, spend: number | null, prevSpend: number | null | undefined, incomplete?: string): ChannelRow => {
-    const mine = L.all.filter((r) => r.source_channel === leadCh), q = mine.filter((r) => isQualifiedCall(r.call_status)).length;
+    const mine = L.all.filter((r) => r.source_channel === leadCh), q = mine.filter((r) => isQualifiedLead(r)).length;
     const cpl = spend !== null && mine.length ? r2(spend / mine.length) : null;
     const pm = Lp?.all.filter((r) => r.source_channel === leadCh).length ?? 0;
     const prevCpl = prevSpend === undefined ? undefined : prevSpend !== null && pm ? r2(prevSpend / pm) : null;

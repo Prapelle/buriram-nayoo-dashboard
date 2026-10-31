@@ -2,10 +2,11 @@
 import { useIsMobile } from "@/lib/use-mobile";
 import { Skeleton } from "@/components/Skeleton";
 import { Notice } from "@/components/Toast";
+import { useAsk } from "@/components/AskDialog";
 import { DateInput } from "@/components/DateInput";
 import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CHANNELS } from "@/lib/dashboard";
+import { ALL_CHANNELS, CHANNELS, channelLabel, LEGACY_CHANNELS } from "@/lib/dashboard";
 import { CALL_DEFAULT, normCall } from "@/lib/lead-options";
 import { CLOSED_BUY, CLOSED_CALL, CLOSED_SELL, followUps, STALE_DAYS } from "@/lib/lead-insights";
 import { lineHref, telHref } from "@/lib/contact-links";
@@ -48,6 +49,7 @@ export function LeadsManager() {
   const [msg, setMsg] = useState<{ type: "ok" | "error"; text: string } | null>(null);
   const [rowBusy, setRowBusy] = useState("");
   const [delAsk, setDelAsk] = useState(false);
+  const [ask, askEl] = useAsk();
   const [sortBy, setSortBy] = useState<{ key: SortKey; dir: "asc" | "desc" } | null>(null);
   const [autoFollow, setAutoFollow] = useState(""); // วันติดตามที่ระบบเสนอให้ (แสดงคำอธิบาย)
 
@@ -129,9 +131,15 @@ export function LeadsManager() {
 
   /** เปลี่ยนสถานะ/Call Status จากตาราง (ส่งทั้งแถว พร้อมตรวจข้อมูลเก่า) */
   async function quick(row: Lead, field: string, value: string) {
+    // กู้ไม่ผ่าน → ถามสาเหตุก่อน (บังคับกรอก)
+    let extra: Record<string, string> = {};
+    if (field === "call_status" && value === "กู้ไม่ผ่าน") {
+      const why = await ask({ title: `${row.lead_code} ${row.customer_name}: กู้ไม่ผ่าน`, label: "สาเหตุที่กู้ไม่ผ่าน", initial: row.lost_reason ?? "" });
+      if (why === null) { await load(); return; } extra = { lost_reason: why };
+    }
     setRowBusy(row.lead_id); setMsg(null);
     try {
-      const { ok, j } = await post({ ...Object.fromEntries(EDITABLE.map((k) => [k, row[k] ?? ""])), [field]: value, lead_id: row.lead_id, updated_at_seen: row.updated_at });
+      const { ok, j } = await post({ ...Object.fromEntries(EDITABLE.map((k) => [k, row[k] ?? ""])), [field]: value, ...extra, lead_id: row.lead_id, updated_at_seen: row.updated_at });
       if (!ok) throw new Error(j.code === "VALIDATION" && j.fields?.need ? `${row.lead_code}: ยังไม่มี Need กรุณากด ดู/แก้ไข แล้วเลือก Need ก่อน` : j.error ?? "บันทึกไม่สำเร็จ");
       await load();
     } catch (e) { setMsg({ type: "error", text: e instanceof Error ? e.message : "เกิดข้อผิดพลาด" }); await load(); }
@@ -220,7 +228,7 @@ export function LeadsManager() {
             return (<>
               {grp("1. ข้อมูลติดต่อ", <>
                 {field("received_at", "วันที่รับ Lead", { type: "date", required: true })}
-                {select("source_channel", "ช่องทาง", pair(CHANNELS), { required: true })}
+                {select("source_channel", "ช่องทาง", [...pair(CHANNELS), ...(LEGACY_CHANNELS.includes(form.source_channel) ? [[form.source_channel, channelLabel(form.source_channel)] as [string, string]] : [])], { required: true })}
                 {field("customer_name", "ชื่อลูกค้า", { required: true })}
                 {field("phone", "เบอร์โทร", { type: "tel", mode: "tel", placeholder: "08x-xxx-xxxx" })}
                 {field("line_id", "Line", { placeholder: "@line หรือ LINE ID" })}
@@ -241,7 +249,7 @@ export function LeadsManager() {
                 {select("call_status", "Call Status", pair(CALL_STATUS), { onChange: (v) => setStatus("call_status", v) })}
                 {field("staff", "Staff", { list: "staff-list" })}
                 <datalist id="staff-list">{data.staff.map((o) => <option key={o} value={o} />)}</datalist>
-                {(closedNow || form.lost_reason) && field("lost_reason", "เหตุผลที่ปิดไม่สำเร็จ")}
+                {normCall(form.call_status) === "กู้ไม่ผ่าน" ? field("lost_reason", "สาเหตุที่กู้ไม่ผ่าน", { required: true }) : (closedNow || form.lost_reason) && field("lost_reason", "เหตุผลที่ปิดไม่สำเร็จ")}
               </>)}
               {grp("4. การติดตาม", <>
                 {field("last_contacted_at", "ติดต่อล่าสุด", { type: "date" })}
@@ -305,7 +313,7 @@ export function LeadsManager() {
         <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">ค้นหา</span>
           <input value={f.q} onChange={(e) => { setF({ ...f, q: e.target.value }); setPage(1); }} placeholder="ชื่อ / เบอร์ / Line / ความสนใจ / Remark" className="w-56 h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm" /></label>
         {fdate("from", "รับตั้งแต่")}{fdate("to", "ถึง")}
-        {fsel("channel", "ช่องทาง", pair(CHANNELS))}{fsel("need", "ความต้องการ", pair(NEEDS))}{fsel("status", "สถานะ", pair(statusOptsFilter))}
+        {fsel("channel", "ช่องทาง", ALL_CHANNELS.map((c) => [c, channelLabel(c)] as [string, string]))}{fsel("need", "ความต้องการ", pair(NEEDS))}{fsel("status", "สถานะ", pair(statusOptsFilter))}
         {fsel("callStatus", "Call Status", pair(CALL_STATUS))}{fsel("staff", "Staff", pair(data.staff))}
         {fsel("area", "พื้นที่", pair(data.areas))}
         {Object.values(f).some(Boolean) && <button onClick={() => { setF(EMPTY_F); setPage(1); }} className="py-1.5 text-sm underline">ล้าง</button>}
@@ -377,6 +385,7 @@ export function LeadsManager() {
         </div>
       )}
       {!form && <button onClick={() => openForm(null)} aria-label="เพิ่ม Lead (มือถือ)" className="fixed bottom-20 right-4 z-30 flex h-13 items-center gap-1 rounded-full bg-brand-600 px-5 text-sm font-semibold text-white shadow-lg shadow-brand-600/30 md:hidden">+ เพิ่ม Lead</button>}
+      {askEl}
     </div>
   );
 }

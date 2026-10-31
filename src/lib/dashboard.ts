@@ -1,6 +1,6 @@
 import { excludePages, pageMetric, summarizeFb, VIEWERS_REMARK } from "./fbmetrics";
 import type { Role } from "./roles";
-import { isQualifiedCall, isSiteVisitCall, BUY_NEEDS, BUY_STATUS, SELL_NEEDS, SELL_STATUS } from "./lead-options";
+import { isQualifiedLead, isWalkIn, BUY_NEEDS, BUY_STATUS, SELL_NEEDS, SELL_STATUS } from "./lead-options";
 import { COMPARE_LABEL, compareRange, type CompareMode, type DRange } from "./compare";
 import { thDate } from "./thdate";
 
@@ -17,12 +17,18 @@ export type DashData = {
 };
 export type Filters = { from?: string; to?: string; channel?: string; campaign?: string; area?: string; service?: string };
 
-export const CHANNELS = ["Facebook Organic", "Facebook Ads", "Google Ads", "Website/SEO", "LINE OA", "TikTok/YouTube", "Event/Home Expo", "Referral", "Other", "Unknown"];
+// ช่องทาง (31/10/2026): ลูกค้ามาจากโฆษณา = Facebook Ads · ทักเอง = Facebook Message / Facebook Comment · TikTok กับ YouTube แยกกัน
+export const CHANNELS = ["Facebook Ads", "Facebook Message", "Facebook Comment", "Google Ads", "Website/SEO", "LINE OA", "TikTok", "YouTube", "Event/Home Expo", "Referral", "Other", "Unknown"];
+/** ช่องทางเดิม: Lead ที่บันทึกไว้แล้วยังเก็บค่าเดิม แสดงในตัวกรองและรายงานเป็น "(ค่าเดิม)" แต่เลือกให้ Lead ใหม่ไม่ได้ */
+export const LEGACY_CHANNELS = ["Facebook Organic", "TikTok/YouTube"];
+export const ALL_CHANNELS = [...CHANNELS, ...LEGACY_CHANNELS];
+export const channelLabel = (c: string) => (LEGACY_CHANNELS.includes(c) ? `${c} (ค่าเดิม)` : c);
 export const SERVICES = ["Product", "Project", "Event"];
 export const PIPELINE = ["New", "Contacted", "Qualified", "Proposal", "Won", "Lost"];
 export const DEFAULT_EXCLUDED_PAGES = ["BAAN Prompt Community - Buriram&Surin"];
 const PAID_CHANNELS = ["Facebook Ads", "Google Ads"];
-const CH = { meta: "Facebook Ads", google: "Google Ads", posts: "Facebook Organic", line: "LINE OA" };
+// สถิติ Facebook Page (Organic) อยู่ในตัวกรองช่องทาง Facebook Message / Comment (และค่าเดิม Facebook Organic)
+const CH: Record<"meta" | "google" | "posts" | "line", string[]> = { meta: ["Facebook Ads"], google: ["Google Ads"], posts: ["Facebook Message", "Facebook Comment", "Facebook Organic"], line: ["LINE OA"] };
 
 export type KpiState = "value" | "pending" | "excluded" | "restricted" | "na";
 export type Kpi = { key: string; label: string; fmt: "thb" | "int" | "pct" | "sec"; value: number | null; state: KpiState; note?: string; /** มีค่าแต่ข้อมูลไม่ครบ: เหตุผล */ incomplete?: string;
@@ -116,7 +122,7 @@ export const fmtGaps = (g: Span[]) => g.map(([a, b]) => (a === b ? dmyS(a) : `${
 export function computeDashboard(data: DashData, f: Filters, role: Role): Dashboard {
   const notes: string[] = [];
   const warnings: string[] = [];
-  const chOk = (c: keyof typeof CH) => !f.channel || f.channel === CH[c];
+  const chOk = (c: keyof typeof CH) => !f.channel || CH[c].includes(f.channel);
   const excluded = (c: keyof typeof CH) => !chOk(c);
 
   // ---- ตัวกรองต่อชุดข้อมูล ----
@@ -181,8 +187,8 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
 
   const lineNew = sumOf(line, "new_friends"), lineInq = sumOf(line, "inquiries"), lineLeads = sumOf(line, "leads");
 
-  // Qualified Lead = Call Status รอเข้าชม / เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน (ผู้ใช้กำหนด 28/10/2026)
-  const qualified = (r: Row) => isQualifiedCall(r.call_status);
+  // Qualified Lead (31/10/2026): คนต้องการขาย = เซ็นสัญญา / สัญญาเปิด / ขายแล้ว · คนต้องการซื้อ = Call Status รอเข้าชม / เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน
+  const qualified = (r: Row) => isQualifiedLead(r);
   const leadsTotal = leads.length;
   // ช่วงเวลาของ CPL: ใช้ช่วงที่เลือก หรือถ้าไม่ได้เลือก ใช้ช่วงของรายงานโฆษณาที่นำมาคิด เพื่อให้ค่าโฆษณาและ Lead เป็นช่วงเดียวกัน
   const adSpan = mergeSpans([...meta, ...google]);
@@ -209,6 +215,16 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
     return kpi(key, label, "thb", Math.round((paidTotal / base.length) * 100) / 100, undefined, `${formula} · ฐาน ${base.length} Lead ที่รับ ${cplPeriod} (ช่วงเดียวกับค่าโฆษณา)`, cplIncomplete);
   };
   const cplAdsBase = cplLeads.filter((r) => PAID_CHANNELS.includes(r.source_channel));
+  /** CPL แยกช่องทางโฆษณา (31/10/2026): ค่าโฆษณาของแพลตฟอร์ม ÷ Lead ช่องทางเดียวกัน ช่วงเดียวกัน */
+  const cplCh = (key: string, label: string, src: "meta" | "google", spend: number | null, channel: string): Kpi => {
+    const formula = `${src === "meta" ? "Meta Ads Spend" : "Google Ads Spend"} ÷ Lead ช่องทาง ${channel}`;
+    if (excluded(src)) return kpi(key, label, "thb", null, "excluded", `${formula} · ไม่รวมในตัวกรองช่องทางนี้`);
+    if (spend === null) return kpi(key, label, "thb", null, "pending", `${formula} · ยังไม่มีรายงานโฆษณาในช่วงนี้`);
+    if (cplBlock) return kpi(key, label, "thb", null, "na", cplBlock);
+    const base = cplLeads.filter((r) => r.source_channel === channel);
+    if (!base.length) return kpi(key, label, "thb", null, "na", `${formula} · ไม่มี Lead ช่องทางนี้ในช่วง ${cplPeriod} (หารด้วย 0 ไม่ได้)`);
+    return kpi(key, label, "thb", Math.round((spend / base.length) * 100) / 100, undefined, `${formula} · ฐาน ${base.length} Lead ที่รับ ${cplPeriod}`, cplIncomplete);
+  };
 
   const groups: Dashboard["groups"] = [
     { title: "ค่าโฆษณา", items: [
@@ -234,13 +250,15 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
     ] },
     { title: "Leads", items: [
       kpi("leads", "Total Leads", "int", leadsAll.length ? leadsTotal : null, undefined, "นับ lead_id ไม่ซ้ำ ตามวันที่รับ Lead ในช่วงที่เลือก"),
-      kpi("qualified", "Qualified Leads", "int", leadsAll.length ? leadsQ : null, undefined, `จำนวน Lead ที่ Call Status = รอเข้าชม, เข้าชมแล้ว, จอง, ซื้อสำเร็จ หรือ กู้ไม่ผ่าน (ติดต่อได้แล้วยังไม่นับ) จาก ${leadsTotal} Lead ในช่วงที่เลือก (แยกตามช่องทางดูที่กราฟ)`),
+      kpi("qualified", "Qualified Leads", "int", leadsAll.length ? leadsQ : null, undefined, `คนต้องการขาย: เซ็นสัญญา / สัญญาเปิด / ขายแล้ว · คนต้องการซื้อ: Lead ที่ Call Status = รอเข้าชม, เข้าชมแล้ว, จอง, ซื้อสำเร็จ หรือ กู้ไม่ผ่าน (ติดต่อได้แล้วยังไม่นับ) จาก ${leadsTotal} Lead ในช่วงที่เลือก (แยกตามช่องทางดูที่กราฟ)`),
     ] },
     { title: "ประสิทธิภาพ (ไม่ใช่ ROI เชิงสาเหตุ)", items: [
       cplKpi("cpl", "CPL (Lead จากโฆษณา)", cplAdsBase, "Lead จาก Facebook Ads + Google Ads"),
       cplKpi("cpl_all", "CPL (Lead ทั้งหมด)", cplLeads, "Total Leads ทุกช่องทาง"),
-      cplKpi("cplq", "Cost per Qualified Lead", cplAdsBase.filter(qualified), "Qualified Lead จากโฆษณา (Call Status รอเข้าชม / เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน)"),
-      cplKpi("cpsv", "Cost per Site Visit", cplLeads.filter((r) => isSiteVisitCall(r.call_status)), "Lead ทุกช่องทางที่ Call Status = เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน"),
+      cplCh("cpl_meta", "CPL Facebook Ads", "meta", metaV, "Facebook Ads"),
+      cplCh("cpl_google", "CPL Google Ads", "google", googleV, "Google Ads"),
+      cplKpi("cplq", "Cost per Qualified Lead", cplAdsBase.filter(qualified), "Qualified Lead จากโฆษณา (คนต้องการซื้อ: Call Status รอเข้าชม / เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน · คนต้องการขาย: เซ็นสัญญา / สัญญาเปิด / ขายแล้ว)"),
+      cplKpi("cpsv", "Cost per Walk in", cplLeads.filter((r) => isWalkIn(r)), "Walk in ทุกช่องทาง (คนต้องการซื้อที่ Call Status = เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน)"),
     ] },
   ];
 
@@ -296,7 +314,7 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
       spendByChannel: spendByChannel.length ? spendByChannel : null,
       leadsByChannel: leadsTotal ? countBy(leads, "source_channel") : null,
       pipeline: leadsTotal ? countBy(leads, "status", PIPELINE) : null,
-      leadQualByChannel: leadsAll.length ? CHANNELS.map((c) => ({ label: c, value: contacted.filter((r) => r.source_channel === c).length })).filter((x) => x.value > 0 || leads.some((r) => r.source_channel === x.label)) : null,
+      leadQualByChannel: leadsAll.length ? ALL_CHANNELS.map((c) => ({ label: channelLabel(c), value: contacted.filter((r) => r.source_channel === c).length })).filter((x) => x.value > 0 || leads.some((r) => r.source_channel === x.label)) : null,
       buyStatus: statusChart(leads, BUY_NEEDS, "buy_status", BUY_STATUS),
       sellStatus: statusChart(leads, SELL_NEEDS, "sell_status", SELL_STATUS),
       lineGrowth, monthly: monthly.length ? monthly : null, daily: daily.length ? daily : null,

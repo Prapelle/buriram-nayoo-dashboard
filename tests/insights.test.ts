@@ -1,7 +1,7 @@
 // 30/10/2026 — ติดตามลูกค้า · ผลงานรายพนักงาน · เหตุผลที่ไม่สำเร็จ · Checklist ข้อมูลประจำเดือน · เป้าหมายรายเดือน
 // รัน: npx tsx tests/insights.test.ts (ไม่ต้องใช้ไฟล์จริง)
 import assert from "node:assert/strict";
-import { followUps, isClosedLead, leadsInRange, lostReasons, staffPerformance } from "../src/lib/lead-insights";
+import { followUps, isClosedLead, leadsInRange, loanRejectReasons, lostReasons, staffPerformance, staffRow } from "../src/lib/lead-insights";
 import { buildChecklist, monthWindow } from "../src/lib/data-checklist";
 import { progressMonth, targetProgress } from "../src/lib/target-progress";
 import { TargetError, validateTarget } from "../src/lib/targets";
@@ -32,11 +32,19 @@ const sp: Row[] = [
   L("4", { staff: "เอ", call_status: "ซื้อสำเร็จ" }), L("5", { staff: " เอ ", need: "ขาย", sell_status: "เซ็นสัญญา" }), L("6", { staff: "เอ", need: "ขาย", sell_status: "ขายแล้ว" }),
   L("7", { staff: "บี", call_status: "ไม่สนใจ" }), L("8", { staff: "", call_status: "จอง" }),
 ];
-const st = Object.fromEntries(staffPerformance(sp).map((s) => [s.staff, s]));
-assert.deepEqual({ ...st["เอ"] }, { staff: "เอ", leads: 6, qualified: 3, qualifiedPct: 50, siteVisits: 2, leadsPerVisit: 3, contractSold: 2, leadsPerContract: 3, bought: 1 });
-assert.equal(st["บี"].leadsPerVisit, null); assert.equal(st["บี"].qualifiedPct, 0); assert.equal(st["(ไม่ระบุ Staff)"].siteVisits, 1);
-assert.equal(staffPerformance(sp)[0].staff, "เอ");
-ok("Staff เอ: Lead 6 · Qualified 3 (50%) · Site Visit 2 → Lead ต่อ 1 Site Visit = 3 · สัญญา+ขายแล้ว 2 → 3 · ซื้อสำเร็จ 1 · ไม่มี Site Visit → — (ไม่ใช่ 0) · Staff ว่าง = (ไม่ระบุ Staff)");
+const st = Object.fromEntries(staffPerformance(sp, "buyer").map((s) => [s.staff, s]));
+// คนต้องการซื้อ: เอ มี 4 ราย (ติดต่อได้แล้ว / รอเข้าชม / เข้าชมแล้ว / ซื้อสำเร็จ) · Qualified 3 · Walk in 2 · ซื้อสำเร็จ 1 → %Conversion 25
+assert.deepEqual({ ...st["เอ"] }, { staff: "เอ", leads: 4, qualified: 3, qualifiedPct: 75, walkIn: 2, won: 1, conversionPct: 25 });
+assert.equal(st["บี"].conversionPct, 0); assert.equal(st["บี"].qualifiedPct, 0); assert.equal(st["(ไม่ระบุ Staff)"].walkIn, 1);
+const ss = Object.fromEntries(staffPerformance(sp, "seller").map((s) => [s.staff, s]));
+// คนต้องการขาย: Qualified = เซ็นสัญญา / สัญญาเปิด / ขายแล้ว (ไม่ใช้ Call Status) · %Conversion = ขายแล้ว ÷ Lead
+assert.deepEqual({ ...ss["เอ"] }, { staff: "เอ", leads: 2, qualified: 2, qualifiedPct: 100, walkIn: 0, won: 1, conversionPct: 50 });
+assert.equal(Object.keys(ss).length, 1);
+ok("แยก 2 ฝั่ง · คนต้องการซื้อ เอ: Lead 4 · Qualified 3 (75%) · Walk in 2 · ซื้อสำเร็จ 1 → %Conversion 25% · คนต้องการขาย เอ: Lead 2 · Qualified (สัญญา+ขายแล้ว) 2 · ขายแล้ว 1 → 50% · Staff ว่าง = (ไม่ระบุ Staff)");
+assert.deepEqual(loanRejectReasons([L("x", { call_status: "กู้ไม่ผ่าน", lost_reason: "รายได้ไม่พอ" }), L("y", { call_status: "กู้ไม่ผ่าน", lost_reason: " รายได้ไม่พอ " }), L("z", { call_status: "กู้ไม่ผ่าน" }), L("w", { need: "ขาย", call_status: "กู้ไม่ผ่าน", lost_reason: "x" })]),
+  [{ reason: "รายได้ไม่พอ", count: 2 }, { reason: "(ไม่ได้กรอกสาเหตุ)", count: 1 }]);
+assert.equal(staffRow("รวม", [], "buyer").conversionPct, null);
+ok("สาเหตุที่กู้ไม่ผ่าน: รวมข้อความเดียวกัน · ไม่กรอก = (ไม่ได้กรอกสาเหตุ) · ไม่นับคนต้องการขาย · ไม่มี Lead → %Conversion — (ไม่ใช่ 0)");
 
 console.log("3) เหตุผลที่ไม่สำเร็จ");
 const lr: Row[] = [

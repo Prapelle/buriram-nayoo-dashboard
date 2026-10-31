@@ -6,7 +6,7 @@
  */
 import { writeAudit } from "./audit";
 import {
-  AUTO_STATUS, autoChanges, DEFAULT_PRODUCTS, DEV_COLUMNS, DEV_DEFAULT, DEV_EDITABLE, DEV_STATUS, findDevDuplicates, IMPORT_HEADERS, LOG_COLUMNS, nextDevCode, normLine, normName, normPhone,
+  addDays, AUTO_STATUS, autoChanges, CONTACT_COLUMNS, CONTACT_METHODS, NEXT_CONTACT_DAYS, DEFAULT_PRODUCTS, DEV_COLUMNS, DEV_DEFAULT, DEV_EDITABLE, DEV_STATUS, findDevDuplicates, IMPORT_HEADERS, LOG_COLUMNS, nextDevCode, normLine, normName, normPhone,
   PRODUCT_COLUMNS, productDrivenStatus, productState, todayBkk, validateDev, validateProduct, type Dev, type DevDup, type DevProduct,
 } from "./developers";
 import { appendRows, batchUpdateValues, colLetter, deleteRow, listTabs, readTabs, toRow } from "./sheets";
@@ -16,11 +16,16 @@ export class DevError extends Error {
 }
 type Tab = { headers: string[]; rows: Record<string, string>[] };
 const TABS = ["DEVELOPERS", "DEVELOPER_PRODUCTS", "DEVELOPER_STATUS_LOG", "APP_CONFIG"];
+const CONTACTS = "DEVELOPER_CONTACTS"; // เพิ่ม 31/10/2026 — ยังไม่ได้เตรียม Sheet ก็เปิดหน้าได้ (ไม่มีประวัติ) แต่บันทึกการติดต่อไม่ได้
 const CONFIG_KEY = "developer_products";
 
 async function load(): Promise<Record<string, Tab>> {
   let t: Record<string, Tab>;
-  try { t = await readTabs(TABS); } catch { throw new DevError(409, "ยังไม่มีแท็บ Developer — ให้ Admin กด ตั้งค่า → ตั้งค่าระบบ → เตรียม Google Sheet", "SHEET_NOT_READY"); }
+  try {
+    const have = new Set((await listTabs()).map((m) => m.title));
+    t = await readTabs(have.has(CONTACTS) ? [...TABS, CONTACTS] : TABS);
+    if (!t[CONTACTS]) t[CONTACTS] = { headers: [], rows: [] };
+  } catch { throw new DevError(409, "ยังไม่มีแท็บ Developer — ให้ Admin กด ตั้งค่า → ตั้งค่าระบบ → เตรียม Google Sheet", "SHEET_NOT_READY"); }
   if (!t.DEVELOPERS.headers.includes("developer_id") || !t.DEVELOPER_PRODUCTS.headers.includes("product_id") || !t.DEVELOPER_STATUS_LOG.headers.includes("log_id"))
     throw new DevError(409, "แท็บ Developer ยังไม่พร้อม — ให้ Admin กด เตรียม Google Sheet", "SHEET_NOT_READY");
   return t;
@@ -69,17 +74,33 @@ export async function listDevelopers() {
   const products = t.DEVELOPER_PRODUCTS.rows.filter((r) => r.product_id && ids.has(r.developer_id)).map(pickProd);
   const logs = t.DEVELOPER_STATUS_LOG.rows.filter((r) => r.log_id).map((r) => Object.fromEntries(LOG_COLUMNS.map((c) => [c, r[c] ?? ""])));
   const staff = [...new Set(devs.map((d) => d.staff.trim()).filter(Boolean))].sort();
-  return { devs, products, logs, staff, productTypes: productTypesOf(t.APP_CONFIG.rows), today: todayBkk() };
+  const contacts = t[CONTACTS].rows.filter((r) => r.contact_id).map((r) => Object.fromEntries(CONTACT_COLUMNS.map((c) => [c, r[c] ?? ""])));
+  return { devs, products, logs, contacts, staff, productTypes: productTypesOf(t.APP_CONFIG.rows), today: todayBkk() };
 }
 
 function manualLog(dev: Dev, from: string, to: string, actor: string, now: string) {
   return { log_id: crypto.randomUUID(), developer_id: dev.developer_id, staff: dev.staff ?? "", from_status: from, to_status: to, kind: "manual", counts_as: "", month: todayBkk().slice(0, 7), changed_by: actor, changed_at: now };
 }
-/** ผลของการเปลี่ยน Status ด้วยมือ: เข้าพบแล้ว → ติดต่อล่าสุด = วันนี้ · ปิดการขาย → won_at = วันนี้ */
+/** ผลของการเปลี่ยน Status ด้วยมือ: เข้าพบแล้ว → ติดต่อล่าสุด = วันนี้ (+ ติดต่อครั้งถัดไป +30 วันถ้าว่าง/ผ่านไปแล้ว) · ปิดการขาย → won_at = วันนี้ */
 function applyStatus(rec: Dev, to: string, now: string) {
   rec.status = to; rec.status_changed_at = now;
-  if (to === "เข้าพบแล้ว") rec.last_contacted_at = todayBkk();
+  if (to === "เข้าพบแล้ว") touchContact(rec, todayBkk());
   if (to === "ปิดการขาย") rec.won_at = todayBkk();
+}
+function touchContact(rec: Dev, date: string, method?: string) {
+  rec.last_contacted_at = date;
+  if (method) rec.last_contact_method = method;
+  if (!rec.next_follow_up_at || rec.next_follow_up_at <= date) rec.next_follow_up_at = addDays(date, NEXT_CONTACT_DAYS);
+}
+/** ตรวจว่าพร้อมบันทึกการติดต่อ (มีแท็บประวัติ + คอลัมน์สถานะการเข้าพบ) */
+function contactReady(t: Record<string, Tab>, method: string) {
+  if (!CONTACT_METHODS.includes(method)) throw new DevError(422, "เลือกสถานะการเข้าพบ: โทร / Line / เจอหน้า", "VALIDATION", { fields: { last_contact_method: "เลือก โทร / Line / เจอหน้า" } });
+  if (!t[CONTACTS].headers.includes("contact_id") || !t.DEVELOPERS.headers.includes("last_contact_method"))
+    throw new DevError(409, "ยังไม่มีแท็บประวัติการติดต่อ — ให้ Admin กด ตั้งค่า → เตรียม Google Sheet ก่อน", "SHEET_NOT_READY");
+}
+async function writeContact(t: Record<string, Tab>, dev: Dev, method: string, date: string, source: "status" | "manual", note: string, actor: string, now: string) {
+  const row = { contact_id: crypto.randomUUID(), developer_id: dev.developer_id, staff: dev.staff ?? "", method, contacted_at: date, source, note, created_by: actor, created_at: now };
+  await appendRows(CONTACTS, [toRow(t[CONTACTS].headers, row)]); t[CONTACTS].rows.push(row);
 }
 function checkManualStatus(to: string, products: DevProduct[], developerId: string) {
   if (AUTO_STATUS.includes(to)) throw new DevError(422, `"${to}" ระบบตั้งให้เองจากวันของ Product — เพิ่ม Product ที่หน้า Developer แทน`, "AUTO_STATUS", { fields: { status: "สถานะนี้ตั้งเองไม่ได้" } });
@@ -111,27 +132,33 @@ export async function saveDeveloper(input: Record<string, unknown>, actor: strin
   const statusChanged = (prev?.status || "") !== v.rec.status && !(prev && AUTO_STATUS.includes(prev.status) && AUTO_STATUS.includes(v.rec.status));
   if (prev ? statusChanged : v.rec.status !== DEV_DEFAULT) checkManualStatus(v.rec.status, t.DEVELOPER_PRODUCTS.rows, id);
   if (prev && !statusChanged) v.rec.status = prev.status; // ไม่ทับ Status ที่ระบบเพิ่งเปลี่ยน
+  const met = v.rec.status === "เข้าพบแล้ว" && (prev ? statusChanged : true);
+  if (met) contactReady(t, v.rec.last_contact_method); // ย้ายมา เข้าพบแล้ว ต้องเลือกวิธี (โทร / Line / เจอหน้า)
   if (!prev) {
     const rec: Dev = { ...Object.fromEntries(DEV_COLUMNS.map((c) => [c, ""])), ...v.rec, developer_id: crypto.randomUUID(), dev_code: nextDevCode(rows.map((r) => r.dev_code)),
       created_by: actor, created_at: now, updated_by: actor, updated_at: now };
     applyStatus(rec, rec.status, now);
     if (v.rec.last_contacted_at && rec.status === "เข้าพบแล้ว") rec.last_contacted_at = v.rec.last_contacted_at;
+    if (met) touchContact(rec, rec.last_contacted_at || todayBkk(), v.rec.last_contact_method);
     await appendRows("DEVELOPERS", [toRow(t.DEVELOPERS.headers, rec)]);
     if (rec.status !== DEV_DEFAULT) await writeLogs(t, [manualLog(rec, "", rec.status, actor, now)]);
+    if (met) await writeContact(t, rec, v.rec.last_contact_method, rec.last_contacted_at, "status", "", actor, now);
     await writeAudit(actor, "developer_create", "developer", rec.developer_id, `${rec.dev_code} ${rec.company_name || rec.project_main}`);
     return { created: true, dev: rec };
   }
   const rec: Dev = { ...prev, ...Object.fromEntries(DEV_EDITABLE.map((k) => [k, v.rec[k]])), updated_by: actor, updated_at: now };
   if (statusChanged) { applyStatus(rec, v.rec.status, now); if (v.rec.last_contacted_at !== prev.last_contacted_at && v.rec.last_contacted_at) rec.last_contacted_at = v.rec.last_contacted_at; }
+  if (met) touchContact(rec, rec.last_contacted_at || todayBkk(), v.rec.last_contact_method);
   await batchUpdateValues([{ range: rowRange("DEVELOPERS", t.DEVELOPERS.headers, rowNo), values: [toRow(t.DEVELOPERS.headers, rec)] }]);
   if (statusChanged) await writeLogs(t, [manualLog(rec, prev.status, rec.status, actor, now)]);
+  if (met) await writeContact(t, rec, v.rec.last_contact_method, rec.last_contacted_at, "status", "", actor, now);
   const changed = DEV_EDITABLE.filter((k) => (prev![k] ?? "") !== (rec[k] ?? "")).map((k) => k === "status" ? `Status ${prev!.status} → ${rec.status}` : k);
   await writeAudit(actor, "developer_update", "developer", rec.developer_id, `${rec.dev_code}: ${changed.join(", ") || "ไม่มีการเปลี่ยนแปลง"}`);
   return { created: false, dev: rec };
 }
 
 /** เปลี่ยน Status จากบอร์ด Sale developer (ลากการ์ด / เมนู) */
-export async function changeDevStatus(id: string, to: string, updatedAtSeen: string, actor: string) {
+export async function changeDevStatus(id: string, to: string, updatedAtSeen: string, actor: string, method?: string) {
   if (!id) throw new DevError(400, "ไม่ระบุรายการ", "BAD_REQUEST");
   const t = await load();
   const i = t.DEVELOPERS.rows.findIndex((r) => r.developer_id === id);
@@ -140,13 +167,35 @@ export async function changeDevStatus(id: string, to: string, updatedAtSeen: str
   if (updatedAtSeen !== prev.updated_at) throw new DevError(409, "รายการนี้ถูกแก้ไขโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่", "STALE");
   if ((prev.status || DEV_DEFAULT) === to) return { changed: false, dev: prev };
   checkManualStatus(to, t.DEVELOPER_PRODUCTS.rows, id);
+  if (to === "เข้าพบแล้ว") contactReady(t, String(method ?? ""));
   const now = new Date().toISOString();
   const rec: Dev = { ...prev, updated_by: actor, updated_at: now };
   applyStatus(rec, to, now);
+  if (to === "เข้าพบแล้ว") rec.last_contact_method = String(method);
   await batchUpdateValues([{ range: rowRange("DEVELOPERS", t.DEVELOPERS.headers, i + 2), values: [toRow(t.DEVELOPERS.headers, rec)] }]);
   await writeLogs(t, [manualLog(rec, prev.status || DEV_DEFAULT, to, actor, now)]);
+  if (to === "เข้าพบแล้ว") await writeContact(t, rec, String(method), rec.last_contacted_at, "status", "", actor, now);
   await writeAudit(actor, "developer_status", "developer", id, `${rec.dev_code}: ${prev.status || DEV_DEFAULT} → ${to}`);
   return { changed: true, dev: rec };
+}
+
+/** บันทึกการติดต่อ (ไม่เปลี่ยน Status): อัปเดตติดต่อล่าสุด + สถานะการเข้าพบ · นับในยอด โทร / Line / เจอหน้า แต่ไม่นับเป็น "เข้าพบ" */
+export async function recordContact(id: string, method: string, date: string, note: string, updatedAtSeen: string, actor: string) {
+  const t = await load();
+  const i = t.DEVELOPERS.rows.findIndex((r) => r.developer_id === id);
+  if (i < 0) throw new DevError(404, "ไม่พบรายการนี้", "NOT_FOUND");
+  const prev = pickDev(t.DEVELOPERS.rows[i]);
+  if (updatedAtSeen !== prev.updated_at) throw new DevError(409, "รายการนี้ถูกแก้ไขโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่", "STALE");
+  contactReady(t, method);
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(date) && date <= todayBkk() ? date : todayBkk();
+  if (String(note ?? "").length > 500) throw new DevError(422, "หมายเหตุยาวเกิน 500 ตัวอักษร", "VALIDATION", { fields: { note: "ยาวเกิน 500 ตัวอักษร" } });
+  const now = new Date().toISOString();
+  const rec: Dev = { ...prev, updated_by: actor, updated_at: now };
+  if (!prev.last_contacted_at || d >= prev.last_contacted_at) touchContact(rec, d, method);
+  await batchUpdateValues([{ range: rowRange("DEVELOPERS", t.DEVELOPERS.headers, i + 2), values: [toRow(t.DEVELOPERS.headers, rec)] }]);
+  await writeContact(t, rec, method, d, "manual", String(note ?? "").trim(), actor, now);
+  await writeAudit(actor, "developer_contact", "developer", id, `${rec.dev_code}: ติดต่อ (${method}) ${d}`);
+  return { dev: rec };
 }
 
 export async function deleteDeveloper(id: string, updatedAtSeen: string, actor: string) {

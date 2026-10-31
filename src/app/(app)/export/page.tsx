@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { ExportForm, type DatasetInfo } from "@/components/ExportForm";
-import { CHANNELS } from "@/lib/dashboard";
+import { ALL_CHANNELS } from "@/lib/dashboard";
 import { NEEDS } from "@/lib/lead-options";
 import { DATASETS } from "@/lib/export/datasets";
 import { readColumns } from "@/lib/tabdata";
@@ -26,7 +26,7 @@ export default async function ExportPage() {
         <h1 className="text-[26px] font-bold tracking-tight">ส่งออกข้อมูล</h1>
         <p className="text-sm text-slate-500">ดาวน์โหลดเป็น CSV เพื่อใช้ต่อใน Excel / Google Sheets · แต่ละไฟล์เป็นข้อมูลระดับเดียว (ดู ระดับข้อมูล) · ไฟล์กลุ่ม สรุป เป็นตัวเลขที่สรุปแล้ว ห้ามนำไปบวกกับไฟล์ต้นฉบับ</p>
       </div>
-      <ExportForm datasets={datasets} channels={CHANNELS} campaigns={campaigns} needs={NEEDS} />
+      <ExportForm datasets={datasets} channels={ALL_CHANNELS} campaigns={campaigns} needs={NEEDS} />
     </section>
   );
 }

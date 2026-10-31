@@ -1,6 +1,6 @@
 // วิเคราะห์ Lead (30/10/2026): รายการติดตาม · ผลงานรายพนักงาน · เหตุผลที่ไม่สำเร็จ
 // ใช้ร่วมกันในหน้า ภาพรวม, Leads และ รายงาน Lead (ไม่อ่านข้อมูลส่วนบุคคลนอกจากที่หน้านั้นมีสิทธิ์อยู่แล้ว)
-import { isQualifiedCall, isSiteVisitCall, normCall, SELL_NEEDS } from "./lead-options";
+import { isQualifiedLead, isWalkIn, normCall, SELL_NEEDS, SELL_SOLD } from "./lead-options";
 
 export type LeadRow = Record<string, string>;
 const day = (v: unknown) => String(v ?? "").slice(0, 10);
@@ -16,7 +16,7 @@ export function isClosedLead(r: LeadRow): boolean {
 }
 
 /** สัญญา + ขายแล้ว (Seller Leads): เซ็นสัญญา / สัญญาเปิด / ขายแล้ว */
-export const CONTRACT_SELL = ["เซ็นสัญญา", "สัญญาเปิด", "ขายแล้ว"];
+export const CONTRACT_SELL = ["เซ็นสัญญา", "สัญญาเปิด", "ขายแล้ว"]; // = Qualified ของคนต้องการขาย
 export const isContractOrSold = (r: LeadRow) => CONTRACT_SELL.includes(r.sell_status ?? "");
 
 export const STALE_DAYS = 3; // ผู้ใช้กำหนด 30/10/2026 (เดิม 14)
@@ -40,26 +40,38 @@ export function followUps(rows: LeadRow[], today: string): FollowUp {
   };
 }
 
-export type StaffRow = {
-  staff: string; leads: number; qualified: number; qualifiedPct: number | null;
-  siteVisits: number; leadsPerVisit: number | null; contractSold: number; leadsPerContract: number | null; bought: number;
-};
+/**
+ * ผลงานรายพนักงาน แยก 2 ฝั่ง (31/10/2026)
+ * - คนต้องการขาย (Need = ขาย): Qualified = เซ็นสัญญา / สัญญาเปิด / ขายแล้ว · สำเร็จ = ขายแล้ว
+ * - คนต้องการซื้อ (ซื้อ / เช่า / สร้าง และยังไม่ระบุ Need): Qualified = Call Status · Walk in · สำเร็จ = ซื้อสำเร็จ
+ * %Conversion = สำเร็จ ÷ Lead × 100 · หาร 0 = null
+ */
 const r1 = (n: number) => Math.round(n * 10) / 10;
-/** ผลงานรายพนักงาน (ตามช่อง Staff) · Lead ต่อ 1 Site Visit = Lead ÷ Site Visit · Lead ต่อ 1 สัญญา/ขาย = Lead ÷ (เซ็นสัญญา + สัญญาเปิด + ขายแล้ว) · หาร 0 = null */
-export function staffPerformance(rows: LeadRow[]): StaffRow[] {
+export type Side = "seller" | "buyer";
+export const sideRows = (rows: LeadRow[], side: Side) => rows.filter((r) => (side === "seller") === isSeller(r));
+export type StaffRow = { staff: string; leads: number; qualified: number; qualifiedPct: number | null; walkIn: number; won: number; conversionPct: number | null };
+const pct = (a: number, b: number) => (b ? r1((a / b) * 100) : null);
+export function staffPerformance(rows: LeadRow[], side: Side): StaffRow[] {
   const m = new Map<string, LeadRow[]>();
-  for (const r of rows) { const k = (r.staff ?? "").trim() || "(ไม่ระบุ Staff)"; if (!m.has(k)) m.set(k, []); m.get(k)!.push(r); }
-  const out = [...m].map(([staff, list]) => {
-    const q = list.filter((r) => isQualifiedCall(r.call_status)).length;
-    const v = list.filter((r) => isSiteVisitCall(r.call_status)).length;
-    const c = list.filter(isContractOrSold).length;
-    return {
-      staff, leads: list.length, qualified: q, qualifiedPct: list.length ? r1((q / list.length) * 100) : null,
-      siteVisits: v, leadsPerVisit: v ? r1(list.length / v) : null, contractSold: c, leadsPerContract: c ? r1(list.length / c) : null,
-      bought: list.filter((r) => normCall(r.call_status) === "ซื้อสำเร็จ").length,
-    };
-  });
+  for (const r of sideRows(rows, side)) { const k = (r.staff ?? "").trim() || "(ไม่ระบุ Staff)"; if (!m.has(k)) m.set(k, []); m.get(k)!.push(r); }
+  const out = [...m].map(([staff, list]) => staffRow(staff, list, side));
   return out.sort((a, b) => b.leads - a.leads || a.staff.localeCompare(b.staff));
+}
+export function staffRow(staff: string, list: LeadRow[], side: Side): StaffRow {
+  const q = list.filter((r) => isQualifiedLead(r)).length;
+  const won = list.filter((r) => (side === "seller" ? r.sell_status === SELL_SOLD : normCall(r.call_status) === "ซื้อสำเร็จ")).length;
+  const walkIn = side === "buyer" ? list.filter((r) => isWalkIn(r)).length : 0;
+  return { staff, leads: list.length, qualified: q, qualifiedPct: pct(q, list.length), walkIn, won, conversionPct: pct(won, list.length) };
+}
+/** สาเหตุที่กู้ไม่ผ่าน (ข้อความที่กรอก) ของคนต้องการซื้อ */
+export function loanRejectReasons(rows: LeadRow[]): { reason: string; count: number }[] {
+  const nm = new Map<string, { reason: string; count: number }>();
+  for (const r of sideRows(rows, "buyer")) {
+    if (normCall(r.call_status) !== "กู้ไม่ผ่าน") continue;
+    const t = (r.lost_reason ?? "").trim().replace(/\s+/g, " ") || "(ไม่ได้กรอกสาเหตุ)";
+    const k = t.toLowerCase(); const cur = nm.get(k) ?? { reason: t, count: 0 }; cur.count++; nm.set(k, cur);
+  }
+  return [...nm.values()].sort((a, b) => b.count - a.count);
 }
 
 /** เหตุผลที่ไม่สำเร็จ: จากสถานะ (Call / Sell / Buy) — Lead หนึ่งรายนับเหตุผลเดียว (ตามลำดับด้านล่าง) */

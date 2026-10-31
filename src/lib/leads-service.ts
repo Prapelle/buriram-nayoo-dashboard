@@ -1,3 +1,4 @@
+import { LEGACY_CHANNELS } from "./dashboard";
 import { writeAudit } from "./audit";
 import { CALL_DEFAULT, CALL_STATUS, normCall, SELL_DEFAULT, SELL_STATUS } from "./lead-options";
 import { areaLabel, AREA_SUGGEST, contactableFor, findDuplicates, LEAD_COLUMNS, leadStatusOf, nextLeadCode, normalizeEmail, normalizeLine, normalizePhone, pipelineOf, resolveNeedStatus, stampStatus, statusFieldOf, todayBkk, validateLead, type DupMatch, type Lead } from "./leads";
@@ -49,6 +50,9 @@ export async function saveLead(input: Record<string, unknown>, actor: string) {
     if (input.updated_at_seen !== prev.updated_at) throw new LeadError(409, "Lead นี้ถูกแก้ไขโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่ก่อนแก้ไข", "STALE");
   }
 
+  // ช่องทางเดิม (Facebook Organic, TikTok/YouTube): Lead เดิมคงค่าไว้ได้ แต่เลือกให้ Lead ใหม่ / เปลี่ยนเป็นค่านี้ไม่ได้
+  if (LEGACY_CHANNELS.includes(v.rec.source_channel) && (!prev || prev.source_channel !== v.rec.source_channel))
+    throw new LeadError(422, "ช่องทางนี้เลิกใช้แล้ว กรุณาเลือกช่องทางใหม่", "VALIDATION", { fields: { source_channel: "ช่องทางนี้เลิกใช้แล้ว" } });
   const contactChanged = !prev || normalizePhone(prev.phone) !== normalizePhone(v.rec.phone) || normalizeEmail(prev.email) !== normalizeEmail(v.rec.email) || normalizeLine(prev.line_id) !== normalizeLine(v.rec.line_id);
   if (contactChanged && input.confirmDuplicate !== true) {
     const matches = findDuplicates(rows.map(pick), v.rec, leadId || undefined);
@@ -122,7 +126,7 @@ export async function deleteLead(leadId: string, updatedAtSeen: string, actor: s
 export type StatusField = "sell_status" | "call_status";
 
 /** เปลี่ยนสถานะช่องเดียว (ลากวางบนหน้า Seller Leads = sell_status / Buyer Leads = call_status): ตรวจข้อมูลเก่า, คำนวณขั้น Pipeline และ contactable ใหม่, บันทึก Audit */
-export async function changeLeadStatus(leadId: string, field: StatusField, value: string, updatedAtSeen: string, actor: string) {
+export async function changeLeadStatus(leadId: string, field: StatusField, value: string, updatedAtSeen: string, actor: string, lostReason?: string) {
   if (!leadId) throw new LeadError(400, "ไม่ระบุ Lead", "BAD_REQUEST");
   const label = field === "sell_status" ? "Sell Status" : "Call Status";
   if (!(field === "sell_status" ? SELL_STATUS : CALL_STATUS).includes(value)) throw new LeadError(422, `${label} ไม่ถูกต้อง`, "VALIDATION", { fields: { [field]: `${label} ไม่ถูกต้อง` } });
@@ -139,6 +143,13 @@ export async function changeLeadStatus(leadId: string, field: StatusField, value
   if (prev[field] && prev[field] === value) return { changed: false, lead: prev };
 
   const rec: Lead = { ...prev, [field]: value };
+  // ย้ายไป กู้ไม่ผ่าน → ต้องมีสาเหตุ (ช่อง lost_reason)
+  if (field === "call_status" && value === "กู้ไม่ผ่าน") {
+    const why = String(lostReason ?? "").trim() || prev.lost_reason;
+    if (!why) throw new LeadError(422, "กรุณากรอกสาเหตุที่กู้ไม่ผ่าน", "VALIDATION", { fields: { lost_reason: "กรุณากรอกสาเหตุที่กู้ไม่ผ่าน" } });
+    if (!tab.headers.includes("lost_reason")) throw new LeadError(409, "แท็บ LEADS ยังไม่พร้อม กรุณากด เตรียม Google Sheet", "SHEET_NOT_READY");
+    rec.lost_reason = why;
+  }
   if (field === "call_status") rec.contactable = contactableFor(value, prev.contactable);
   rec.status = pipelineOf(rec);
   Object.assign(rec, stampStatus(prev, rec, todayBkk()), { updated_by: actor, updated_at: new Date().toISOString() });
