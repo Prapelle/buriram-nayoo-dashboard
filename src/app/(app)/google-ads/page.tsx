@@ -1,4 +1,5 @@
 import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
+import { logError } from "@/lib/log";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
@@ -21,7 +22,7 @@ export default async function GoogleAdsPage({ searchParams }: { searchParams: Pr
 
   let headers: string[], rows: Record<string, string>[];
   try { ({ headers, rows } = await readColumns(spec.tab, { exclude: HIDE.filter((h) => h !== "imported_at") })); }
-  catch (e) { return <section><h1 className="mb-4 text-[26px] font-bold tracking-tight">Google Ads</h1><p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">โหลดข้อมูลไม่สำเร็จ: {e instanceof Error ? e.message.slice(0, 200) : "ไม่ทราบสาเหตุ"} — ลอง ตั้งค่า → เตรียม Google Sheet</p></section>; }
+  catch (e) { logError("page /google-ads", e); return <section><h1 className="mb-4 text-[26px] font-bold tracking-tight">Google Ads</h1><p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">โหลดข้อมูลไม่สำเร็จ: {e instanceof Error ? e.message.slice(0, 200) : "ไม่ทราบสาเหตุ"} — ลอง ตั้งค่า → เตรียม Google Sheet</p></section>; }
 
   const periods = [...new Set(rows.map((r) => `${r.report_start}|${r.report_end}`).filter((p) => p !== "|"))].sort().reverse();
   const period = one(sp.period) || periods[0] || "";

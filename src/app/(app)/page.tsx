@@ -1,4 +1,5 @@
 import { RangeFields } from "@/components/RangeFields";
+import { logError } from "@/lib/log";
 import { rangeOf } from "@/lib/range-memory";
 import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
 import { redirect } from "next/navigation";
@@ -58,7 +59,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
     if (role !== "marketing") { const x = followUps(data.leads, today); fu = { overdue: x.overdue.length, today: x.today.length, stale: x.stale.length }; }
     ({ dash, prevRange, note: cmpNote } = computeDashboardCompared(data, f, role, mode));
     campaigns = [...new Set([...data.google.map((r) => r.campaign_name), ...data.meta.map((r) => r.ad_set_name), ...data.leads.map((r) => r.campaign_name)].filter(Boolean))].sort();
-  } catch (e) {
+  } catch (e) { logError("page /", e);
     return (
       <section>
         <h1 className="mb-4 text-[26px] font-bold tracking-tight">ภาพรวมการตลาด</h1>
@@ -133,10 +134,13 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="ค่าโฆษณาแยกตามช่องทาง (฿)">{c.spendByChannel ? <BarList items={c.spendByChannel} unit="฿" title="ค่าโฆษณาแยกตามช่องทาง" /> : <Pending href={imp} />}</Card>
-        <Card title="Leads แยกตามช่องทาง">{c.leadsByChannel ? <BarList items={c.leadsByChannel} title="Leads แยกตามช่องทาง" /> : <Pending href={imp} />}</Card>
+        <Card title="Monthly Trend — ค่าโฆษณารายเดือน (฿)">{c.monthly ? <StackedMonths rows={c.monthly} /> : <Pending href={imp} />}</Card>
+        <Card title="Leads แยกตามช่องทาง — คนต้องการซื้อ / เช่า / สร้าง">{c.leadsByChannelBuy ? <BarList items={c.leadsByChannelBuy} title="Leads คนต้องการซื้อ แยกตามช่องทาง" /> : <Pending text="ยังไม่มี Lead คนต้องการซื้อ / เช่า / สร้าง ในช่วงนี้" />}</Card>
+        <Card title="Leads แยกตามช่องทาง — คนต้องการขาย">{c.leadsByChannelSell ? <BarList items={c.leadsByChannelSell} title="Leads คนต้องการขาย แยกตามช่องทาง" /> : <Pending text="ยังไม่มี Lead คนต้องการขาย ในช่วงนี้" />}</Card>
+        <Card title="Qualified แยกตามช่องทาง — คนต้องการซื้อ (รอเข้าชมขึ้นไป)">{c.qualByChannelBuy ? <BarList items={c.qualByChannelBuy} title="Qualified คนต้องการซื้อ แยกตามช่องทาง" /> : <Pending text="ยังไม่มี Lead คนต้องการซื้อ / เช่า / สร้าง ในช่วงนี้" />}</Card>
+        <Card title="Qualified แยกตามช่องทาง — คนต้องการขาย (สัญญา + ขายแล้ว)">{c.qualByChannelSell ? <BarList items={c.qualByChannelSell} title="Qualified คนต้องการขาย แยกตามช่องทาง" /> : <Pending text="ยังไม่มี Lead คนต้องการขาย ในช่วงนี้" />}</Card>
         <Card title="Lead ซื้อ / เช่า / สร้าง แยกตาม Buy Status">{c.buyStatus ? <BarList items={c.buyStatus} title="Lead แยกตาม Buy Status" /> : <Pending text="ยังไม่มี Lead ที่ Need เป็น ซื้อ / เช่า / สร้าง" href={imp} />}</Card>
         <Card title="Lead ขาย แยกตาม Sell Status">{c.sellStatus ? <BarList items={c.sellStatus} title="Lead แยกตาม Sell Status" /> : <Pending text="ยังไม่มี Lead ที่ Need เป็น ขาย" href={imp} />}</Card>
-        <Card title="Qualified Leads แยกตามช่องทาง (ซื้อ: รอเข้าชมขึ้นไป · ขาย: สัญญา + ขายแล้ว)">{c.leadQualByChannel ? <BarList items={c.leadQualByChannel} title="Qualified Leads แยกตามช่องทาง" /> : <Pending text="ยังไม่มี Lead" href={imp} />}</Card>
         <Card title="Sales Pipeline — คนต้องการซื้อ / เช่า / สร้าง (สะสม)">{c.pipelineBuy ? <BarList items={c.pipelineBuy} title="Sales Pipeline คนต้องการซื้อ" /> : <Pending text="ยังไม่มี Lead คนต้องการซื้อ / เช่า / สร้าง ในช่วงนี้" />}</Card>
         <Card title="Sales Pipeline — คนต้องการขาย (สะสม)">{c.pipelineSell ? <BarList items={c.pipelineSell} title="Sales Pipeline คนต้องการขาย" /> : <Pending text="ยังไม่มี Lead คนต้องการขาย ในช่วงนี้" />}</Card>
         <Card title="LINE OA Growth (เพื่อนทั้งหมดสิ้นเดือน)">
@@ -144,7 +148,6 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
             ? <LineChart label="เพื่อน LINE OA" points={c.lineGrowth.filter((r) => r.friendsEnd !== null).map((r) => ({ x: my(r.month), y: r.friendsEnd! }))} />
             : <Pending href={imp} />}
         </Card>
-        <Card title="Monthly Trend — ค่าโฆษณารายเดือน (฿)">{c.monthly ? <StackedMonths rows={c.monthly} /> : <Pending href={imp} />}</Card>
         <Card title="แนวโน้มรายวัน — Google Ads Cost (฿)">
           {c.daily ? <LineChart label="Google Ads Cost รายวัน" unit="฿" points={c.daily.map((d) => ({ x: dm(d.date), y: d.cost }))} /> : <Pending text="รอข้อมูล (นำเข้า Google Ads Time series)" href={imp} />}
         </Card>

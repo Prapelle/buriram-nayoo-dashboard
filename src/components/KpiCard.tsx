@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Kpi } from "@/lib/dashboard";
 import { changePct } from "@/lib/compare";
+import { KpiNote } from "./KpiNote";
 
 const dur = (v: number) => { const m = Math.floor(v / 60), sec = Math.round(v - m * 60); return m ? `${m} นาที ${sec} วินาที` : `${Math.round(v * 10) / 10} วินาที`; };
 const show = (fmt: Kpi["fmt"], v: number) => fmt === "sec" ? dur(v) : fmt === "thb" ? `฿${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : fmt === "pct" ? `${v}%` : v.toLocaleString("en-US");
@@ -30,7 +31,7 @@ export function KpiCard({ k, importHref }: { k: Kpi; importHref?: string }) {
       {cmp && <div className="mt-1 text-xs tabular-nums">{cmp}</div>}
       {cmp && k.prevIncomplete && <div className="mt-1 inline-block rounded bg-amber-50 px-1.5 py-0.5 text-xs text-amber-800" title={k.prevIncomplete}>{L} ข้อมูลไม่ครบ: {k.prevIncomplete}</div>}
       {k.incomplete && k.state === "value" && <div className="mt-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900" title={k.incomplete}>ข้อมูลไม่ครบ: {k.incomplete}</div>}
-      {k.note && <div className="mt-1 text-[11px] text-slate-500 sm:text-xs">{k.note}</div>}
+      {k.note && <KpiNote text={k.note} />}
     </div>
   );
 }

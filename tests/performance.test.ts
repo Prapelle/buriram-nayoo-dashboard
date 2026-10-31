@@ -125,7 +125,7 @@ console.log("8) Customer Funnel + ประสิทธิภาพแต่ล�
   const bs = Object.fromEntries(sp.funnel!.map((x) => [x.key, x]));
   assert.equal(bs.leads.value, 3); assert.equal(bs.qualified.value, 2); assert.equal(bs.sold.value, 1); assert.equal(bs.walkin, undefined); assert.equal(bs.visits.value, 22409);
   const cs = Object.fromEntries(sp.channels!.map((c) => [c.channel, c]));
-  assert.equal(cs["Meta Ads"].leads, 2); assert.equal(cs["Meta Ads"].sold, 1); assert.equal(cs["Unknown"].leads, 1); assert.equal(cs["Unknown"].kind, "Organic");
+  assert.equal(cs["Meta Ads"].leads, 2); assert.equal(cs["Meta Ads"].cpl, null); assert.equal(cs["Meta Ads"].cpql, null); // CPL นับเฉพาะคนต้องการซื้อ assert.equal(cs["Meta Ads"].sold, 1); assert.equal(cs["Unknown"].leads, 1); assert.equal(cs["Unknown"].kind, "Organic");
   ok("แท็บคนต้องการขาย: Leads 3 · Qualified 2 · ขายแล้ว 1 (ไม่ปนกับคนต้องการซื้อ 7) · Unknown นับเป็น Organic และนับ Lead ได้");
   const { p: e } = run({ leads: [], web: [], posts: [], meta: [] });
   const be = Object.fromEntries(e.funnel!.map((x) => [x.key, x]));

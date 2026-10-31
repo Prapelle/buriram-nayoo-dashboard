@@ -1292,3 +1292,11 @@ Users 17,443 · Page Views 42,450 · PV/User 2.43 · Duration 1 นาที 0 �
 - **มือถือ:** หน้า Performance ล้นจอแนวนอน 236px เมื่อมีข้อมูล → แก้ (grid-cols-1 + min-w-0)
 - **อัปเกรด Next.js 15.5 → 16.4.3** (Turbopack) + @opennextjs/cloudflare 1.20.15 — แก้ปัญหา hydration #418 ที่สุ่มเกิดใน 15.5 (React canary ชนกับการแสดง Suspense แบบทยอย ทำให้หน้ากะพริบ/บางครั้ง error parentNode) · ตรวจเปิด 25 หน้า × 2 ขนาดจอ × 2 รอบ = 100 ครั้ง: hydration error 0 · ล้นจอ 0 · error ในหน้า 0
 - **Passed:** 483/483 · TypeScript + Cloudflare build ผ่าน · Worker รันได้ใน wrangler dev (gzip 1.56 MB)
+
+## 45) CPL เฉพาะคนต้องการซื้อ · กราฟช่องทางแยกฝั่ง · Log · มือถือ (1/11/2026)
+- **CPL ทุกตัว** (CPL จากโฆษณา / ทั้งหมด / Facebook Ads / Google Ads / Cost per Qualified / Cost per Walk in) นับเฉพาะคนต้องการซื้อ / เช่า / สร้าง · หน้า Performance แท็บคนต้องการขายไม่คำนวณ ฿/Lead และ ฿/Qualified (แสดง —)
+- **หน้าภาพรวม:** กราฟ Leads แยกตามช่องทาง และ Qualified แยกตามช่องทาง แยกเป็นคนต้องการซื้อ / คนต้องการขาย (4 กราฟ) · จัดกราฟเป็นคู่ ซื้อ | ขาย
+- **Log ของเว็บจริง:** เปิด Workers Logs (`observability`) · `logError()` ใน API ทุกตัว (error 500) และหน้าที่โหลดข้อมูลไม่สำเร็จ — บันทึกเฉพาะตำแหน่ง / ชนิด / ข้อความ error ไม่มีข้อมูลลูกค้า
+- **compatibility_date:** 2025-06-01 → 2026-10-15
+- **มือถือ:** คำอธิบายใต้ตัวเลข KPI ซ่อนไว้หลังปุ่ม "ⓘ ที่มาของตัวเลข" (จอใหญ่แสดงเหมือนเดิม)
+- **Passed:** 484/484 · Cloudflare build + wrangler dev ผ่าน · ตรวจ 25 หน้า × 2 ขนาดจอ: hydration error 0 · ล้นจอ 0

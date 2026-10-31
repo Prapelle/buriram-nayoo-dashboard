@@ -42,4 +42,14 @@ t("CPL N/A บอกเหตุผลชัด: ค่าโฆษณามี�
   const dn = computeDashboard({ ...data, leads: [L("O1", "รอเข้าชม", { received_at: "2026-10-05" })] }, {}, "admin"); const kn = Object.fromEntries(dn.groups.flatMap((g) => g.items).map((x) => [x.key, x]));
   assert.equal(kn.cpl.state, "na"); assert.match(kn.cpl.note!, /ค่าโฆษณามีช่วง 1 ก\.ย\. 69.*Lead ที่รับในช่วงนั้น = 0.*มี 1 Lead แต่รับนอกช่วง/);
 });
+t("CPL นับเฉพาะคนต้องการซื้อ (1/11/2026) · กราฟช่องทางแยกฝั่ง", () => {
+  const sl = [L("S1", "", { need: "ขาย", sell_status: "ขายแล้ว" }), L("S2", "", { need: "ขาย", sell_status: "สนใจขาย", source_channel: "LINE OA" })];
+  const dc = computeDashboard({ ...data, leads: [...leads, ...sl] }, {}, "admin"); const kc = Object.fromEntries(dc.groups.flatMap((g) => g.items).map((x) => [x.key, x]));
+  assert.equal(kc.cpl.value, k.cpl.value); assert.equal(kc.cpl_all.value, k.cpl_all.value); assert.equal(kc.cpl_meta.value, k.cpl_meta.value); // Lead คนขายไม่เปลี่ยน CPL
+  assert.match(kc.cpl.note!, /คนต้องการซื้อ/);
+  const sum = (x: { value: number }[] | null) => (x ?? []).reduce((a, b) => a + b.value, 0);
+  assert.equal(sum(dc.charts.leadsByChannelBuy), 9); assert.equal(sum(dc.charts.leadsByChannelSell), 2);
+  assert.equal(sum(dc.charts.qualByChannelBuy), kc.qualified_buy.value); assert.equal(sum(dc.charts.qualByChannelSell), kc.qualified_sell.value);
+  assert.deepEqual(dc.charts.leadsByChannelSell!.map((x) => x.label).sort(), ["Facebook Ads", "LINE OA"]);
+});
 console.log("ผ่านทั้งหมด");

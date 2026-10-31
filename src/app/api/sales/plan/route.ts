@@ -1,3 +1,4 @@
+import { logError } from "@/lib/log";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/guard";
 import { planSales, SalesError, type SalesInput } from "@/lib/sales/service";
@@ -10,6 +11,6 @@ export async function POST(req: Request) {
   try { return NextResponse.json(await planSales((await req.json()) as SalesInput)); }
   catch (e) {
     if (e instanceof SalesError) return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
-    return NextResponse.json({ error: e instanceof Error ? e.message : "unknown error" }, { status: 500 });
+    { logError("/api/sales/plan", e); return NextResponse.json({ error: e instanceof Error ? e.message : "unknown error" }, { status: 500 }); }
   }
 }

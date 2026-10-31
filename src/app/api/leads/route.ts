@@ -1,3 +1,4 @@
+import { logError } from "@/lib/log";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/guard";
 import { changeLeadStatus, deleteLead, LeadError, listLeads, saveLead } from "@/lib/leads-service";
@@ -6,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 function fail(e: unknown) {
   if (e instanceof LeadError) return NextResponse.json({ error: e.message, code: e.code, ...e.extra }, { status: e.status });
-  return NextResponse.json({ error: e instanceof Error ? e.message : "unknown error" }, { status: 500 });
+  { logError("/api/leads", e); return NextResponse.json({ error: e instanceof Error ? e.message : "unknown error" }, { status: 500 }); }
 }
 
 // ข้อมูลลูกค้า (PII) — เฉพาะ Admin และ Sales

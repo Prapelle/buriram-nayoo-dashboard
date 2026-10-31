@@ -1,3 +1,4 @@
+import { logError } from "@/lib/log";
 import { NextResponse } from "next/server";
 import { writeAudit } from "@/lib/audit";
 import { requireRole } from "@/lib/guard";
@@ -20,6 +21,6 @@ export async function GET(req: Request) {
     await writeAudit(g.email, "export", "dataset", "sales_transactions", `ส่งออก ${out.length} แถว`);
     return new NextResponse(salesCsv(out), { headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": 'attachment; filename="sales_transactions.csv"', "cache-control": "no-store" } });
   } catch (e) {
-    return NextResponse.json({ error: e instanceof Error ? e.message : "unknown error" }, { status: 500 });
+    { logError("/api/export/sales-transactions", e); return NextResponse.json({ error: e instanceof Error ? e.message : "unknown error" }, { status: 500 }); }
   }
 }

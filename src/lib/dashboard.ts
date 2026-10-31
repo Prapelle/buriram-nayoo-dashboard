@@ -44,6 +44,8 @@ export type Dashboard = {
     pipelineSell: { label: string; value: number }[] | null;
     /** Qualified Leads (Call Status = รอเข้าชม / เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน) แยกตามช่องทางของ Lead */
     leadQualByChannel: { label: string; value: number }[] | null;
+    /** แยกฝั่ง (1/11/2026) */ leadsByChannelBuy: { label: string; value: number }[] | null; leadsByChannelSell: { label: string; value: number }[] | null;
+    qualByChannelBuy: { label: string; value: number }[] | null; qualByChannelSell: { label: string; value: number }[] | null;
     /** Phase 6: Lead แยกตาม Buy Status (ซื้อ/เช่า/สร้าง) และ Sell Status (ขาย) */
     buyStatus: { label: string; value: number }[] | null;
     sellStatus: { label: string; value: number }[] | null;
@@ -196,7 +198,8 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
   // ช่วงเวลาของ CPL: ใช้ช่วงที่เลือก หรือถ้าไม่ได้เลือก ใช้ช่วงของรายงานโฆษณาที่นำมาคิด เพื่อให้ค่าโฆษณาและ Lead เป็นช่วงเดียวกัน
   const adSpan = mergeSpans([...meta, ...google]);
   const cplFrom = f.from ?? adSpan[0]?.[0], cplTo = f.to ?? adSpan[adSpan.length - 1]?.[1];
-  const cplLeads = leadsAll.filter((r) => leadFilter(r) && cplFrom !== undefined && cplTo !== undefined && day(r.received_at) >= cplFrom && day(r.received_at) <= cplTo);
+  // CPL ทุกตัวนับเฉพาะคนต้องการซื้อ / เช่า / สร้าง (1/11/2026 ผู้ใช้กำหนด — โฆษณายิงหาคนซื้อ)
+  const cplLeads = leadsAll.filter((r) => leadFilter(r) && !isSellerLead(r) && cplFrom !== undefined && cplTo !== undefined && day(r.received_at) >= cplFrom && day(r.received_at) <= cplTo);
   const leadsQ = leads.filter(qualified).length;
   const paidLeads = leads.filter((r) => PAID_CHANNELS.includes(r.source_channel));
   const paidLeadsQ = paidLeads.filter(qualified).length;
@@ -212,7 +215,7 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
   const cplBlock = f.service ? "ตัวกรอง Service ใช้กับ Lead เท่านั้น ค่าโฆษณาไม่ได้แยกตามบริการ จึงคำนวณ CPL ไม่ได้" : undefined;
   const cplIncomplete = [paidIncomplete, partial ? "รายงานโฆษณาบางรายการครอบคลุมเกินช่วงที่เลือก ค่าโฆษณาจึงมากกว่าช่วงของ Lead" : undefined].filter(Boolean).join(" · ") || undefined;
   // CPL เป็น N/A เพราะไม่มี Lead ในช่วงของค่าโฆษณา: บอกให้ชัดว่าค่าโฆษณามีถึงวันไหน และ Lead ที่มีอยู่รับหลัง/ก่อนช่วงนั้น
-  const outside = leads.filter((r) => !cplLeads.includes(r)).length;
+  const outside = leads.filter((r) => !isSellerLead(r) && !cplLeads.includes(r)).length;
   const noLeadWhy = !f.from && cplTo
     ? `ค่าโฆษณามีช่วง ${cplPeriod} · Lead ที่รับในช่วงนั้น = 0 (หารด้วย 0 ไม่ได้)${outside ? ` · มี ${outside} Lead แต่รับนอกช่วงที่มีค่าโฆษณา — นำเข้ารายงานโฆษณาของช่วงเดียวกับ Lead ก่อน` : ""}`
     : `Lead ที่รับช่วง ${cplPeriod} = 0 (หารด้วย 0 ไม่ได้)`;
@@ -226,7 +229,7 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
   const cplAdsBase = cplLeads.filter((r) => PAID_CHANNELS.includes(r.source_channel));
   /** CPL แยกช่องทางโฆษณา (31/10/2026): ค่าโฆษณาของแพลตฟอร์ม ÷ Lead ช่องทางเดียวกัน ช่วงเดียวกัน */
   const cplCh = (key: string, label: string, src: "meta" | "google", spend: number | null, channel: string): Kpi => {
-    const formula = `${src === "meta" ? "Meta Ads Spend" : "Google Ads Spend"} ÷ Lead ช่องทาง ${channel}`;
+    const formula = `${src === "meta" ? "Meta Ads Spend" : "Google Ads Spend"} ÷ Lead คนต้องการซื้อ ช่องทาง ${channel}`;
     if (excluded(src)) return kpi(key, label, "thb", null, "excluded", `${formula} · ไม่รวมในตัวกรองช่องทางนี้`);
     if (spend === null) return kpi(key, label, "thb", null, "pending", `${formula} · ยังไม่มีรายงานโฆษณาในช่วงนี้`);
     if (cplBlock) return kpi(key, label, "thb", null, "na", cplBlock);
@@ -266,11 +269,11 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
       kpi("qualified_sell", "Qualified คนต้องการขาย", "int", leadsAll.length ? sellLeads.filter(qualified).length : null, undefined, "สถานะการขาย = เซ็นสัญญา / สัญญาเปิด / ขายแล้ว"),
     ] },
     { title: "ประสิทธิภาพ (ไม่ใช่ ROI เชิงสาเหตุ)", items: [
-      cplKpi("cpl", "CPL (Lead จากโฆษณา)", cplAdsBase, "Lead จาก Facebook Ads + Google Ads"),
-      cplKpi("cpl_all", "CPL (Lead ทั้งหมด)", cplLeads, "Total Leads ทุกช่องทาง"),
+      cplKpi("cpl", "CPL (Lead จากโฆษณา)", cplAdsBase, "Lead คนต้องการซื้อ จาก Facebook Ads + Google Ads"),
+      cplKpi("cpl_all", "CPL (Lead ทั้งหมด)", cplLeads, "Lead คนต้องการซื้อ ทุกช่องทาง"),
       cplCh("cpl_meta", "CPL Facebook Ads", "meta", metaV, "Facebook Ads"),
       cplCh("cpl_google", "CPL Google Ads", "google", googleV, "Google Ads"),
-      cplKpi("cplq", "Cost per Qualified Lead", cplAdsBase.filter(qualified), "Qualified Lead จากโฆษณา (คนต้องการซื้อ: Call Status รอเข้าชม / เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน · คนต้องการขาย: เซ็นสัญญา / สัญญาเปิด / ขายแล้ว)"),
+      cplKpi("cplq", "Cost per Qualified Lead", cplAdsBase.filter(qualified), "Qualified Lead คนต้องการซื้อ จากโฆษณา (Call Status รอเข้าชม / เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน)"),
       cplKpi("cpsv", "Cost per Walk in", cplLeads.filter((r) => isWalkIn(r)), "Walk in ทุกช่องทาง (คนต้องการซื้อที่ Call Status = เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน)"),
     ] },
   ];
@@ -282,6 +285,8 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
   ];
   /** Pipeline แบบสะสม (1/11/2026): แต่ละขั้นนับ Lead ที่ผ่านขั้นนั้นมาแล้ว ขั้นถัดไปจึงไม่มากกว่าขั้นก่อนหน้า · ใช้นิยามเดียวกับการ์ด Qualified */
   const funnelOf = (rows: Row[], steps: [string, (r: Row) => boolean][]) => steps.map(([label, keep]) => ({ label, value: rows.filter(keep).length }));
+  /** Qualified ตามช่องทาง: แสดงทุกช่องทางที่มี Lead ในฝั่งนั้น (Qualified 0 ก็แสดง) เรียงมากไปน้อย */
+  const qualBy = (rows: Row[]) => countBy(rows, "source_channel").map((x) => ({ label: x.label, value: rows.filter((r) => (r.source_channel || "Unknown") === x.label && qualified(r)).length })).sort((a, b) => b.value - a.value);
   const countBy = (rows: Row[], k: string, order?: string[]) => {
     const m = new Map<string, number>(); rows.forEach((r) => m.set(r[k] || "Unknown", (m.get(r[k] || "Unknown") ?? 0) + 1));
     const keys = order ? order.filter((o) => m.has(o)) : [...m.keys()].sort((a, b) => (m.get(b)! - m.get(a)!));
@@ -328,6 +333,10 @@ export function computeDashboard(data: DashData, f: Filters, role: Role): Dashbo
     charts: {
       spendByChannel: spendByChannel.length ? spendByChannel : null,
       leadsByChannel: leadsTotal ? countBy(leads, "source_channel") : null,
+      leadsByChannelBuy: buyLeads.length ? countBy(buyLeads, "source_channel") : null,
+      leadsByChannelSell: sellLeads.length ? countBy(sellLeads, "source_channel") : null,
+      qualByChannelBuy: buyLeads.length ? qualBy(buyLeads) : null,
+      qualByChannelSell: sellLeads.length ? qualBy(sellLeads) : null,
       pipelineBuy: buyLeads.length ? funnelOf(buyLeads, [["Lead ที่รับ", () => true], ["ติดต่อได้แล้วขึ้นไป", (r) => isContactedCall(r.call_status)], ["Qualified", qualified], ["Walk in", (r) => isWalkIn(r)], ["ซื้อสำเร็จ", (r) => normCall(r.call_status) === CALL_SOLD]]) : null,
       pipelineSell: sellLeads.length ? funnelOf(sellLeads, [["Lead ที่รับ", () => true], ["สนใจขายขึ้นไป", (r) => SELL_ACTIVE.includes(r.sell_status)], ["Qualified (สัญญา + ขายแล้ว)", qualified], ["ขายแล้ว", (r) => r.sell_status === SELL_SOLD]]) : null,
       leadQualByChannel: leadsAll.length ? ALL_CHANNELS.map((c) => ({ label: channelLabel(c), value: contacted.filter((r) => r.source_channel === c).length })).filter((x) => x.value > 0 || leads.some((r) => r.source_channel === x.label)) : null,

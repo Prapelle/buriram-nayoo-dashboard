@@ -1,4 +1,5 @@
 import { RangeFields } from "@/components/RangeFields";
+import { logError } from "@/lib/log";
 import { rangeOf } from "@/lib/range-memory";
 import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
 import Link from "next/link";
@@ -27,7 +28,7 @@ export default async function SalesDashboardPage({ searchParams }: { searchParam
 
   let all: TxRow[];
   try { all = (await readColumns("SALES_TRANSACTIONS", { exclude: ["raw_json", "record_id", "row_key", "source_batch_id"] })).rows; }
-  catch (e) {
+  catch (e) { logError("page /sales", e);
     return <section><h1 className="mb-4 text-[26px] font-bold tracking-tight">Revenue</h1><p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">โหลดข้อมูลไม่สำเร็จ: {e instanceof Error ? e.message.slice(0, 200) : "ไม่ทราบสาเหตุ"} — ลอง <Link href="/settings" className="underline">ตั้งค่า → เตรียม Google Sheet</Link></p></section>;
   }
   const v = computeSales(all, f);

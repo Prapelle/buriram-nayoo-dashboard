@@ -1,3 +1,4 @@
+import { logError } from "@/lib/log";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/guard";
 import type { UploadBatch } from "@/lib/website/parse";
@@ -6,7 +7,7 @@ import { commitWebsite, planWebsite, saveManualWebsite, websiteOverview, WebErro
 export const dynamic = "force-dynamic";
 const fail = (e: unknown) => e instanceof WebError
   ? NextResponse.json({ error: e.message, code: e.code }, { status: e.status })
-  : NextResponse.json({ error: e instanceof Error ? e.message : "unknown error" }, { status: 500 });
+  : (logError("/api/website", e), NextResponse.json({ error: e instanceof Error ? e.message : "unknown error" }, { status: 500 }));
 
 // Website Analytics — Admin / Marketing (ไม่มีข้อมูลส่วนบุคคล)
 export async function GET(req: Request) {

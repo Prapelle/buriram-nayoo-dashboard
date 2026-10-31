@@ -1,4 +1,5 @@
 import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
+import { logError } from "@/lib/log";
 import Link from "next/link";
 import { Note } from "@/components/Note";
 import { redirect } from "next/navigation";
@@ -25,7 +26,7 @@ export default async function FacebookAdsPage({ searchParams }: { searchParams: 
 
   let rows: Record<string, string>[];
   try { rows = (await readColumns("META_ADS", { only: [...COLS.map((c) => c.key), "imported_at"] })).rows; }
-  catch (e) { return <section><h1 className="mb-4 text-[26px] font-bold tracking-tight">Facebook Ads</h1><p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">โหลดข้อมูลไม่สำเร็จ: {e instanceof Error ? e.message.slice(0, 200) : "ไม่ทราบสาเหตุ"} — ลอง ตั้งค่า → เตรียม Google Sheet</p></section>; }
+  catch (e) { logError("page /facebook-ads", e); return <section><h1 className="mb-4 text-[26px] font-bold tracking-tight">Facebook Ads</h1><p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">โหลดข้อมูลไม่สำเร็จ: {e instanceof Error ? e.message.slice(0, 200) : "ไม่ทราบสาเหตุ"} — ลอง ตั้งค่า → เตรียม Google Sheet</p></section>; }
 
   // ชื่อ Action ที่แสดง: ตัด prefix actions:/Action: — ตัวกรองยังใช้ค่าดิบ ตัวเลขจึงไม่เปลี่ยน
   const label = actionLabels(rows.map((r) => r.result_indicator));

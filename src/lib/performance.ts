@@ -305,10 +305,10 @@ export function computePerformance(d: DashData, f: PerfFilters): Performance {
   });
   const chRow = (channel: string, kind: ChannelRow["kind"], leadCh: string, spend: number | null, prevSpend: number | null | undefined, incomplete?: string): ChannelRow => {
     const mine = L.all.filter((r) => r.source_channel === leadCh), q = mine.filter((r) => isQualifiedLead(r)).length;
-    const cpl = spend !== null && mine.length ? r2(spend / mine.length) : null;
+    const cpl = !seller && spend !== null && mine.length ? r2(spend / mine.length) : null; // CPL นับเฉพาะคนต้องการซื้อ (แท็บคนต้องการขายไม่คำนวณ)
     const pm = Lp?.all.filter((r) => r.source_channel === leadCh).length ?? 0;
     const prevCpl = prevSpend === undefined ? undefined : prevSpend !== null && pm ? r2(prevSpend / pm) : null;
-    return { channel, kind, spend, leads: mine.length, qualified: q, sold: mine.filter(isSold).length, cpl, cpql: spend !== null && q ? r2(spend / q) : null, prevCpl, change: prevCpl === undefined ? undefined : changePct(cpl, prevCpl).pct, incomplete };
+    return { channel, kind, spend, leads: mine.length, qualified: q, sold: mine.filter(isSold).length, cpl, cpql: !seller && spend !== null && q ? r2(spend / q) : null, prevCpl: seller ? undefined : prevCpl, change: seller || prevCpl === undefined ? undefined : changePct(cpl, prevCpl).pct, incomplete };
   };
   const channels: ChannelRow[] = [
     chRow("Meta Ads", "Paid", "Facebook Ads", M?.spend ?? null, pv(Mp?.spend), M?.incomplete),

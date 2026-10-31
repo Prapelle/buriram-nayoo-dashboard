@@ -1,4 +1,5 @@
 import { RangeFields } from "@/components/RangeFields";
+import { logError } from "@/lib/log";
 import { rangeOf } from "@/lib/range-memory";
 import Link from "next/link";
 import { Note } from "@/components/Note";
@@ -23,7 +24,7 @@ export default async function LeadReportPage({ searchParams }: { searchParams: P
   const rg = await rangeOf(sp); const from = rg.from, to = rg.to;
   let all: Record<string, string>[];
   try { all = leadsInRange((await fetchDashboardData(role)).leads, from, to); }
-  catch (e) { return <section><h1 className="mb-4 text-[26px] font-bold tracking-tight">รายงาน Lead</h1><p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">โหลดข้อมูลไม่สำเร็จ: {e instanceof Error ? e.message.slice(0, 200) : ""}</p></section>; }
+  catch (e) { logError("page /lead-report", e); return <section><h1 className="mb-4 text-[26px] font-bold tracking-tight">รายงาน Lead</h1><p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">โหลดข้อมูลไม่สำเร็จ: {e instanceof Error ? e.message.slice(0, 200) : ""}</p></section>; }
   const rows = sideRows(all, side);
   const staff = staffPerformance(all, side);
   const total = staffRow("รวม", rows, side);

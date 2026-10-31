@@ -1,3 +1,4 @@
+import { logError } from "@/lib/log";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/guard";
 import { addProductType, changeDevStatus, recordContact, deleteDeveloper, deleteProduct, DevError, importDevelopers, listDevelopers, saveDeveloper, saveProduct } from "@/lib/developers-service";
@@ -6,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 function fail(e: unknown) {
   if (e instanceof DevError) return NextResponse.json({ error: e.message, code: e.code, ...e.extra }, { status: e.status });
-  return NextResponse.json({ error: e instanceof Error ? e.message : "unknown error" }, { status: 500 });
+  { logError("/api/developers", e); return NextResponse.json({ error: e instanceof Error ? e.message : "unknown error" }, { status: 500 }); }
 }
 
 // Developer (มีเบอร์/Line ผู้ติดต่อ) — เฉพาะ Admin และ Sales

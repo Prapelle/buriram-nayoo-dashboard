@@ -1,4 +1,5 @@
 import { RangeFields } from "@/components/RangeFields";
+import { logError } from "@/lib/log";
 import { rangeOf } from "@/lib/range-memory";
 import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
 import Link from "next/link";
@@ -47,7 +48,7 @@ export default async function FacebookPagePage({ searchParams }: { searchParams:
       readColumns("FB_PAGE_INSIGHTS", { only: ["metric", "metric_date", "value", "imported_at"] }).catch(() => null), // แท็บใหม่ ยังไม่เตรียม Sheet → แสดงส่วนอื่นได้
     ]);
     rows = data.rows; excluded = ex; if (pg) pageRows = pg.rows; else pageTabMissing = true;
-  } catch (e) {
+  } catch (e) { logError("page /facebook-page", e);
     return <section><h1 className="mb-4 text-[26px] font-bold tracking-tight">Facebook Page</h1><p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">โหลดข้อมูลไม่สำเร็จ: {e instanceof Error ? e.message.slice(0, 200) : "ไม่ทราบสาเหตุ"} — ลอง ตั้งค่า → เตรียม Google Sheet</p></section>;
   }
   const { kept, excludedPosts } = excludePages(rows, excluded);

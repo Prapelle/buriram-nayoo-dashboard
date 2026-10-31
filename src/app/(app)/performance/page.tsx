@@ -1,4 +1,5 @@
 import { RangeFields } from "@/components/RangeFields";
+import { logError } from "@/lib/log";
 import { rangeOf } from "@/lib/range-memory";
 import Link from "next/link";
 import { Note } from "@/components/Note";
@@ -29,7 +30,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
 
   let p: Performance;
   try { p = computePerformance(await fetchDashboardData(role), f); }
-  catch (e) {
+  catch (e) { logError("page /performance", e);
     return <section><h1 className="mb-4 text-[26px] font-bold tracking-tight">Marketing Performance</h1><p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">โหลดข้อมูลไม่สำเร็จ: {e instanceof Error ? e.message.slice(0, 200) : "ไม่ทราบสาเหตุ"} — ลอง <Link href="/settings" className="underline">ตั้งค่า → เตรียม Google Sheet</Link></p></section>;
   }
   const inp = "h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm";
@@ -145,13 +146,14 @@ function FunnelAndChannels({ p, side, sideHref }: { p: Performance; side: "buyer
               <td className="py-1.5 !pl-0"><span className="font-medium">{c.channel}</span> <span className={`rounded px-1 text-[10px] ${KIND[c.kind]}`}>{c.kind}</span>{best === c && <span className="ml-1 rounded bg-emerald-600 px-1 text-[10px] text-white">ถูกที่สุด</span>}{c.incomplete && <span className="ml-1 text-xs text-amber-700" title={c.incomplete}>⚠</span>}</td>
               <td className="text-right tabular-nums">{c.kind === "Organic" ? <span className="text-xs text-slate-400">ไม่มีค่าโฆษณา</span> : thb(c.spend)}</td>
               <td className="text-right tabular-nums">{c.leads.toLocaleString("en-US")}</td>
-              <td className="text-right font-semibold tabular-nums">{c.kind === "Organic" ? <span className="text-slate-400">—</span> : c.spend !== null && !c.leads ? <span className="text-xs font-normal text-slate-400">N/A (0 Lead)</span> : thb(c.cpl)}</td>
+              <td className="text-right font-semibold tabular-nums">{c.kind === "Organic" || side === "seller" ? <span className="text-slate-400">—</span> : c.spend !== null && !c.leads ? <span className="text-xs font-normal text-slate-400">N/A (0 Lead)</span> : thb(c.cpl)}</td>
               <td className="text-right tabular-nums">{c.qualified.toLocaleString("en-US")}</td>
-              <td className="text-right tabular-nums">{c.kind === "Organic" ? <span className="text-slate-400">—</span> : thb(c.cpql)}</td>
+              <td className="text-right tabular-nums">{c.kind === "Organic" || side === "seller" ? <span className="text-slate-400">—</span> : thb(c.cpql)}</td>
               <td className="text-right tabular-nums">{c.sold.toLocaleString("en-US")}</td>
               {p.compare && <td className="text-right"><Change v={c.change} lowerIsBetter /></td>}
             </tr>))}</tbody>
         </table></div>
+        {side === "seller" && <p className="mt-2 text-xs text-slate-500">฿ / Lead และ ฿ / Qualified คำนวณเฉพาะแท็บคนต้องการซื้อ (โฆษณายิงหาคนซื้อ) — แท็บนี้แสดงจำนวน Lead ของคนต้องการขายตามช่องทาง</p>}
         <Note className="mt-2" href="/settings/metrics/performance">฿ / Lead = ค่าโฆษณาของแพลตฟอร์ม ÷ Lead ที่ช่องทางตรงกัน (Meta Ads ↔ Lead ช่องทาง Facebook Ads) ในช่วงเดียวกัน · ยิ่งต่ำยิ่งคุ้ม แต่ควรดู ฿ / Qualified และ ซื้อสำเร็จ ประกอบ (ช่องทางที่ Lead ถูกแต่ไม่มีใครซื้อ อาจไม่คุ้มจริง) · ช่องทางที่ไม่ใช่โฆษณา (รวม Unknown) นับเป็น Organic และไม่มีข้อมูลค่าใช้จ่ายในระบบ · ⚠ = รายงานโฆษณาไม่ครอบคลุมช่วงพอดี</Note>
       </Card></div>
     </div>
