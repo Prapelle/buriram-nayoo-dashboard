@@ -1,4 +1,7 @@
 "use client";
+import { Skeleton } from "@/components/Skeleton";
+import { DateInput } from "@/components/DateInput";
+import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toCsv } from "@/lib/csv";
 import { readXlsx, XlsxError, type Cell } from "@/lib/xlsx";
@@ -14,12 +17,13 @@ type Plan = {
 };
 type Batch = Record<string, string>;
 const thb = (n: number) => `฿${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const dmy = (iso: string) => (/^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : iso || "-");
-const when = (iso: string) => { try { return new Date(iso).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", dateStyle: "short", timeStyle: "short" }); } catch { return iso; } };
+const dmy = (iso: string) => thDate(iso) || "-";
+const when = (iso: string) => thDateTime(iso);
 const ST: Record<string, [string, string]> = { insert: ["เพิ่มใหม่", "bg-green-100 text-green-800"], update: ["อัปเดต", "bg-blue-100 text-blue-800"], duplicate: ["ซ้ำ (ข้าม)", "bg-slate-100 text-slate-600"] };
 
 /** incoming: ไฟล์ที่เลือกมาจากหน้า นำเข้า CSV */
-export function SalesImport({ incoming }: { incoming?: { file: File; id: number } } = {}) {
+export function SalesImport({ incoming, embedded = false }: { incoming?: { file: File; id: number }; embedded?: boolean } = {}) {
+  // embedded = อยู่ในหน้า นำเข้า CSV: ไม่แสดงช่องอัปโหลดซ้ำ (ใช้ช่องรวมด้านบน) และไม่แสดงประวัติซ้ำ (ดูได้ที่หน้า Sales)
   const [file, setFile] = useState<{ name: string; sheet: string; grid: Cell[][]; at: string } | null>(null);
   const [edit, setEdit] = useState({ taxId: "", companyName: "", periodStart: "", periodEnd: "" });
   const [mode, setMode] = useState<"skip" | "update">("skip");
@@ -85,6 +89,7 @@ export function SalesImport({ incoming }: { incoming?: { file: File; id: number 
   return (
     <div className="space-y-8">
       <section className="space-y-4">
+        {!embedded && (
         <div onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)} onDrop={(e) => { e.preventDefault(); setDrag(false); pick(e.dataTransfer.files[0]); }}
           className={`rounded-lg border-2 border-dashed p-8 text-center ${drag ? "border-slate-900 bg-slate-100" : "border-slate-300 bg-white"}`}>
           <p className="mb-3 text-slate-600">ลากไฟล์รายงานยอดขาย (.xlsx) มาวางที่นี่ หรือ</p>
@@ -92,6 +97,7 @@ export function SalesImport({ incoming }: { incoming?: { file: File; id: number 
           <input ref={input} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={(e) => pick(e.target.files?.[0])} />
           <p className="mt-3 text-xs text-slate-500">ระบบหาหัวตารางจากชื่อคอลัมน์เอง · อ่านไฟล์ในเบราว์เซอร์ · ยังไม่เขียนข้อมูลจนกว่าจะกดยืนยัน</p>
         </div>
+        )}
         {file && <p className="text-sm text-slate-600">ไฟล์: <b>{file.name}</b> · ชีต {file.sheet} · อัปโหลด {when(file.at)} · สถานะ: {({ reading: "กำลังอ่านไฟล์", loading: "กำลังตรวจสอบ", ready: "รอยืนยัน", committing: "กำลังนำเข้า", done: "นำเข้าแล้ว", error: "มีข้อผิดพลาด", idle: "" })[state]}</p>}
         {(state === "reading" || state === "loading") && <p role="status" className="text-sm text-slate-500">กำลังประมวลผล...</p>}
         {state === "error" && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p>}
@@ -102,8 +108,8 @@ export function SalesImport({ incoming }: { incoming?: { file: File; id: number 
               <label className="md:col-span-2"><span className="mb-1 block text-xs text-slate-500">บริษัทผู้ขาย</span><input className={inp + " w-full"} value={edit.companyName} disabled={locked} onChange={(e) => setEdit({ ...edit, companyName: e.target.value })} onBlur={() => runPlan()} /></label>
               <label><span className="mb-1 block text-xs text-slate-500">เลขผู้เสียภาษีผู้ขาย (13 หลัก) *</span><input className={inp + " w-full"} value={edit.taxId} disabled={locked} inputMode="numeric" onChange={(e) => setEdit({ ...edit, taxId: e.target.value })} onBlur={() => runPlan()} /></label>
               <div />
-              <label><span className="mb-1 block text-xs text-slate-500">ช่วงรายงาน เริ่ม</span><input type="date" className={inp} value={edit.periodStart} disabled={locked} onChange={(e) => { const v = { ...edit, periodStart: e.target.value }; setEdit(v); runPlan(file, v); }} /></label>
-              <label><span className="mb-1 block text-xs text-slate-500">สิ้นสุด</span><input type="date" className={inp} value={edit.periodEnd} disabled={locked} onChange={(e) => { const v = { ...edit, periodEnd: e.target.value }; setEdit(v); runPlan(file, v); }} /></label>
+              <label><span className="mb-1 block text-xs text-slate-500">ช่วงรายงาน เริ่ม</span><DateInput className={inp} value={edit.periodStart} disabled={locked} onChange={(e) => { const v = { ...edit, periodStart: e.target.value }; setEdit(v); runPlan(file, v); }} /></label>
+              <label><span className="mb-1 block text-xs text-slate-500">สิ้นสุด</span><DateInput className={inp} value={edit.periodEnd} disabled={locked} onChange={(e) => { const v = { ...edit, periodEnd: e.target.value }; setEdit(v); runPlan(file, v); }} /></label>
               <p className="self-end text-xs text-slate-500 md:col-span-2">ช่วงรายงาน: {plan.period.label || "-"}{plan.period.derived && " (ไม่พบในไฟล์ ใช้ช่วงวันที่ของเอกสาร — โปรดตรวจ)"} · หัวตารางอยู่แถว {plan.headerRow}</p>
             </div>
             {plan.needs.map((n, i) => <p key={i} role="alert" className="rounded-md bg-red-50 p-2 text-sm text-red-700">{n}</p>)}
@@ -161,9 +167,9 @@ export function SalesImport({ incoming }: { incoming?: { file: File; id: number 
         )}
       </section>
 
-      <section>
+      {!embedded && <section>
         <h2 className="mb-2 text-lg font-semibold">ประวัติการนำเข้า</h2>
-        {hist.state === "loading" && <p className="text-sm text-slate-500">กำลังโหลด...</p>}
+        {hist.state === "loading" && <Skeleton kind={"rows"} />}
         {hist.state === "error" && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">โหลดประวัติไม่ได้: {hist.error}</p>}
         {hist.state === "ok" && hist.rows.length === 0 && <p className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">ยังไม่มีประวัติการนำเข้า</p>}
         {hist.state === "ok" && hist.rows.length > 0 && (
@@ -173,7 +179,7 @@ export function SalesImport({ incoming }: { incoming?: { file: File; id: number 
               <td><span className={`rounded px-1.5 py-0.5 text-xs ${b.status === "success" ? "bg-green-100 text-green-800" : b.status === "failed" ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-800"}`}>{b.status}</span></td>
               <td className="whitespace-nowrap">{b.rows_inserted}/{b.rows_updated}/{b.rows_skipped}/{b.rows_invalid}</td><td className="text-right tabular-nums">{b.total_net_imported ? Number(b.total_net_imported).toLocaleString("en-US") : ""}</td><td className="max-w-40 truncate pl-3">{b.imported_by}</td></tr>))}</tbody></table></div>
         )}
-      </section>
+      </section>}
     </div>
   );
 }

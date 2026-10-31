@@ -100,7 +100,7 @@ let s = searchAt(web, OCT)!;
 assert.equal(s.clicks, 4744); assert.equal(s.impressions, 203839); assert.equal(s.ctr, Math.round((4744 / 203839) * 10000) / 100); assert.equal(s.position, 6.79); assert.equal(s.incomplete, undefined);
 ok(`Search Console 1–27 ต.ค.: Clicks 4,744 · Impressions 203,839 · CTR = ${s.ctr}% (คำนวณใหม่) · ตำแหน่งเฉลี่ยถ่วงน้ำหนัก 6.79`);
 s = searchAt(web, { from: "2026-10-10", to: "2026-10-12" })!; assert.equal(s.clicks, 161 + 178 + 188); assert.equal(s.incomplete, undefined);
-s = searchAt(web, { from: "2026-10-20", to: "2026-10-31" })!; assert.match(s.incomplete!, /4 วัน \(28\/10\/2026–31\/10\/2026\)/); assert.equal(searchAt(web, { from: "2026-09-01", to: "2026-09-30" }), null);
+s = searchAt(web, { from: "2026-10-20", to: "2026-10-31" })!; assert.match(s.incomplete!, /4 วัน \(28 ต.ค. 69–31 ต.ค. 69\)/); assert.equal(searchAt(web, { from: "2026-09-01", to: "2026-09-30" }), null);
 ok("กรองรายวันได้ตรง (10–12 ต.ค. = 527 Clicks) · ช่วงที่เกินข้อมูล → ไม่ครบ ระบุวันที่ขาด · ไม่มีข้อมูล → รอข้อมูล");
 
 console.log("6) หน้า Marketing Performance");

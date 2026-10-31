@@ -1,4 +1,8 @@
 "use client";
+import { Skeleton } from "@/components/Skeleton";
+import { Notice } from "@/components/Toast";
+import { DateInput } from "@/components/DateInput";
+import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
 import { useCallback, useEffect, useState } from "react";
 import { NUM_FIELDS, TEXT_FIELDS } from "@/lib/line-oa";
 
@@ -10,8 +14,8 @@ const GROUPS: [string, string[]][] = [
   ["การสอบถามและ Leads", ["new_chats", "inquiries", "leads", "qualified_leads"]],
 ];
 const label = Object.fromEntries(NUM_FIELDS);
-const my = (m: string) => (m ? `${m.slice(5, 7)}/${m.slice(0, 4)}` : "");
-const when = (iso: string) => { try { return new Date(iso).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", dateStyle: "short", timeStyle: "short" }); } catch { return iso; } };
+const my = (m: string) => thMonth(m);
+const when = (iso: string) => thDateTime(iso);
 const SHOW: [string, string][] = [["friends_end", "เพื่อนสิ้นเดือน"], ["new_friends", "เพื่อนใหม่"], ["inquiries", "Inquiries"], ["leads", "Leads"], ["qualified_leads", "Qualified"]];
 
 export function LineOaManager() {
@@ -65,10 +69,10 @@ export function LineOaManager() {
           <h2 className="font-semibold">{editing ? `แก้ไขข้อมูลเดือน ${my(form.report_month)}` : "เพิ่ม / แก้ไขข้อมูลรายเดือน"}</h2>
           {(editing || form.report_month) && <button onClick={reset} className="text-sm underline">ล้างฟอร์ม</button>}
         </div>
-        {msg && <p role={msg.type === "error" ? "alert" : "status"} className={`rounded-md p-3 text-sm ${msg.type === "ok" ? "bg-green-50 text-green-800" : msg.type === "error" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-900"}`}>{msg.text}</p>}
+        <Notice msg={msg} onClose={() => setMsg(null)} />
         <label className="block max-w-xs text-sm">
           <span className="mb-1 block font-medium">เดือนที่รายงาน *</span>
-          <input type="month" value={form.report_month} disabled={editing} onChange={(e) => onMonth(e.target.value)} className={inp("report_month")} />
+          <DateInput month value={form.report_month} disabled={editing} onChange={(e) => onMonth(e.target.value)} className={inp("report_month")} />
           {err("report_month")}
         </label>
         {GROUPS.map(([title, keys]) => (
@@ -94,7 +98,7 @@ export function LineOaManager() {
 
       <section>
         <h2 className="mb-2 text-lg font-semibold">ข้อมูลที่บันทึกแล้ว</h2>
-        {list.state === "loading" && <p className="text-sm text-slate-500">กำลังโหลด...</p>}
+        {list.state === "loading" && <Skeleton kind={"rows"} />}
         {list.state === "error" && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">โหลดข้อมูลไม่ได้: {list.error}</p>}
         {list.state === "ok" && list.rows.length === 0 && <p className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">ยังไม่มีข้อมูล LINE OA — กรอกฟอร์มด้านบนเพื่อเพิ่มเดือนแรก</p>}
         {list.state === "ok" && list.rows.length > 0 && (

@@ -1,4 +1,7 @@
+import { RangeFields } from "@/components/RangeFields";
+import { rangeOf } from "@/lib/range-memory";
 import Link from "next/link";
+import { Note } from "@/components/Note";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { fetchDashboardData } from "@/lib/dashboard-data";
@@ -8,13 +11,14 @@ import { leadsInRange, lostReasons, LOST_REASONS, staffPerformance, type StaffRo
 export const dynamic = "force-dynamic";
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 const iso = (v: string) => (/^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
+const ns = (v: number | null, suffix = "") => (v === null ? "—" : `${v.toLocaleString("en-US")}${suffix}`);
 const n = (v: number | null, suffix = "") => (v === null ? <span className="text-slate-400">—</span> : `${v.toLocaleString("en-US")}${suffix}`);
 
 export default async function LeadReportPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const role = (await auth())?.user?.role;
   if (!role) redirect("/login");
   const sp = await searchParams;
-  const from = iso(one(sp.from)), to = iso(one(sp.to));
+  const rg = await rangeOf(sp); const from = rg.from, to = rg.to;
   let rows: Record<string, string>[];
   try { rows = leadsInRange((await fetchDashboardData(role)).leads, from, to); }
   catch (e) { return <section><h1 className="mb-4 text-2xl font-bold">รายงาน Lead</h1><p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">โหลดข้อมูลไม่สำเร็จ: {e instanceof Error ? e.message.slice(0, 200) : ""}</p></section>; }
@@ -35,25 +39,34 @@ export default async function LeadReportPage({ searchParams }: { searchParams: P
         <p className="text-sm text-slate-500">ผลงานรายพนักงาน และเหตุผลที่ไม่สำเร็จ · นับ Lead ตามวันที่รับ{from || to ? "" : " (ทั้งหมด)"} · ตัวเลขรวมเท่านั้น</p>
       </div>
       <form method="get" className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-white p-4 text-sm">
-        <label><span className="mb-1 block text-xs text-slate-500">รับ Lead ตั้งแต่</span><input type="date" name="from" defaultValue={from} className={inp} /></label>
-        <label><span className="mb-1 block text-xs text-slate-500">ถึง</span><input type="date" name="to" defaultValue={to} className={inp} /></label>
+        <RangeFields from={from} to={to} className={inp} labelFrom="รับ Lead ตั้งแต่" remembered={rg.remembered} />
         <button className="rounded-md bg-slate-900 px-4 py-1.5 font-medium text-white hover:bg-slate-700">ใช้ตัวกรอง</button>
-        {(from || to) && <Link href="/lead-report" className="py-1.5 underline">ล้าง</Link>}
+        {(from || to) && <Link href="/lead-report?range=all" className="py-1.5 underline">ล้าง</Link>}
       </form>
 
       <article className="space-y-2 rounded-lg border border-slate-200 bg-white p-4">
         <h2 className="font-semibold">ผลงานรายพนักงาน</h2>
         {!rows.length ? <p className="text-sm text-slate-500">ยังไม่มี Lead ในช่วงนี้</p> : (
-          <div className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm">
+          <>
+          {/* มือถือ: การ์ดรายพนักงาน */}
+          <ul className="space-y-2 md:hidden">{[...staff, total].map((s) => (
+            <li key={s.staff} className={`rounded-md border border-slate-200 p-3 text-sm ${s === total ? "bg-slate-50" : ""}`}>
+              <div className="font-semibold">{s.staff}</div>
+              <dl className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 tabular-nums">
+                {([["Lead ที่รับ", ns(s.leads)], ["Qualified", `${ns(s.qualified)} (${ns(s.qualifiedPct, "%")})`], ["Site Visit", ns(s.siteVisits)], ["Lead ต่อ 1 Site Visit", ns(s.leadsPerVisit)], ["สัญญา + ขายแล้ว", ns(s.contractSold)], ["Lead ต่อ 1 สัญญา/ขาย", ns(s.leadsPerContract)], ["ซื้อสำเร็จ", ns(s.bought)]] as [string, string][]).map(([k, v]) => <div key={k} className="flex justify-between gap-2"><dt className="text-xs text-slate-500">{k}</dt><dd>{v}</dd></div>)}
+              </dl>
+            </li>))}</ul>
+          <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[760px] text-sm">
             <thead><tr className="border-b text-xs text-slate-500"><th className="px-2 py-1.5 text-left font-medium">Staff</th><th className={th}>Lead ที่รับ</th><th className={th}>Qualified</th><th className={th}>% Qualified</th><th className={th}>Site Visit</th><th className={th}>Lead ต่อ 1 Site Visit</th><th className={th}>สัญญา + ขายแล้ว</th><th className={th}>Lead ต่อ 1 สัญญา/ขาย</th><th className={th}>ซื้อสำเร็จ</th></tr></thead>
             <tbody>{[...staff, total].map((s) => (
-              <tr key={s.staff} className={`border-b border-slate-100 tabular-nums ${s === total ? "bg-slate-50 font-semibold" : ""}`}>
+              <tr key={s.staff} data-pin={s === total ? "" : undefined} className={`border-b border-slate-100 tabular-nums ${s === total ? "bg-slate-50 font-semibold" : ""}`}>
                 <td className="px-2 py-1.5">{s.staff}</td><td className="px-2 text-right">{n(s.leads)}</td><td className="px-2 text-right">{n(s.qualified)}</td><td className="px-2 text-right">{n(s.qualifiedPct, "%")}</td>
                 <td className="px-2 text-right">{n(s.siteVisits)}</td><td className="px-2 text-right">{n(s.leadsPerVisit)}</td><td className="px-2 text-right">{n(s.contractSold)}</td><td className="px-2 text-right">{n(s.leadsPerContract)}</td><td className="px-2 text-right">{n(s.bought)}</td>
               </tr>))}</tbody>
           </table></div>
+          </>
         )}
-        <p className="text-xs text-slate-500">Qualified = Call Status รอเข้าชม / เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน · Site Visit = เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน · สัญญา + ขายแล้ว = Sell Status เซ็นสัญญา / สัญญาเปิด / ขายแล้ว · <b>Lead ต่อ 1 ...</b> = Lead ที่รับ ÷ จำนวนนั้น (ยิ่งน้อยยิ่งดี) · — = ยังไม่มี (หารด้วย 0 ไม่ได้)</p>
+        <Note className="" href="/settings/metrics/lead-report">Qualified = Call Status รอเข้าชม / เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน · Site Visit = เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน · สัญญา + ขายแล้ว = Sell Status เซ็นสัญญา / สัญญาเปิด / ขายแล้ว · <b>Lead ต่อ 1 ...</b> = Lead ที่รับ ÷ จำนวนนั้น (ยิ่งน้อยยิ่งดี) · — = ยังไม่มี (หารด้วย 0 ไม่ได้)</Note>
       </article>
 
       <article className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
@@ -68,7 +81,7 @@ export default async function LeadReportPage({ searchParams }: { searchParams: P
           </table></div>
         </>}
         {lost.notes.length > 0 && <div><h3 className="text-sm font-medium">เหตุผลที่บันทึกไว้ (ช่อง เหตุผลที่ปิดไม่สำเร็จ)</h3><ul className="mt-1 list-disc pl-5 text-sm text-slate-700">{lost.notes.map((x) => <li key={x.reason}>{x.reason} <span className="text-slate-500">({x.count})</span></li>)}</ul></div>}
-        <p className="text-xs text-slate-500">นับจากสถานะ: Call Status กู้ไม่ผ่าน / ไม่สนใจ / ติดต่อไม่ได้ · Sell Status ยกเลิก / บ้านไม่พร้อมขาย · Buy Status Archive — Lead หนึ่งรายนับเหตุผลเดียว · ช่องทางที่ % ไม่สำเร็จสูง อาจได้ Lead ไม่ตรงกลุ่ม</p>
+        <Note className="" href="/settings/metrics/lead-report">นับจากสถานะ: Call Status กู้ไม่ผ่าน / ไม่สนใจ / ติดต่อไม่ได้ · Sell Status ยกเลิก / บ้านไม่พร้อมขาย · Buy Status Archive — Lead หนึ่งรายนับเหตุผลเดียว · ช่องทางที่ % ไม่สำเร็จสูง อาจได้ Lead ไม่ตรงกลุ่ม</Note>
       </article>
     </section>
   );

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Kpi } from "@/lib/dashboard";
 import { changePct } from "@/lib/compare";
 
@@ -5,7 +6,7 @@ const dur = (v: number) => { const m = Math.floor(v / 60), sec = Math.round(v - 
 const show = (fmt: Kpi["fmt"], v: number) => fmt === "sec" ? dur(v) : fmt === "thb" ? `฿${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : fmt === "pct" ? `${v}%` : v.toLocaleString("en-US");
 
 /** การ์ด KPI ใช้ร่วมกันทุกหน้า: รอข้อมูล / N/A / ข้อมูลไม่ครบ / เทียบปีก่อนหรือช่วงก่อน (prev = undefined คือไม่ได้เปรียบเทียบ, null คือไม่มีข้อมูล) */
-export function KpiCard({ k }: { k: Kpi }) {
+export function KpiCard({ k, importHref }: { k: Kpi; importHref?: string }) {
   const L = k.prevLabel ?? "ช่วงก่อน";
   let cmp: React.ReactNode = null;
   if (k.prev !== undefined && k.state === "value") {
@@ -22,7 +23,7 @@ export function KpiCard({ k }: { k: Kpi }) {
     <div className="rounded-lg border border-slate-200 bg-white p-4">
       <div className="text-xs text-slate-500">{k.label}</div>
       {k.state === "value" && <div className="mt-1 text-2xl font-bold tabular-nums">{show(k.fmt, k.value!)}</div>}
-      {k.state === "pending" && <div className="mt-1 text-lg font-semibold text-slate-400">รอข้อมูล</div>}
+      {k.state === "pending" && <div className="mt-1 flex items-baseline gap-2"><span className="text-lg font-semibold text-slate-400">รอข้อมูล</span>{importHref && <Link href={importHref} className="text-xs text-slate-600 underline">นำเข้าข้อมูล →</Link>}</div>}
       {k.state === "excluded" && <div className="mt-1 text-sm text-slate-400">ไม่รวมในตัวกรองนี้</div>}
       {k.state === "restricted" && <div className="mt-1 text-sm text-slate-400">ไม่มีสิทธิ์ดูข้อมูลนี้</div>}
       {k.state === "na" && <div className="mt-1 text-lg font-semibold text-slate-500">N/A</div>}

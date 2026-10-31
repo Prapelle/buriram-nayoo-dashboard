@@ -1,3 +1,4 @@
+import { thMonth } from "./thdate";
 // Checklist ข้อมูลประจำเดือน (30/10/2026): แต่ละแหล่งข้อมูลนำเข้าครบเดือนนั้นแล้วหรือยัง
 // ใช้ข้อมูลที่หน้า ภาพรวม อ่านอยู่แล้ว (ไม่เรียก Google Sheets เพิ่ม) · ยอดขาย FlowAccount ส่งวันที่เอกสารมาแยก (เฉพาะ Admin)
 import { addDays, dmyS, gapsIn, mergeSpans, type DashData, type Row, type Span } from "./dashboard";
@@ -7,8 +8,7 @@ export type CheckStatus = "ครบ" | "บางส่วน" | "ยังไ�
 export type CheckItem = { key: string; name: string; status: CheckStatus; detail: string; href: string };
 export type Checklist = { month: string; label: string; from: string; to: string; items: CheckItem[]; done: number };
 
-const TH_MONTH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
-export const monthLabel = (m: string) => `${TH_MONTH[Number(m.slice(5, 7)) - 1]} ${Number(m.slice(0, 4)) + 543}`;
+export const monthLabel = (m: string) => thMonth(m);
 const lastDay = (m: string) => new Date(Date.UTC(Number(m.slice(0, 4)), Number(m.slice(5, 7)), 0)).toISOString().slice(0, 10); // วันสุดท้ายของเดือน
 const fmt = (g: Span[]) => g.slice(0, 3).map(([a, b]) => (a === b ? dmyS(a) : `${dmyS(a)}–${dmyS(b)}`)).join(", ") + (g.length > 3 ? " ..." : "");
 

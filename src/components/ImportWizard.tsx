@@ -1,4 +1,7 @@
 "use client";
+import { Skeleton } from "@/components/Skeleton";
+import { DateInput } from "@/components/DateInput";
+import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SPECS } from "@/lib/import/specs";
 import { readTextFile, toCsv } from "@/lib/csv";
@@ -28,8 +31,8 @@ const STATUS_TH: Record<string, [string, string]> = {
   insert: ["เพิ่มใหม่", "bg-green-100 text-green-800"], update: ["อัปเดต", "bg-blue-100 text-blue-800"],
   skip: ["ไม่เปลี่ยนแปลง", "bg-slate-100 text-slate-600"], invalid: ["ไม่ถูกต้อง", "bg-red-100 text-red-800"],
 };
-const dmy = (iso?: string) => (iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : iso || "-");
-const dmyTime = (iso: string) => { try { return new Date(iso).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", dateStyle: "short", timeStyle: "short" }); } catch { return iso; } };
+const dmy = (iso?: string) => thDate(iso) || "-";
+const dmyTime = (iso: string) => thDateTime(iso);
 
 /** ประเภทไฟล์ (ตรวจในเบราว์เซอร์): โฆษณา/Facebook → ขั้นตอนเดิม · GA4/Search Console → ส่วนนำเข้าของหน้า Website · .xlsx → ส่วนนำเข้าของหน้า Sales */
 function kindOf(name: string, text: string): "marketing" | "website" {
@@ -177,11 +180,11 @@ export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" 
 
             {plan.spec.period === "user" && (
               <div className="flex flex-wrap items-end gap-4 text-sm">
-                <label><span className="mb-1 block font-medium">ช่วงรายงาน เริ่ม</span><input type="date" className={dateInput} value={period.reportStart} disabled={locked} onChange={(e) => setP("reportStart", e.target.value)} /></label>
-                <label><span className="mb-1 block font-medium">สิ้นสุด</span><input type="date" className={dateInput} value={period.reportEnd} disabled={locked} onChange={(e) => setP("reportEnd", e.target.value)} /></label>
+                <label><span className="mb-1 block font-medium">ช่วงรายงาน เริ่ม</span><DateInput className={dateInput} value={period.reportStart} disabled={locked} onChange={(e) => setP("reportStart", e.target.value)} /></label>
+                <label><span className="mb-1 block font-medium">สิ้นสุด</span><DateInput className={dateInput} value={period.reportEnd} disabled={locked} onChange={(e) => setP("reportEnd", e.target.value)} /></label>
                 {plan.spec.comparison && <>
-                  <label><span className="mb-1 block font-medium">เปรียบเทียบกับ เริ่ม</span><input type="date" className={dateInput} value={period.comparisonStart} disabled={locked} onChange={(e) => setP("comparisonStart", e.target.value)} /></label>
-                  <label><span className="mb-1 block font-medium">สิ้นสุด</span><input type="date" className={dateInput} value={period.comparisonEnd} disabled={locked} onChange={(e) => setP("comparisonEnd", e.target.value)} /></label>
+                  <label><span className="mb-1 block font-medium">เปรียบเทียบกับ เริ่ม</span><DateInput className={dateInput} value={period.comparisonStart} disabled={locked} onChange={(e) => setP("comparisonStart", e.target.value)} /></label>
+                  <label><span className="mb-1 block font-medium">สิ้นสุด</span><DateInput className={dateInput} value={period.comparisonEnd} disabled={locked} onChange={(e) => setP("comparisonEnd", e.target.value)} /></label>
                 </>}
                 <p className="basis-full text-xs text-slate-500">ไฟล์ Google Ads ไม่มีวันที่ในเนื้อไฟล์ ระบบเดาจากชื่อไฟล์ — โปรดตรวจให้ถูกต้องก่อนยืนยัน ({dmy(period.reportStart)} – {dmy(period.reportEnd)})</p>
               </div>
@@ -196,7 +199,7 @@ export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" 
                 </p>
                 {plan.info.metric.lifetime > 0 && (
                   <div>
-                    <label><span className="mb-1 block font-medium">วันที่ส่งออกข้อมูล (ใช้เป็นวันที่ของแถว Lifetime)</span><input type="date" className={dateInput} value={period.snapshotDate} disabled={locked} onChange={(e) => setP("snapshotDate", e.target.value)} /></label>
+                    <label><span className="mb-1 block font-medium">วันที่ส่งออกข้อมูล (ใช้เป็นวันที่ของแถว Lifetime)</span><DateInput className={dateInput} value={period.snapshotDate} disabled={locked} onChange={(e) => setP("snapshotDate", e.target.value)} /></label>
                     <p className="mt-2 rounded-md bg-amber-50 p-2 text-amber-800">แถว Lifetime เป็นยอด <b>สะสม ณ วันส่งออก</b> ไม่ใช่ยอดของวันใดวันหนึ่ง และจะไม่ถูกรวมกับยอดรายวัน</p>
                   </div>
                 )}
@@ -272,13 +275,14 @@ export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" 
       {salesIn && role === "admin" && (
         <section className="space-y-2 rounded-lg border border-slate-200 bg-white p-5">
           <h2 className="font-semibold">ไฟล์รายงานยอดขาย (Sales)</h2>
-          <SalesImport key={salesIn.id} incoming={salesIn} />
+          <SalesImport key={salesIn.id} incoming={salesIn} embedded />
         </section>
       )}
 
       <section>
         <h2 className="mb-2 text-lg font-semibold">ประวัติการนำเข้า</h2>
-        {history.state === "loading" && <p className="text-sm text-slate-500">กำลังโหลด...</p>}
+        {role === "admin" && <p className="mb-2 text-xs text-slate-500">ประวัติการนำเข้ายอดขาย (FlowAccount) ดูที่หน้า <a href="/sales" className="underline">Sales</a></p>}
+        {history.state === "loading" && <Skeleton kind={"rows"} />}
         {history.state === "error" && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">โหลดประวัติไม่ได้: {history.error}</p>}
         {history.state === "ok" && history.rows.length === 0 && <p className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">ยังไม่มีประวัติการนำเข้า</p>}
         {history.state === "ok" && history.rows.length > 0 && (

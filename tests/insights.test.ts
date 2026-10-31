@@ -67,15 +67,15 @@ const data: DashData = {
 };
 const c = buildChecklist(data, "2026-09", TODAY, { salesDates: ["2026-09-03", "2026-08-30"] })!;
 const st2 = Object.fromEntries(c.items.map((x) => [x.key, x]));
-assert.equal(st2.fb_posts.status, "บางส่วน"); assert.match(st2.fb_posts.detail, /ขาด 10\/09\/2026/);
+assert.equal(st2.fb_posts.status, "บางส่วน"); assert.match(st2.fb_posts.detail, /ขาด 10 ก.ย. 69/);
 assert.equal(st2.fb_viewers.status, "ครบ"); assert.equal(st2.fb_link.status, "ยังไม่มี"); assert.equal(st2.meta.status, "ครบ");
-assert.equal(st2.gads.status, "บางส่วน"); assert.match(st2.gads.detail, /16\/09\/2026–30\/09\/2026/); assert.equal(st2.gtime.status, "ครบ");
+assert.equal(st2.gads.status, "บางส่วน"); assert.match(st2.gads.detail, /16 ก.ย. 69–30 ก.ย. 69/); assert.equal(st2.gtime.status, "ครบ");
 assert.equal(st2.ga4.status, "ครบ"); assert.equal(st2.gsc.status, "บางส่วน"); assert.equal(st2.line.status, "ครบ"); assert.equal(st2.sales.detail, "มี 1 เอกสารในเดือนนี้");
-assert.equal(c.done, 6); assert.equal(c.items.length, 10); assert.equal(c.label, "ก.ย. 2569");
+assert.equal(c.done, 6); assert.equal(c.items.length, 10); assert.equal(c.label, "ก.ย. 69");
 assert.equal(st2.fb_link.href, "/settings/import-guide/fb-results");
 assert.equal(buildChecklist(data, "2026-09", TODAY)!.items.length, 9); // ไม่ใช่ Admin = ไม่มีแถวยอดขาย
 const oct = buildChecklist(data, "2026-10", TODAY)!; assert.equal(oct.to, "2026-10-29"); assert.ok(oct.items.every((x) => x.status === "ยังไม่มี"));
-ok("ก.ย. 2569: Facebook โพสต์ขาด 10/09 · Viewers ครบ · Link clicks ยังไม่มี · Google Campaign ขาด 16–30/09 · GA4 snapshot ครบ · Search Console บางส่วน · LINE ครบ · ยอดขาย 1 เอกสาร (เฉพาะ Admin) · เดือนปัจจุบันตรวจถึงเมื่อวาน · ลิงก์ไปคู่มือของแต่ละรายการ");
+ok("ก.ย. 69: Facebook โพสต์ขาด 10/09 · Viewers ครบ · Link clicks ยังไม่มี · Google Campaign ขาด 16–30/09 · GA4 snapshot ครบ · Search Console บางส่วน · LINE ครบ · ยอดขาย 1 เอกสาร (เฉพาะ Admin) · เดือนปัจจุบันตรวจถึงเมื่อวาน · ลิงก์ไปคู่มือของแต่ละรายการ");
 
 console.log("5) เป้าหมายรายเดือน");
 assert.deepEqual(validateTarget({ month: "2026-11", ad_budget_thb: "60,000", lead_target: "120" }), { month: "2026-11", budget: 60000, leads: 120, notes: "" });
@@ -90,6 +90,6 @@ const td: DashData = { ...data, meta: [{ report_start: "2026-10-01", report_end:
 const p = targetProgress(td, "2026-10", TODAY, "admin")!;
 assert.equal(p.spend, 30000); assert.equal(p.spendPct, 50); assert.equal(p.leads, 2); assert.equal(p.leadPct, 20); assert.equal(p.current, true); assert.equal(p.elapsedPct, Math.round((30 / 31) * 1000) / 10);
 assert.equal(targetProgress(td, "2026-09", TODAY, "admin"), null); assert.equal(targetProgress(td, "2026-08", TODAY, "admin"), null);
-ok("ต.ค. 2569: ค่าโฆษณา 30,000 / งบ 60,000 = 50% · Lead 2 / 10 = 20% · ผ่านไป 96.8% ของเดือน · เดือนที่ไม่ได้ตั้งเป้า = ไม่แสดง · ตัวกรองเดือนเต็มพอดีใช้เดือนนั้น");
+ok("ต.ค. 69: ค่าโฆษณา 30,000 / งบ 60,000 = 50% · Lead 2 / 10 = 20% · ผ่านไป 96.8% ของเดือน · เดือนที่ไม่ได้ตั้งเป้า = ไม่แสดง · ตัวกรองเดือนเต็มพอดีใช้เดือนนั้น");
 
 console.log(`\nผ่านทั้งหมด ${pass} รายการ`);

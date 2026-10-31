@@ -182,7 +182,7 @@ try {
   ok("Performance", "Google Spend ฿28,814.82 / Clicks 31,513 / CPC ฿0.91 · Meta ฿37,557.54 · Facebook Engagement 319");
   r = await call("/performance?from=2026-09-10&to=2026-09-20", { as: MKT }); assert.ok(r.html.includes("9,613.98") && r.html.includes("9,360"));
   ok("Performance", "กรอง 10–20 ก.ย.: Google Spend ฿9,613.98 / Clicks 9,360 จาก Time series");
-  r = await call("/performance?from=2026-09-01&to=2026-09-30&compare=yoy", { as: MKT }); assert.ok(r.html.includes("ปีก่อน: Missing Data") && r.html.includes("01/09/2025"));
+  r = await call("/performance?from=2026-09-01&to=2026-09-30&compare=yoy", { as: MKT }); assert.ok(r.html.includes("ปีก่อน: Missing Data") && r.html.includes("1 ก.ย. 68"));
   r = await call("/?from=2026-09-01&to=2026-09-30&compare=yoy", { as: ADMIN }); assert.ok(r.html.includes("ปีก่อน: Missing Data") && r.html.includes("ช่วงเดียวกันของปีก่อน"));
   r = await call("/?compare=yoy", { as: ADMIN }); assert.ok(r.html.includes("เลือกวันที่"));
   ok("YoY", "เทียบ ก.ย. 2025: ไม่มีข้อมูลปีก่อน → Missing Data ทั้งสองหน้า · ไม่เลือกวันที่ในภาพรวม → บอกให้เลือก");

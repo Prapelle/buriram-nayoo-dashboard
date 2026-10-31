@@ -2,6 +2,7 @@ import { excludePages, pageMetric, summarizeFb, VIEWERS_REMARK } from "./fbmetri
 import type { Role } from "./roles";
 import { isQualifiedCall, isSiteVisitCall, BUY_NEEDS, BUY_STATUS, SELL_NEEDS, SELL_STATUS } from "./lead-options";
 import { COMPARE_LABEL, compareRange, type CompareMode, type DRange } from "./compare";
+import { thDate } from "./thdate";
 
 export type Row = Record<string, string>;
 export type DashData = {
@@ -88,7 +89,7 @@ function kpi(key: string, label: string, fmt: Kpi["fmt"], value: number | null, 
 // ---------- ความครบถ้วนของข้อมูลโฆษณา (Phase 2) ----------
 export type Span = [string, string];
 export const addDays = (d: string, n: number) => new Date(Date.parse(d + "T00:00:00Z") + n * 86400000).toISOString().slice(0, 10);
-export const dmyS = (d: string) => (d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : "");
+export const dmyS = (d: string) => thDate(d);
 /** รวมช่วงวันที่ของรายงาน (ช่วงที่ติดกัน/ทับกันรวมเป็นช่วงเดียว) */
 export function mergeSpans(rows: Row[]): Span[] {
   const sp = rows.map((r) => [r.report_start, r.report_end] as Span).filter(([a, b]) => a && b).sort((x, y) => x[0].localeCompare(y[0]));

@@ -3,21 +3,53 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { NavItem } from "@/lib/roles";
+import { TableSort } from "@/components/TableSort";
 
 // โครงหน้าแอป: แถบบนพร้อมปุ่มเบอร์เกอร์ (☰) เปิด/ปิดเมนูด้านข้าง (31/10/2026)
 // - มือถือ (< md): เมนูปิดไว้ก่อน · กดแล้วเลื่อนออกมาทับหน้า · กดลิงก์ / พื้นหลัง / Esc = ปิด
-// - จอใหญ่ (≥ md): เมนูเปิดไว้ก่อน · กดเพื่อซ่อน/แสดง · จำค่าไว้ในเบราว์เซอร์นี้ (ถ้าเบราว์เซอร์ไม่ให้เก็บก็ใช้ค่าเริ่มต้น)
+// - จอใหญ่ (≥ md): เมนูเต็มไว้ก่อน · กดเพื่อย่อเหลือแถบไอคอน / ขยายกลับ · จำค่าไว้ในเบราว์เซอร์นี้
+// - เมนูแบ่งกลุ่ม (การตลาด / ฝ่ายขาย / โครงการหมู่บ้าน / ข้อมูล / ตั้งค่า) · Leads มีตัวเลข Lead ที่ต้องติดตาม (เลยกำหนด + วันนี้)
 const KEY = "nayoo.sidebarHidden";
+const BADGE_KEY = "nayoo.badges";
 const isDesktop = () => typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches;
+
+const ICONS: Record<string, string> = {
+  home: "M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z",
+  chart: "M4 20V10M10 20V4M16 20v-7M22 20H2",
+  page: "M5 3h10l4 4v14H5zM14 3v5h5M8 12h8M8 16h8",
+  megaphone: "M3 10v4h3l7 4V6L6 10zM16 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12",
+  search: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM21 21l-5-5",
+  chat: "M4 5h16v11H9l-5 4z",
+  globe: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18",
+  users: "M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21c0-4 3-6 7-6s7 2 7 6M17 11a3 3 0 1 0 0-6M22 21c0-3-2-5-4-5.5",
+  board: "M4 4h4v16H4zM10 4h4v10h-4zM16 4h4v13h-4z",
+  report: "M6 3h12v18H6zM9 8h6M9 12h6M9 16h3",
+  money: "M3 7h18v10H3zM12 9.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM6 7v10M18 7v10",
+  building: "M4 21V5l8-3v19M12 9h8v12M7 8h2M7 12h2M7 16h2M15 13h2M15 17h2M2 21h20",
+  upload: "M12 16V4M7 9l5-5 5 5M4 20h16",
+  download: "M12 4v12M7 11l5 5 5-5M4 20h16",
+  gear: "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1",
+  target: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zM12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2z",
+  book: "M4 5a2 2 0 0 1 2-2h14v16H6a2 2 0 0 0-2 2zM4 19V5M8 7h8",
+  info: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 11v6M12 7.5v.5",
+};
+function Icon({ name }: { name?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="shrink-0">
+      <path d={ICONS[name ?? ""] ?? ICONS.page} />
+    </svg>
+  );
+}
 
 export function AppShell({ items, email, role, signOutAction, children }: {
   items: NavItem[]; email: string; role: string; signOutAction: () => Promise<void>; children: React.ReactNode;
 }) {
   const path = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [desktopHidden, setDesktopHidden] = useState(false);
+  const [rail, setRail] = useState(false); // จอใหญ่: ย่อเหลือไอคอน
+  const [badges, setBadges] = useState<Record<string, number>>({});
 
-  useEffect(() => { try { setDesktopHidden(window.localStorage.getItem(KEY) === "1"); } catch { /* ใช้ค่าเริ่มต้น */ } }, []);
+  useEffect(() => { try { setRail(window.localStorage.getItem(KEY) === "1"); } catch { /* ใช้ค่าเริ่มต้น */ } }, []);
   useEffect(() => { setMobileOpen(false); }, [path]); // เปลี่ยนหน้าแล้วปิดเมนูบนมือถือ
   useEffect(() => {
     if (!mobileOpen) return;
@@ -25,21 +57,47 @@ export function AppShell({ items, email, role, signOutAction, children }: {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [mobileOpen]);
+  // ตัวเลขบนเมนู: หน้าอื่นโหลดใหม่ไม่เกินทุก 1 นาที (เก็บไว้ในแท็บนี้) — เฉพาะ Admin / Sales
+  useEffect(() => {
+    if (role !== "admin" && role !== "sales") return;
+    let cached: { at: number; v: Record<string, number> } | null = null;
+    try { cached = JSON.parse(window.sessionStorage.getItem(BADGE_KEY) ?? "null"); } catch { /* ไม่มีค่าเก็บ */ }
+    if (cached?.v) setBadges(cached.v);
+    if (cached && Date.now() - cached.at < 60_000 && !["/", "/leads", "/buyer-leads", "/seller-leads"].includes(path)) return; // หน้าที่เกี่ยวกับ Lead โหลดใหม่ทุกครั้ง
+    let alive = true;
+    fetch("/api/badges").then((r) => (r.ok ? r.json() : null)).then((j) => {
+      if (!alive || !j) return; const v = { "/leads": Number(j.leads) || 0 }; setBadges(v);
+      try { window.sessionStorage.setItem(BADGE_KEY, JSON.stringify({ at: Date.now(), v })); } catch { /* ไม่เก็บ */ }
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [role, path]);
 
-  const toggle = () => {
-    if (isDesktop()) {
-      setDesktopHidden((h) => { const n = !h; try { window.localStorage.setItem(KEY, n ? "1" : "0"); } catch { /* ไม่จำค่า */ } return n; });
-    } else setMobileOpen((o) => !o);
-  };
-  // aria-expanded ตามขนาดจอปัจจุบัน (ค่าเริ่มต้นก่อนโหลด = จอใหญ่เปิด)
   const [desk, setDesk] = useState(true);
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 768px)"); setDesk(mq.matches);
     const on = () => setDesk(mq.matches); mq.addEventListener("change", on);
     return () => mq.removeEventListener("change", on);
   }, []);
-  const expanded = desk ? !desktopHidden : mobileOpen;
+  const toggle = () => {
+    if (isDesktop()) setRail((h) => { const n = !h; try { window.localStorage.setItem(KEY, n ? "1" : "0"); } catch { /* ไม่จำค่า */ } return n; });
+    else setMobileOpen((o) => !o);
+  };
+  const expanded = desk ? !rail : mobileOpen;
+  const compact = desk && rail; // แสดงเฉพาะไอคอน
 
+  const link = (n: NavItem, active: boolean, sub = false) => {
+    const b = badges[n.href] ?? 0;
+    return (
+      <Link key={n.href + n.label} href={n.href} prefetch={false} aria-current={active ? "page" : undefined} title={compact ? n.label : undefined} aria-label={compact ? n.label : undefined}
+        className={`flex items-center gap-2.5 rounded-md text-sm ${compact ? "justify-center px-0 py-2" : sub ? "ml-3 px-3 py-1.5" : "px-3 py-2"} ${active ? "bg-slate-900 text-white" : sub ? "text-slate-600 hover:bg-slate-100" : "text-slate-700 hover:bg-slate-100"}`}>
+        <span className="relative"><Icon name={n.icon} />{compact && b > 0 && <span className="absolute -right-2 -top-2 h-2.5 w-2.5 rounded-full bg-red-500" />}</span>
+        {!compact && <span className="min-w-0 flex-1 truncate">{n.label}</span>}
+        {!compact && b > 0 && <span title="Lead ที่ต้องติดตาม (เลยกำหนด + วันนี้)" className={`rounded-full px-1.5 text-[11px] font-semibold ${active ? "bg-white text-slate-900" : "bg-red-500 text-white"}`}>{b}</span>}
+      </Link>
+    );
+  };
+
+  let lastGroup: string | undefined;
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-30 flex h-12 items-center gap-3 border-b border-slate-200 bg-white px-3">
@@ -55,41 +113,29 @@ export function AppShell({ items, email, role, signOutAction, children }: {
 
       <div className="flex">
         {mobileOpen && <div className="fixed inset-0 top-12 z-30 bg-slate-900/40 md:hidden" onClick={() => setMobileOpen(false)} aria-hidden="true" />}
-        <aside id="side-menu"
-          className={`fixed bottom-0 left-0 top-12 z-40 flex w-64 shrink-0 flex-col gap-4 overflow-y-auto border-r border-slate-200 bg-white p-4 transition-transform duration-200
-            md:sticky md:z-auto md:h-[calc(100vh-3rem)] md:w-60 md:translate-x-0 md:transition-none
-            ${mobileOpen ? "visible translate-x-0" : "invisible -translate-x-full md:visible"}
-            ${desktopHidden ? "md:hidden" : ""}`}>
-          <nav aria-label="เมนูหลัก" className="flex flex-col gap-1">
+        <aside id="side-menu" data-compact={compact ? "" : undefined}
+          className={`fixed bottom-0 left-0 top-12 z-40 flex w-64 shrink-0 flex-col gap-4 overflow-y-auto border-r border-slate-200 bg-white transition-transform duration-200
+            md:sticky md:z-auto md:h-[calc(100vh-3rem)] md:translate-x-0 md:transition-none ${compact ? "p-2 md:w-16" : "p-4 md:w-64"}
+            ${mobileOpen ? "visible translate-x-0" : "invisible -translate-x-full md:visible"}`}>
+          <nav aria-label="เมนูหลัก" className="flex flex-col gap-0.5">
             {items.map((n) => {
+              const head = n.group && n.group !== lastGroup ? n.group : null; lastGroup = n.group ?? lastGroup;
+              const heading = head && (compact ? <hr key={"g" + head} className="my-2 border-slate-200" /> : <div key={"g" + head} className="mt-3 px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400">{head}</div>);
               if (n.children) {
                 // เมนูย่อย: ตรงพอดี หรือเป็นหน้าย่อยของเมนูนั้น (เมนูย่อยที่ยาวกว่าชนะ)
                 const hit = [...n.children].sort((a, b) => b.href.length - a.href.length).find((c) => path === c.href || path.startsWith(c.href + "/"));
                 return (
-                  <div key={n.label} className="flex flex-col gap-1">
-                    <span className={`rounded-md px-3 py-2 text-sm ${hit ? "font-semibold text-slate-900" : "text-slate-700"}`}>{n.label}</span>
-                    {n.children.map((c) => {
-                      const active = hit?.href === c.href;
-                      return (
-                        <Link key={c.href} href={c.href} aria-current={active ? "page" : undefined}
-                          className={`ml-3 rounded-md px-3 py-1.5 text-sm ${active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}>
-                          {c.label}
-                        </Link>
-                      );
-                    })}
+                  <div key={n.label} className="flex flex-col gap-0.5">
+                    {compact ? <hr className="my-2 border-slate-200" /> : <span className={`mt-3 flex items-center gap-2.5 rounded-md px-3 py-2 text-sm ${hit ? "font-semibold text-slate-900" : "text-slate-700"}`}><Icon name={n.icon} />{n.label}</span>}
+                    {n.children.map((c) => link(c, hit?.href === c.href, true))}
                   </div>
                 );
               }
               const active = n.href === "/" ? path === "/" : path.startsWith(n.href);
-              return (
-                <Link key={n.href} href={n.href} aria-current={active ? "page" : undefined}
-                  className={`rounded-md px-3 py-2 text-sm ${active ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100"}`}>
-                  {n.label}
-                </Link>
-              );
+              return [heading, link(n, active)];
             })}
           </nav>
-          <div className="mt-auto text-xs text-slate-500">
+          <div className={`mt-auto text-xs text-slate-500 ${compact ? "hidden" : ""}`}>
             <div className="truncate">{email}</div>
             <div className="mb-2">สิทธิ์: {role}</div>
             <form action={signOutAction}><button className="underline">ออกจากระบบ</button></form>
@@ -97,6 +143,7 @@ export function AppShell({ items, email, role, signOutAction, children }: {
         </aside>
         <main className="min-w-0 flex-1 p-4 md:p-8">{children}</main>
       </div>
+      <TableSort />
     </div>
   );
 }

@@ -164,7 +164,7 @@ console.log("9) Facebook Page ระดับเพจ: Viewers / Link clicks �
   const part = pageMetric(rows, "viewers", { from: "2026-09-10", to: "2026-09-12" })!;
   assert.equal(part.sum, 93295 + 46502 + 34273);
   const over = pageMetric(rows, "viewers", { from: "2026-08-30", to: "2026-10-02" })!;
-  assert.equal(over.sum, sumV); assert.match(over.incomplete!, /4 วัน \(30\/08\/2026–31\/08\/2026, 01\/10\/2026–02\/10\/2026\)/);
+  assert.equal(over.sum, sumV); assert.match(over.incomplete!, /4 วัน \(30 ส.ค. 69–31 ส.ค. 69, 1 ต.ค. 69–2 ต.ค. 69\)/);
   assert.equal(pageMetric(rows, "viewers", { from: "2026-10-01", to: "2026-10-31" }), null);
   const dupDay = [...rows, { metric: "viewers", metric_date: "2026-09-01", value: "99999", imported_at: "2026-10-29T00:00:00Z" }];
   assert.equal(pageMetric(dupDay, "viewers", { from: "2026-09-01", to: "2026-09-01" })!.sum, 99999);

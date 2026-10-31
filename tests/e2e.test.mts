@@ -170,7 +170,7 @@ const v1 = applyView(posts, { sort: "reach", dir: "desc", size: 10 }); assert.eq
 const v2 = applyView(posts, { sort: "link_clicks", dir: "asc", size: 100 }); assert.equal(v2.rows.at(-1)!.link_clicks, ""); assert.equal(v2.rows[0].link_clicks === "", false);
 assert.equal(applyView(posts, { q: "ไม่มีข้อความนี้แน่นอน", searchKeys: ["title"] }).total, 0); assert.equal(applyView(posts, { page: 99, size: 10 }).page, 6);
 ok("ตาราง: เรียงลำดับ/แบ่งหน้า/ค้นหาได้ และค่าว่างอยู่ท้ายเสมอ");
-assert.equal(fmtCell("thb", "3944.63"), "฿3,944.63"); assert.equal(fmtCell("date", "2026-09-30"), "30/09/2026"); assert.equal(fmtCell("int", ""), ""); assert.equal(fmtCell("pct", "5.61"), "5.61%");
+assert.equal(fmtCell("thb", "3944.63"), "฿3,944.63"); assert.equal(fmtCell("date", "2026-09-30"), "30 ก.ย. 69"); assert.equal(fmtCell("int", ""), ""); assert.equal(fmtCell("pct", "5.61"), "5.61%");
 assert.equal(inferKind("cost_thb"), "thb"); assert.equal(inferKind("ctr_pct"), "pct"); assert.equal(inferKind("clicks_comparison"), "int"); ok("รูปแบบแสดงผล: ฿, %, วันที่ DD/MM/YYYY, ค่าว่างไม่แสดงเป็น 0");
 
 console.log("7) LINE OA รายเดือน");

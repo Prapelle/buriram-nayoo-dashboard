@@ -18,6 +18,7 @@ const EXPECT: Record<string, string[] | "public" | Record<string, string[]>> = {
   "src/app/api/import/plan/route.ts": ["admin", "marketing"], "src/app/api/import/commit/route.ts": ["admin", "marketing"], "src/app/api/import/history/route.ts": ["admin", "marketing"],
   "src/app/api/line-oa/route.ts": ["admin", "marketing"],
   "src/app/api/leads/route.ts": ["admin", "sales"],
+  "src/app/api/badges/route.ts": ["admin", "sales"], // จำนวน Lead ที่ต้องติดตาม (ตัวเลขบนเมนู)
   "src/app/api/developers/route.ts": ["admin", "sales"], // Developer มีเบอร์/Line ผู้ติดต่อ
   "src/app/api/sales/plan/route.ts": ["admin", "sales"], "src/app/api/sales/commit/route.ts": ["admin", "sales"], "src/app/api/sales/history/route.ts": ["admin", "sales"],
   "src/app/api/export/sales-transactions/route.ts": ["admin", "sales"],

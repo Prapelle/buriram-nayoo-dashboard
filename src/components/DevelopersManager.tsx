@@ -1,4 +1,10 @@
 "use client";
+import { useIsMobile } from "@/lib/use-mobile";
+import { Skeleton } from "@/components/Skeleton";
+import { Notice } from "@/components/Toast";
+import { lineHref, telHref } from "@/lib/contact-links";
+import { DateInput } from "@/components/DateInput";
+import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { parseCsv, readTextFile, toCsv } from "@/lib/csv";
 import { readXlsx } from "@/lib/xlsx";
@@ -9,7 +15,7 @@ import {
 
 type Data = { devs: Dev[]; products: DevProduct[]; logs: Record<string, string>[]; staff: string[]; productTypes: string[]; today: string };
 type Dup = { dev_code: string; company_name: string; project_main: string; matched: string[] };
-const dmy = (s?: string) => (s && /^\d{4}-\d{2}-\d{2}/.test(s) ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}` : "");
+const dmy = (s?: string) => (s && /^\d{4}-\d{2}-\d{2}/.test(s) ? thDate(s) : "");
 const thb = (n: number) => `฿${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 const ST_COLOR: Record<string, string> = {
   ยังไม่เข้าร่วม: "bg-slate-100", เข้าร่วมแล้ว: "bg-sky-100", มีแผนเข้าพบ: "bg-amber-100", เข้าพบแล้ว: "bg-indigo-100", ปิดการขาย: "bg-emerald-100",
@@ -23,6 +29,7 @@ const TEMPLATE = [["ชื่อบริษัท", "โครงการห�
 
 export function DevelopersManager() {
   const [data, setData] = useState<Data | null>(null);
+  const mobile = useIsMobile();
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState<{ type: "ok" | "error"; text: string } | null>(null);
   const [f, setF] = useState({ q: "", status: "", tier: "", staff: "", product: "" });
@@ -120,11 +127,12 @@ export function DevelopersManager() {
   const downloadTemplate = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + toCsv(TEMPLATE)], { type: "text/csv;charset=utf-8" })); a.download = "developer_template.csv"; a.click(); URL.revokeObjectURL(a.href); };
 
   if (err) return <p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">{err}</p>;
-  if (!data) return <p className="text-sm text-slate-500">กำลังโหลด...</p>;
+  if (!data) return <Skeleton kind={"rows"} />;
   const inp = (k: string, e = errors) => `w-full rounded-md border px-2 py-1.5 text-sm ${e[k] ? "border-red-400" : "border-slate-300"}`;
   const fld = (k: string, label = LABEL[k], o: { type?: string; area?: boolean; list?: string; req?: boolean } = {}) => (
     <label key={k} className="text-sm"><span className="mb-1 block text-xs text-slate-600">{label}{o.req && " *"}</span>
       {o.area ? <textarea rows={2} value={form![k]} onChange={(e) => setForm({ ...form!, [k]: e.target.value })} className={inp(k)} />
+        : o.type === "date" ? <DateInput aria-label={label} value={form![k]} onChange={(e) => setForm({ ...form!, [k]: e.target.value })} className={inp(k)} />
         : <input type={o.type ?? "text"} list={o.list} value={form![k]} onChange={(e) => setForm({ ...form!, [k]: e.target.value })} className={inp(k)} />}
       {errors[k] && <span className="text-xs text-red-600">{errors[k]}</span>}</label>
   );
@@ -142,7 +150,7 @@ export function DevelopersManager() {
 
   return (
     <div className="space-y-5">
-      {msg && <p role={msg.type === "error" ? "alert" : "status"} className={`rounded-md p-3 text-sm ${msg.type === "ok" ? "bg-green-50 text-green-800" : "bg-red-50 text-red-700"}`}>{msg.text}</p>}
+      <Notice msg={msg} onClose={() => setMsg(null)} />
 
       {form && (
         <section className="space-y-4 rounded-lg border border-slate-300 bg-white p-5">
@@ -202,8 +210,8 @@ export function DevelopersManager() {
               <div className="space-y-2 rounded-md bg-slate-50 p-3">
                 <div className="grid gap-2 sm:grid-cols-5">
                   <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">Product *</span><select aria-label="Product" value={prod.product} onChange={(e) => setProd({ ...prod, product: e.target.value })} className={inp("product", prodErr)}><option value="">— เลือก —</option>{data.productTypes.map((t) => <option key={t}>{t}</option>)}</select></label>
-                  <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">วันเริ่ม *</span><input type="date" aria-label="วันเริ่ม" value={prod.start_date} onChange={(e) => setProd({ ...prod, start_date: e.target.value })} className={inp("start_date", prodErr)} /></label>
-                  <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">วันหมดอายุ *</span><input type="date" aria-label="วันหมดอายุ" value={prod.end_date} onChange={(e) => setProd({ ...prod, end_date: e.target.value })} className={inp("end_date", prodErr)} /></label>
+                  <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">วันเริ่ม *</span><DateInput aria-label="วันเริ่ม" value={prod.start_date} onChange={(e) => setProd({ ...prod, start_date: e.target.value })} className={inp("start_date", prodErr)} /></label>
+                  <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">วันหมดอายุ *</span><DateInput aria-label="วันหมดอายุ" value={prod.end_date} onChange={(e) => setProd({ ...prod, end_date: e.target.value })} className={inp("end_date", prodErr)} /></label>
                   <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">ราคา (บาท)</span><input inputMode="decimal" aria-label="ราคา (บาท)" value={prod.price_thb} onChange={(e) => setProd({ ...prod, price_thb: e.target.value })} className={inp("price_thb", prodErr)} /></label>
                   <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">หมายเหตุ</span><input aria-label="หมายเหตุ Product" value={prod.notes} onChange={(e) => setProd({ ...prod, notes: e.target.value })} className={inp("notes", prodErr)} /></label>
                 </div>
@@ -233,7 +241,24 @@ export function DevelopersManager() {
       </div>
 
       {data.devs.length === 0 ? <p className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">ยังไม่มี Developer — กด &quot;+ เพิ่ม Developer&quot; หรือนำเข้ารายชื่อจากไฟล์ด้านล่าง</p> : (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        <>
+        {mobile && <ul className="space-y-2" aria-label="รายการ Developer">{rows.map((d) => {
+          const act = activeOf(d); const over = d.next_follow_up_at && d.next_follow_up_at < data.today;
+          return (
+            <li key={d.developer_id} className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
+              <div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="font-medium">{d.company_name || d.project_main || "—"}</div><div className="text-xs text-slate-500"><span className="font-mono">{d.dev_code}</span>{d.contact_name && ` · ${d.contact_name}`}</div></div>
+                <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs ${ST_COLOR[d.status || DEV_DEFAULT] ?? "bg-slate-100"}`}>{d.status || DEV_DEFAULT}</span></div>
+              {act.map((p) => <div key={p.product_id} className="mt-1 text-xs">{p.product} <span className="text-slate-500">ถึง {dmy(p.end_date)}</span></div>)}
+              {d.next_follow_up_at && <p className={`mt-1 text-xs ${over ? "font-semibold text-red-600" : "text-slate-600"}`}>ติดต่อ {dmy(d.next_follow_up_at)}</p>}
+              <div className="mt-2 flex flex-wrap gap-2">
+                {d.phone && <a href={telHref(d.phone)} className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white">โทร {d.phone}</a>}
+                {d.line_id && <a href={lineHref(d.line_id)} target="_blank" rel="noreferrer" className="rounded-md bg-green-500 px-3 py-1.5 text-xs font-medium text-white">LINE</a>}
+                <button onClick={() => { setViewId(d.developer_id); setForm(null); setProd(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="rounded-md border border-slate-300 px-3 py-1.5 text-xs">ดู</button>
+                <button onClick={() => openForm(d)} className="rounded-md border border-slate-300 px-3 py-1.5 text-xs">แก้ไข</button>
+              </div>
+            </li>);
+        })}</ul>}
+        {!mobile && <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
           <table className="w-full min-w-[960px] text-left text-sm">
             <thead><tr className="border-b bg-slate-50 text-xs text-slate-500"><th className="p-2">รหัส</th><th>บริษัท / โครงการหลัก</th><th>ผู้ติดต่อ</th><th>เบอร์ / Line</th><th>Tier</th><th>Status</th><th>Product ที่ใช้อยู่</th><th>Staff</th><th>ติดต่อครั้งถัดไป</th><th /></tr></thead>
             <tbody>{rows.map((d) => {
@@ -242,7 +267,7 @@ export function DevelopersManager() {
                 <tr key={d.developer_id} className="border-b border-slate-100 align-top">
                   <td className="p-2 font-mono text-xs">{d.dev_code}</td>
                   <td className="py-2"><div className="font-medium">{d.company_name || "—"}</div><div className="text-xs text-slate-500">{[d.project_main, d.project_sub1, d.project_sub2].filter(Boolean).join(" · ")}</div></td>
-                  <td>{d.contact_name}</td><td className="text-xs">{d.phone}<div>{d.line_id}</div></td><td>{d.tier}</td>
+                  <td>{d.contact_name}</td><td className="text-xs">{d.phone && <a href={telHref(d.phone)} className="hover:underline">{d.phone}</a>}<div>{d.line_id && <a href={lineHref(d.line_id)} target="_blank" rel="noreferrer" className="hover:underline">{d.line_id}</a>}</div></td><td>{d.tier}</td>
                   <td><span className={`rounded px-1.5 py-0.5 text-xs ${ST_COLOR[d.status || DEV_DEFAULT] ?? "bg-slate-100"}`}>{d.status || DEV_DEFAULT}</span></td>
                   <td className="text-xs">{act.length ? act.map((p) => <div key={p.product_id}>{p.product} <span className="text-slate-500">ถึง {dmy(p.end_date)}</span></div>) : <span className="text-slate-300">—</span>}</td>
                   <td>{d.staff}</td><td className={over ? "font-semibold text-red-600" : ""}>{dmy(d.next_follow_up_at)}</td>
@@ -251,12 +276,13 @@ export function DevelopersManager() {
             })}</tbody>
           </table>
           <p className="p-2 text-xs text-slate-500">{rows.length.toLocaleString("en-US")} รายการ</p>
-        </div>
+        </div>}
+        </>
       )}
 
       <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
         <div className="flex flex-wrap items-end justify-between gap-3"><h2 className="font-semibold">สรุปรายเดือน (ต่อ Staff)</h2>
-          <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">เดือน</span><input type="month" aria-label="เดือนของสรุป" value={month} onChange={(e) => setMonth(e.target.value)} className="rounded-md border border-slate-300 px-2 py-1.5 text-sm" /></label></div>
+          <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">เดือน</span><DateInput month aria-label="เดือนของสรุป" value={month} onChange={(e) => setMonth(e.target.value)} className="rounded-md border border-slate-300 px-2 py-1.5 text-sm" /></label></div>
         {report.length === 0 ? <p className="text-sm text-slate-500">ยังไม่มีการเปลี่ยน Status ในเดือนนี้</p> : (
           <div className="overflow-x-auto"><table className="w-full min-w-[560px] text-sm">
             <thead><tr className="border-b text-xs text-slate-500"><th className="py-1.5 text-left font-medium">Staff</th><th className="text-right font-medium">นัดเข้าพบ</th><th className="text-right font-medium">เข้าพบแล้ว</th><th className="text-right font-medium">ไม่ให้เข้าพบ / นัดไม่สำเร็จ</th><th className="text-right font-medium">Win (ปิดการขาย)</th><th className="text-right font-medium">ยอด Product ที่เริ่มเดือนนี้</th></tr></thead>

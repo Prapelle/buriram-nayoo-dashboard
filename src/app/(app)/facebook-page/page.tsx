@@ -1,3 +1,6 @@
+import { RangeFields } from "@/components/RangeFields";
+import { rangeOf } from "@/lib/range-memory";
+import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
@@ -32,7 +35,7 @@ export default async function FacebookPagePage({ searchParams }: { searchParams:
   if (role !== "admin" && role !== "marketing") redirect("/");
   const sp = await searchParams;
   const view = one(sp.view) === "daily" ? "daily" : one(sp.view) === "page" ? "page" : "posts";
-  const from = iso(one(sp.from)), to = iso(one(sp.to));
+  const rg = await rangeOf(sp); const from = rg.from, to = rg.to;
   const q = one(sp.q), type = one(sp.post_type), showAll = one(sp.all) === "1";
   const sort = one(sp.sort) || (view === "posts" ? "publish_time" : "metric_date"), dir = (one(sp.dir) || "desc") as "asc" | "desc";
 
@@ -76,7 +79,7 @@ export default async function FacebookPagePage({ searchParams }: { searchParams:
       <div>
         <h1 className="text-2xl font-bold">Facebook Page</h1>
         <p className="text-sm text-slate-500">
-          {rows.length || pageRows.length ? <>อัปเดตล่าสุด: {last ? new Date(last).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", dateStyle: "short", timeStyle: "short" }) : "-"} · ข้อมูลสถิติ {fmtCell("date", allDates[0] ?? "")} – {fmtCell("date", allDates[allDates.length - 1] ?? "")}</> : "อัปเดตล่าสุด: ยังไม่มีข้อมูล"}
+          {rows.length || pageRows.length ? <>อัปเดตล่าสุด: {last ? thDateTime(last) : "-"} · ข้อมูลสถิติ {fmtCell("date", allDates[0] ?? "")} – {fmtCell("date", allDates[allDates.length - 1] ?? "")}</> : "อัปเดตล่าสุด: ยังไม่มีข้อมูล"}
           {" · "}นำเข้าได้ที่ <Link href="/import" className="underline">นำเข้า CSV</Link>
         </p>
       </div>
@@ -85,13 +88,12 @@ export default async function FacebookPagePage({ searchParams }: { searchParams:
       </p>
       <form method="get" className="flex flex-wrap items-end gap-3 text-sm">
         {view !== "posts" && <input type="hidden" name="view" value={view} />}
-        <label><span className="mb-1 block text-xs text-slate-500">วันที่ของสถิติ ตั้งแต่</span><input type="date" name="from" defaultValue={from} className={inp} /></label>
-        <label><span className="mb-1 block text-xs text-slate-500">ถึง</span><input type="date" name="to" defaultValue={to} className={inp} /></label>
+        <RangeFields from={from} to={to} className={inp} labelFrom="วันที่ของสถิติ ตั้งแต่" remembered={rg.remembered} />
         <label><span className="mb-1 block text-xs text-slate-500">ค้นหา</span><input name="q" defaultValue={q} placeholder="ข้อความโพสต์ / ชื่อเพจ" className={inp} /></label>
         <label><span className="mb-1 block text-xs text-slate-500">ประเภทโพสต์</span><select name="post_type" defaultValue={type} className={inp}><option value="">ทั้งหมด</option>{types.map((x) => <option key={x}>{x}</option>)}</select></label>
         {showAll && <input type="hidden" name="all" value="1" />}
         <button className="rounded-md bg-slate-900 px-4 py-1.5 font-medium text-white">ใช้ตัวกรอง</button>
-        {(q || type || from || to) && <Link href={href("/facebook-page", { view: params.view, all: params.all })} className="py-1.5 underline">ล้าง</Link>}
+        {(q || type || from || to) && <Link href={href("/facebook-page", { view: params.view, all: params.all, range: "all" })} className="py-1.5 underline">ล้าง</Link>}
       </form>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {([["Viewers (แทน Reach)", pv, `${VIEWERS_REMARK} · ผลรวม Viewers รายวันระดับเพจ (คนเดียวกันต่างวันนับซ้ำ ไม่ใช่ Unique)`], ["Link clicks (ระดับเพจ)", pc, "Link clicks รายวันระดับเพจ"]] as const).map(([l, m, note]) => (

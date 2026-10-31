@@ -40,7 +40,7 @@ const half = gtime.filter((r) => r.date <= "2026-09-15");
 ({ k } = run({ gtime: half }));
 assert.equal(k.g_spend.value, 28814.82); assert.match(k.g_spend.note!, /Campaign Report/); ok("Time series มีแค่ครึ่งเดือน แต่ Campaign Report ครบ → ใช้ Campaign Report (ไม่ใช้ข้อมูลครึ่งเดียว)");
 ({ k } = run({ gtime: half, google: [] }));
-assert.equal(k.g_spend.value, tsSum("cost_thb", "2026-09-01", "2026-09-15")); assert.equal(k.g_spend.incomplete, "ไม่มีข้อมูลรายวัน 15 วัน (16/09/2026–30/09/2026)");
+assert.equal(k.g_spend.value, tsSum("cost_thb", "2026-09-01", "2026-09-15")); assert.equal(k.g_spend.incomplete, "ไม่มีข้อมูลรายวัน 15 วัน (16 ก.ย. 69–30 ก.ย. 69)");
 ok("มีแต่ Time series ครึ่งเดือน → ใช้ที่มี + ข้อมูลไม่ครบ ระบุวันที่ขาด 16/09–30/09/2026");
 ({ k } = run({ gtime: [{ date: "2026-09-01", cost_thb: "100", clicks: "0", impressions: "50" }], google: [] }, { from: "2026-09-01", to: "2026-09-01" }));
 assert.equal(k.g_cpc.state, "na"); assert.equal(k.g_cpc.value, null); assert.equal(k.g_clicks.value, 0); ok("Clicks = 0 → CPC = N/A (ไม่ใช่ 0)");
@@ -88,7 +88,7 @@ assert.equal(p.trend.google!.length, 30); assert.equal(r2(p.trend.google!.reduce
 ok("แนวโน้มรายวัน 30 จุด / รายเดือน ก.ย. = 28,814.82 · ไม่มี Time series → ไม่สร้างกราฟจาก Campaign Report (บอกเหตุผล)");
 ({ p } = run({}, { from: "2026-09-10", to: "2026-09-20" }));
 const pf = Object.fromEntries(p.platforms.map((r) => [r.platform, r])); assert.equal(pf["Google Ads"].status, "ครบ"); assert.equal(pf["Meta Ads"].status, "ไม่ครบ"); assert.equal(pf["Website (GA4)"].status, "รอข้อมูล"); assert.equal(pf["Google Search"].status, "รอข้อมูล"); assert.equal(pf["Facebook Page"].spend, null);
-const so = Object.fromEntries(p.sources.map((s) => [s.name, s])); assert.equal(so["Google Ads Time series (รายวัน)"].available, "01/09/2026–30/09/2026");
+const so = Object.fromEntries(p.sources.map((s) => [s.name, s])); assert.equal(so["Google Ads Time series (รายวัน)"].available, "1 ก.ย. 69–30 ก.ย. 69");
 ok("ตารางตามแพลตฟอร์มแยก Paid/Organic/Website พร้อมสถานะ ครบ / ไม่ครบ / รอข้อมูล และช่วงข้อมูลที่มีของแต่ละแหล่ง");
 ({ p } = run({}, { from: "2026-09-20", to: "2026-09-10" })); assert.ok(p.warnings[0].includes("หลังวันที่สิ้นสุด")); assert.equal(p.groups.length, 0); ok("วันที่เริ่มหลังวันสิ้นสุด → เตือน ไม่คำนวณ");
 ({ p } = run({ meta: [], google: [], gtime: [], posts: [] })); assert.equal(p.range, null); ok("ไม่มีข้อมูลเลย → ไม่มีช่วง (แสดงข้อความให้นำเข้า)");

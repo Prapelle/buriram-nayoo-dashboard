@@ -1,5 +1,10 @@
 "use client";
+import { Skeleton } from "@/components/Skeleton";
+import { Notice } from "@/components/Toast";
+import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
 import Link from "next/link";
+import { BoardScroller, BoardTabs } from "@/components/Board";
+import { telHref } from "@/lib/contact-links";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BUY_NEEDS, CALL_DEFAULT, CALL_STATUS, normCall, SELL_DEFAULT, SELL_NEEDS, SELL_STATUS } from "@/lib/lead-options";
 import { filterLeads, leadStatusOf, todayBkk, type Lead } from "@/lib/leads";
@@ -25,7 +30,7 @@ const HEAD: Record<string, string> = {
   ติดต่อได้แล้ว: "bg-green-100", รอเข้าชม: "bg-yellow-200", เข้าชมแล้ว: "bg-sky-200", จอง: "bg-violet-200", ซื้อสำเร็จ: "bg-emerald-200",
   กู้ไม่ผ่าน: "bg-orange-200", ติดต่อไม่ได้: "bg-red-200", ไม่สนใจ: "bg-slate-300", [OTHER]: "bg-amber-100",
 };
-const dmy = (iso: string) => (/^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "");
+const dmy = (iso: string) => (/^\d{4}-\d{2}-\d{2}/.test(iso) ? thDate(iso) : "");
 
 export function StatusBoard({ kind }: { kind: "seller" | "buyer" }) {
   const cfg = CFG[kind];
@@ -37,6 +42,7 @@ export function StatusBoard({ kind }: { kind: "seller" | "buyer" }) {
   }, [kind, cfg.def, statuses]);
 
   const [state, setState] = useState<"loading" | "ok" | "error">("loading");
+  const [tab, setTab] = useState(""); // มือถือ: คอลัมน์ที่แสดง
   const [all, setAll] = useState<Lead[]>([]);
   const [staff, setStaff] = useState<string[]>([]);
   const [q, setQ] = useState("");
@@ -88,7 +94,7 @@ export function StatusBoard({ kind }: { kind: "seller" | "buyer" }) {
 
   return (
     <div className="space-y-3">
-      {msg && <p role={msg.type === "error" ? "alert" : "status"} className={`rounded-md p-3 text-sm ${msg.type === "ok" ? "bg-green-50 text-green-800" : "bg-red-50 text-red-700"}`}>{msg.text}</p>}
+      <Notice msg={msg} onClose={() => setMsg(null)} />
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">ค้นหา</span>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ชื่อ / เบอร์ / รหัส / Remark" className="w-56 rounded-md border border-slate-300 px-2 py-1.5 text-sm" /></label>
@@ -98,24 +104,26 @@ export function StatusBoard({ kind }: { kind: "seller" | "buyer" }) {
         <span className="ml-auto text-xs text-slate-500">{shown.length.toLocaleString("en-US")} รายการ · เพิ่ม/แก้ไขรายละเอียดที่หน้า <Link href="/leads" className="underline">Leads</Link></span>
       </div>
 
-      {state === "loading" && <p className="text-sm text-slate-500">กำลังโหลด...</p>}
+      {state === "loading" && <Skeleton kind={"board"} />}
       {state === "ok" && rows.length === 0 && <p className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">ยังไม่มี {cfg.none} — เพิ่มได้ที่หน้า Leads</p>}
 
       {state === "ok" && rows.length > 0 && (
-        <div className="flex items-start gap-3 overflow-x-auto pb-3">
+        <>
+        <BoardTabs tabs={colKeys.map((k) => ({ key: k, label: k === OTHER ? "ค่าเดิมที่ไม่รู้จัก" : k, count: cols[k].length, cls: HEAD[k] }))} active={colKeys.includes(tab) ? tab : colKeys[0]} onPick={setTab} />
+        <BoardScroller>
           {colKeys.map((k) => {
             const list = cols[k]; const isOther = k === OTHER;
             return (
-              <div key={k}
+              <div key={k} data-col={k}
                 onDragOver={isOther ? undefined : (e) => { if (dragId) { e.preventDefault(); setOver(k); } }}
                 onDragLeave={() => setOver((o) => (o === k ? "" : o))}
                 onDrop={isOther ? undefined : (e) => { e.preventDefault(); setOver(""); const id = e.dataTransfer.getData("text/plain") || dragId; setDragId(""); if (id) move(id, k); }}
-                className={`flex max-h-[75vh] w-64 shrink-0 flex-col rounded-lg border bg-slate-50 ${over === k ? "border-slate-900 ring-2 ring-slate-300" : "border-slate-200"}`}>
+                className={`${(colKeys.includes(tab) ? tab : colKeys[0]) === k ? "flex" : "hidden"} max-h-[75vh] w-full shrink-0 flex-col rounded-lg border bg-slate-50 md:flex md:w-64 ${over === k ? "border-slate-900 ring-2 ring-slate-300" : "border-slate-200"}`}>
                 <div className={`flex items-center justify-between rounded-t-lg px-3 py-2 text-sm font-semibold ${HEAD[k]}`}>
                   <span>{isOther ? "ค่าเดิมที่ไม่รู้จัก" : k}</span><span className="rounded-full bg-white/70 px-2 text-xs">{list.length}</span>
                 </div>
                 <ul className="flex-1 space-y-2 overflow-y-auto p-2">
-                  {list.length === 0 && <li className="py-6 text-center text-xs text-slate-400">ว่าง</li>}
+                  {list.length === 0 && <li className="py-6 text-center text-xs text-slate-400">ยังไม่มี Lead ในสถานะนี้<span className="hidden md:inline"> · ลากการ์ดมาวางได้</span></li>}
                   {list.map((r) => {
                     const overdue = r.next_follow_up_at && r.next_follow_up_at < today && !(cfg.closed as readonly string[]).includes(colOf(r));
                     const b = busy.has(r.lead_id);
@@ -125,7 +133,7 @@ export function StatusBoard({ kind }: { kind: "seller" | "buyer" }) {
                         onDragEnd={() => { setDragId(""); setOver(""); }}
                         className={`rounded-md border border-slate-200 bg-white p-2.5 text-sm shadow-sm ${b ? "opacity-50" : "cursor-grab active:cursor-grabbing"} ${dragId === r.lead_id ? "opacity-40" : ""}`}>
                         <div className="font-medium leading-snug">{r.customer_name}</div>
-                        <div className="mt-0.5 text-xs text-slate-500">{[r.phone, r.property_type, r.price_range].filter(Boolean).join(" · ") || <span className="text-slate-300">—</span>}</div>
+                        <div className="mt-0.5 text-xs text-slate-500">{r.phone && <><a href={telHref(r.phone)} className="text-sky-700 hover:underline" draggable={false}>{r.phone}</a>{(r.property_type || r.price_range) && " · "}</>}{[r.property_type, r.price_range].filter(Boolean).join(" · ")}{!r.phone && !r.property_type && !r.price_range && <span className="text-slate-300">—</span>}</div>
                         {r.interest && <div className="mt-0.5 line-clamp-2 text-xs text-slate-600" title={r.interest}>สนใจ: {r.interest}</div>}
                         {kind === "buyer" && <div className="mt-1 flex gap-1 text-[11px]"><span className="rounded bg-slate-100 px-1.5 py-0.5">{r.need}</span>{r.buy_status && <span className="rounded bg-slate-100 px-1.5 py-0.5">{r.buy_status}</span>}</div>}
                         <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
@@ -143,7 +151,8 @@ export function StatusBoard({ kind }: { kind: "seller" | "buyer" }) {
                 </ul>
               </div>);
           })}
-        </div>
+        </BoardScroller>
+        </>
       )}
       <p className="text-xs text-slate-500">• {cfg.note} · ลากบนมือถือไม่สะดวก ใช้เมนูสถานะบนการ์ดแทน{noNeed > 0 && ` · มี ${noNeed} Lead ที่ยังไม่ระบุ Need ไม่แสดงบนบอร์ด (กำหนด Need ที่หน้า Leads)`}</p>
     </div>

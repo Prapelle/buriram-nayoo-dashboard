@@ -1,4 +1,8 @@
+import { RangeFields } from "@/components/RangeFields";
+import { rangeOf } from "@/lib/range-memory";
+import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
 import Link from "next/link";
+import { Note } from "@/components/Note";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { BarList, LineChart, Pending } from "@/components/charts";
@@ -17,7 +21,8 @@ export default async function SalesDashboardPage({ searchParams }: { searchParam
   const role = (await auth())?.user?.role;
   if (role !== "admin" && role !== "sales") redirect("/");
   const sp = await searchParams;
-  const f: SalesFilters = { from: iso(one(sp.from)), to: iso(one(sp.to)), period: one(sp.period) || undefined, project: one(sp.project) || undefined, salesperson: one(sp.salesperson) || undefined, status: one(sp.status) || undefined, q: one(sp.q) || undefined };
+  const rg = await rangeOf(sp);
+  const f: SalesFilters = { from: rg.from, to: rg.to, period: one(sp.period) || undefined, project: one(sp.project) || undefined, salesperson: one(sp.salesperson) || undefined, status: one(sp.status) || undefined, q: one(sp.q) || undefined };
   const doc = one(sp.doc);
 
   let all: TxRow[];
@@ -49,7 +54,7 @@ export default async function SalesDashboardPage({ searchParams }: { searchParam
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h1 className="text-2xl font-bold">Sales — ยอดขายจากรายงานบัญชี</h1>
-          <p className="text-sm text-slate-500">อัปเดตล่าสุด: {last ? new Date(last).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", dateStyle: "short", timeStyle: "short" }) : "ยังไม่มีข้อมูล"}</p>
+          <p className="text-sm text-slate-500">อัปเดตล่าสุด: {last ? thDateTime(last) : "ยังไม่มีข้อมูล"}</p>
         </div>
         <div className="flex gap-2 text-sm">
           <Link href="/sales/import" className="rounded-md bg-slate-900 px-4 py-1.5 font-medium text-white hover:bg-slate-700">นำเข้ารายงานยอดขาย</Link>
@@ -58,12 +63,11 @@ export default async function SalesDashboardPage({ searchParams }: { searchParam
       </div>
 
       <form method="get" action="/sales" className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-white p-4 text-sm">
-        <label><span className="mb-1 block text-xs text-slate-500">ตั้งแต่</span><input type="date" name="from" defaultValue={f.from} className={inp} /></label>
-        <label><span className="mb-1 block text-xs text-slate-500">ถึง</span><input type="date" name="to" defaultValue={f.to} className={inp} /></label>
+        <RangeFields from={f.from} to={f.to} className={inp} remembered={rg.remembered} />
         {sel("period", "ช่วงรายงาน", f.period, v.options.periods)}{sel("project", "โปรเจ็ค", f.project, v.options.projects)}{sel("salesperson", "พนักงานขาย", f.salesperson, v.options.people)}{sel("status", "สถานะ", f.status, v.options.statuses)}
         <label><span className="mb-1 block text-xs text-slate-500">ค้นหา</span><input name="q" defaultValue={f.q} placeholder="เลขที่เอกสาร / ลูกค้า" className={inp} /></label>
         <button className="rounded-md bg-slate-900 px-4 py-1.5 font-medium text-white">ใช้ตัวกรอง</button>
-        {Object.values(f).some(Boolean) && <Link href="/sales" className="py-1.5 underline">ล้าง</Link>}
+        {Object.values(f).some(Boolean) && <Link href="/sales?range=all" className="py-1.5 underline">ล้าง</Link>}
       </form>
 
       {all.length === 0 && <div className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-slate-600">ยังไม่มีข้อมูลยอดขาย — เริ่มจาก <Link href="/sales/import" className="underline">นำเข้ารายงานยอดขาย (Excel)</Link></div>}
@@ -82,7 +86,7 @@ export default async function SalesDashboardPage({ searchParams }: { searchParam
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title={`ยอดขายสุทธิ${t?.granularity === "month" ? "รายเดือน" : "รายวัน"} (฿)`}>
-          {t ? (t.granularity === "day" ? <LineChart label="ยอดขายสุทธิรายวัน" unit="฿" points={t.points.map((p) => ({ x: `${p.x.slice(8, 10)}/${p.x.slice(5, 7)}`, y: p.y }))} /> : <BarList title="ยอดขายสุทธิรายเดือน" unit="฿" items={t.points.map((p) => ({ label: `${p.x.slice(5, 7)}/${p.x.slice(0, 4)}`, value: p.y }))} />) : <Pending />}
+          {t ? (t.granularity === "day" ? <LineChart label="ยอดขายสุทธิรายวัน" unit="฿" points={t.points.map((p) => ({ x: thDayMonth(p.x), y: p.y }))} /> : <BarList title="ยอดขายสุทธิรายเดือน" unit="฿" items={t.points.map((p) => ({ label: thMonth(p.x), value: p.y }))} />) : <Pending />}
         </Card>
         <Card title="ยอดขายสุทธิตามโปรเจ็ค (฿)">{v.charts.projects ? <BarList title="ยอดขายตามโปรเจ็ค" unit="฿" items={v.charts.projects} /> : <Pending />}</Card>
         <Card title="ยอดขายสุทธิตามพนักงานขาย (฿)">{v.charts.people ? <BarList title="ยอดขายตามพนักงานขาย" unit="฿" items={v.charts.people} /> : <Pending />}</Card>
@@ -93,7 +97,7 @@ export default async function SalesDashboardPage({ searchParams }: { searchParam
         {v.linked.value === null
           ? <p className="text-sm text-slate-500">รอข้อมูล — ยังไม่มีเอกสารที่เชื่อมโยงกับ Lead หรือแคมเปญ ยอดทั้งหมดด้านบนจึงเป็น <b>ยอดขายจากรายงานบัญชี</b> ไม่ได้หมายความว่าเกิดจากการตลาด</p>
           : <p className="text-sm">เอกสารที่เชื่อมโยงได้ {v.linked.docs} ใบ รวม <b>{thb(v.linked.value)}</b> (จาก Lead/แคมเปญที่ระบุไว้)</p>}
-        <p className="mt-2 text-xs text-slate-500">ระบบไม่คำนวณ ROAS/ROI จากยอดขายรวม เพราะไม่มีข้อมูลเชื่อมโยงและต้นทุนโฆษณาที่ตรวจสอบได้ครบ</p>
+        <Note className="mt-2" href="/settings/metrics/sales">ระบบไม่คำนวณ ROAS/ROI จากยอดขายรวม เพราะไม่มีข้อมูลเชื่อมโยงและต้นทุนโฆษณาที่ตรวจสอบได้ครบ</Note>
       </Card>
 
       {detail && (
@@ -108,7 +112,7 @@ export default async function SalesDashboardPage({ searchParams }: { searchParam
       )}
 
       {all.length > 0 && <DataTable cols={cols} rows={view.rows} base="/sales" params={params} sort={sort} dir={dir} page={view.page} pages={view.pages} total={view.total} />}
-      <p className="text-xs text-slate-500">• ยอดสุทธิ = ผลรวมยอดรวมสุทธิ · ก่อนส่วนลด = ขายแยกภาษี · ส่วนลดใช้ส่วนลดตามเอกสาร (ถ้าว่างใช้ส่วนลดก่อน VAT) ไม่บวกรวมกัน · ตัวเลขทุกส่วนคำนวณจากตัวกรองเดียวกัน</p>
+      <Note className="" href="/settings/metrics/sales">• ยอดสุทธิ = ผลรวมยอดรวมสุทธิ · ก่อนส่วนลด = ขายแยกภาษี · ส่วนลดใช้ส่วนลดตามเอกสาร (ถ้าว่างใช้ส่วนลดก่อน VAT) ไม่บวกรวมกัน · ตัวเลขทุกส่วนคำนวณจากตัวกรองเดียวกัน</Note>
     </section>
   );
 }

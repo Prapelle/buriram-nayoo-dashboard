@@ -79,7 +79,7 @@ try {
     L({ ...base, lead_id: "B1", lead_code: "LD-2026-0003", customer_name: "ผู้ซื้อ ก", need: "ซื้อ", call_status: "ยังไม่ได้โทร" }), // ชื่อเดิม
     L({ ...base, lead_id: "B2", lead_code: "LD-2026-0004", customer_name: "ผู้ซื้อ ข", need: "เช่า", call_status: "เข้าชมโครงการแล้ว" }), // ชื่อเดิม
   ] }) });
-  const col = (pg, name) => pg.locator("div.w-64", { has: pg.locator("span", { hasText: new RegExp(`^${name}$`) }) });
+  const col = (pg, name) => pg.locator("div[data-col]", { has: pg.locator("span", { hasText: new RegExp(`^${name}$`) }) });
   await page.goto(BASE + "/seller-leads"); await page.getByText("ผู้ขาย ก").waitFor();
   assert.ok(await col(page, "รอติดต่อ").getByText("ผู้ขาย ก").isVisible()); assert.ok(await col(page, "ค่าเดิมที่ไม่รู้จัก").getByText("ผู้ขาย ข").isVisible());
   await page.getByText("ผู้ขาย ก").dragTo(col(page, "สนใจขาย")); await page.getByText("ผู้ขาย ก: รอติดต่อ → สนใจขาย").waitFor();
@@ -98,13 +98,19 @@ try {
   assert.deepEqual(errors, []);
 
   // ---- หน้า Leads: ตัดช่อง บริษัท/อีเมล/หมวดบริการ/บริการที่สนใจ/UTM · เพิ่ม Line ----
-  await page.goto(BASE + "/leads"); await page.getByRole("button", { name: "+ เพิ่ม Lead" }).click();
-  await page.getByRole("button", { name: /ข้อมูลเพิ่มเติม/ }).click();
+  await page.goto(BASE + "/leads"); await page.getByRole("button", { name: "+ เพิ่ม Lead", exact: true }).click();
   const formT = await page.locator("section", { has: page.getByRole("heading", { name: "เพิ่ม Lead ใหม่" }) }).last().innerText();
   for (const gone of ["บริษัท", "อีเมล", "หมวดบริการ", "บริการที่สนใจ", "UTM source", "UTM medium", "UTM campaign"]) assert.ok(!formT.includes(gone), `ยังมีช่อง ${gone}`);
   assert.ok(formT.includes("Line") && formT.includes("Campaign") && formT.includes("ติดตามครั้งถัดไป"));
-  await page.getByLabel("Name *").fill("ทดสอบไลน์"); await page.getByLabel("Need *").selectOption("ซื้อ"); await page.getByLabel("Line", { exact: true }).fill("@line.test");
-  await page.getByLabel("Channel *").selectOption("LINE OA");
+  await page.getByLabel("ชื่อลูกค้า *").fill("ทดสอบไลน์"); await page.getByLabel("ความต้องการ *").selectOption("ซื้อ"); await page.getByLabel("Line", { exact: true }).fill("@line.test");
+  await page.getByLabel("ช่องทาง *").selectOption("LINE OA");
+  // ฟอร์มภาษาไทยแบ่ง 4 กลุ่ม · ความต้องการ = ซื้อ → ไม่แสดง สภาพทรัพย์ · เปลี่ยนสถานะ → เสนอวันติดตาม +3 วัน
+  for (const g of ["1. ข้อมูลติดต่อ", "2. ความต้องการ", "3. สถานะการขาย", "4. การติดตาม"]) assert.ok(await page.getByRole("group", { name: new RegExp("^" + g.replace(".", "\\.")) }).isVisible(), g);
+  assert.equal(await page.getByLabel("สภาพทรัพย์").count(), 0);
+  await page.getByRole("group", { name: /^3\. สถานะการขาย/ }).getByLabel(/^Buy Status/).selectOption("Warm");
+  const plus3 = new Date(Date.now() + 7 * 3600_000 + 3 * 86400_000).toISOString().slice(0, 10);
+  assert.equal(await page.getByLabel("ติดตามครั้งถัดไป", { exact: true }).inputValue(), plus3); assert.ok(await page.getByText(/ตั้งวันติดตามให้เป็น/).isVisible());
+  await page.getByRole("group", { name: "ตั้งวันติดตาม" }).getByRole("button", { name: "ล้าง" }).click(); assert.equal(await page.getByLabel("ติดตามครั้งถัดไป", { exact: true }).inputValue(), "");
   await page.getByLabel("ความสนใจ", { exact: true }).fill("ทาวน์โฮมใกล้โรงเรียน");
   assert.equal(await page.getByLabel("พื้นที่ (กรอกเองหรือเลือกจากรายการ)").inputValue(), "");
   assert.deepEqual(await page.locator("#area-list option").evaluateAll((o) => o.map((x) => x.value).slice(0, 3)), ["บุรีรัมย์", "สุรินทร์", "หลายจังหวัด"]);
@@ -116,6 +122,9 @@ try {
   const areaF = page.locator("label", { has: page.locator("span", { hasText: /^พื้นที่$/ }) }).locator("select");
   await areaF.selectOption("ประโคนชัย"); await page.getByText("1 รายการ").first().waitFor(); assert.ok(await page.getByText("ทดสอบไลน์").first().isVisible());
   assert.equal(await page.getByRole("combobox", { name: "หมวดบริการ" }).count(), 0);
+  // ตารางเรียงตามหัวคอลัมน์ได้ (ทุกหน้า) · มือถือเป็นการ์ด + ปุ่มโทร
+  await page.getByRole("button", { name: /^ชื่อ/ }).click(); assert.equal(await page.locator("th[aria-sort]").getAttribute("aria-sort"), "ascending");
+  await page.getByRole("button", { name: /^ชื่อ/ }).click(); assert.equal(await page.locator("th[aria-sort]").getAttribute("aria-sort"), "descending");
   ok("หน้า Leads: ฟอร์มไม่มี บริษัท / อีเมล / หมวดบริการ / บริการที่สนใจ / UTM แล้ว · มีช่อง Line / ความสนใจ / พื้นที่กรอกเอง (มีรายการแนะนำ) → บันทึกลง Sheet ตามที่กรอก · ตัวกรองพื้นที่มีค่าที่กรอกเอง · ตัวกรองหมวดบริการถูกตัดออก");
   assert.deepEqual(errors, []);
 
@@ -137,6 +146,32 @@ try {
   assert.ok(/เลยกำหนดติดตาม 1/.test(ov), ov.slice(0, 400)); assert.ok(/Leads vs เป้า \d+ \/ 12/.test(ov) && /ค่าโฆษณา vs งบ/.test(ov)); assert.ok(/ข้อมูลเดือน .*: ครบ \d+\/10/.test(ov));
   if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/overview-extras.png", clip: { x: 0, y: 0, width: 1280, height: 1100 } });
   ok("ภาพรวม (Admin): การ์ดติดตามลูกค้า เลยกำหนด 1 · เป้าหมายเดือนนี้ (Leads / 12, ค่าโฆษณา vs งบ) · Checklist ข้อมูลประจำเดือน 10 รายการ (รวมยอดขาย)");
+  // ---- UX 31/10/2026: ตัวเลขบนเมนู · ช่วงวันที่สำเร็จรูป + จำข้ามหน้า · วันที่ "31 ต.ค. 69" · กดหัวคอลัมน์เรียง · ⓘ ที่มาของตัวเลข ----
+  await page.getByRole("navigation", { name: "เมนูหลัก" }).getByRole("link", { name: /^Leads\s*1$/ }).waitFor(); // เลยกำหนด 1 + วันนี้ 0
+  assert.ok(!(await page.locator("main").innerText()).includes("mm/dd/yyyy"));
+  await page.getByRole("button", { name: "เดือนก่อน" }).click(); await page.waitForURL(/from=\d{4}-\d{2}-01&to=/);
+  const u = new URL(page.url()); const pf = u.searchParams.get("from"), pt = u.searchParams.get("to");
+  const TM = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+  const thd = (d) => `${Number(d.slice(8))} ${TM[Number(d.slice(5, 7)) - 1]} ${(Number(d.slice(0, 4)) + 543) % 100}`;
+  await page.getByText(thd(pf), { exact: true }).first().waitFor(); // ช่องวันที่แสดงแบบไทย
+  await page.goto(BASE + "/performance"); await page.getByRole("heading", { name: /Marketing Performance/, level: 1 }).waitFor();
+  assert.equal(await page.locator('input[name="from"]').inputValue(), pf); assert.equal(await page.locator('input[name="to"]').inputValue(), pt);
+  assert.ok(await page.getByText("ใช้ช่วงวันที่ล่าสุดที่เลือกไว้").isVisible());
+  assert.equal(await page.getByRole("button", { name: "เดือนก่อน" }).getAttribute("aria-pressed"), "true");
+  await page.getByRole("button", { name: "ทั้งหมด", exact: true }).click(); await page.waitForURL(/range=all/);
+  await page.goto(BASE + "/lead-report"); await page.getByRole("heading", { name: "ผลงานรายพนักงาน" }).waitFor();
+  assert.equal(await page.locator('input[name="from"]').inputValue(), ""); // ล้างช่วงที่จำแล้ว
+  // กดหัวคอลัมน์ "Lead ที่รับ" → มากไปน้อย · ซ้ำ → น้อยไปมาก · แถวรวมอยู่ท้ายเสมอ
+  const st = page.locator("table", { has: page.locator("th", { hasText: "Lead ที่รับ" }) });
+  const colv = async () => (await st.locator("tbody tr").evaluateAll((rs) => rs.map((r) => Number(r.children[1].textContent))));
+  const h = st.locator("th", { hasText: "Lead ที่รับ" });
+  await h.click(); let v = await colv(); assert.equal(await h.getAttribute("aria-sort"), "descending");
+  assert.deepEqual(v.slice(0, -1), [...v.slice(0, -1)].sort((a, b) => b - a)); assert.equal(v[v.length - 1], Math.max(...v)); // แถวรวม (ค่ามากสุด) อยู่ท้าย
+  await h.click(); v = await colv(); assert.equal(await h.getAttribute("aria-sort"), "ascending"); assert.deepEqual(v.slice(0, -1), [...v.slice(0, -1)].sort((a, b) => a - b));
+  const note = page.getByText("ที่มาของตัวเลข").first(); assert.ok(!(await page.getByText(/ยิ่งน้อยยิ่งดี/).first().isVisible()));
+  await note.click(); assert.ok(await page.getByText(/ยิ่งน้อยยิ่งดี/).first().isVisible());
+  if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/lead-report.png", fullPage: true });
+  ok("UX: ตัวเลข Lead ที่ต้องติดตามบนเมนู · ปุ่ม เดือนก่อน ตั้งช่วงและจำข้ามหน้า (หน้า Performance ใช้ช่วงเดิม) · ทั้งหมด = ล้าง · ช่องวันที่แสดง \"1 ก.ย. 69\" · กดหัวคอลัมน์เรียงมาก→น้อย/น้อย→มาก แถวรวมอยู่ท้าย · ที่มาของตัวเลขซ่อนใน ⓘ");
   await page.goto(BASE + "/leads?follow=overdue"); await page.getByText("ผู้ซื้อ ก").first().waitFor(); await page.getByText("1 รายการ").first().waitFor();
   assert.equal(await page.getByText("ผู้ขาย ก").count(), 0);
   ok("ภาพรวม → เลยกำหนด เปิดหน้า Leads กรองเฉพาะ Lead ที่ต้องติดตาม (1 รายการ)");
@@ -225,19 +260,24 @@ try {
   await burger.click(); await mnav.waitFor({ state: "visible" }); await expanded("true");
   if (process.env.SHOT_DIR) { await m.page.waitForTimeout(300); await m.page.screenshot({ path: process.env.SHOT_DIR + "/menu-mobile-open.png" }); }
   assert.ok(await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth) <= 1, "เมนูมือถือทำให้ล้นแนวนอน");
+  await m.page.waitForTimeout(300); // รอเมนูเลื่อนออกมาจนสุด (transition 200ms)
   await mnav.getByRole("link", { name: "คู่มือนำเข้าข้อมูล" }).click(); await m.page.waitForURL(BASE + "/settings/import-guide");
   await mnav.waitFor({ state: "hidden" }); await expanded("false");
   await burger.click(); await mnav.waitFor({ state: "visible" }); await m.page.keyboard.press("Escape"); await mnav.waitFor({ state: "hidden" });
   await burger.click(); await mnav.waitFor({ state: "visible" }); await m.page.mouse.click(370, 400); await mnav.waitFor({ state: "hidden" });
   await m.page.setViewportSize({ width: 1280, height: 800 });
-  // ---- จอใหญ่: เมนูเปิดไว้ก่อน · กดซ่อน · จำค่าหลังโหลดหน้าใหม่ · กดแสดงอีกครั้ง ----
+  // ---- จอใหญ่: เมนูเต็มไว้ก่อน (แบ่งกลุ่ม) · กดย่อเหลือไอคอน · จำค่าหลังโหลดหน้าใหม่ · กดขยายอีกครั้ง ----
   await mnav.waitFor({ state: "visible" }); await expanded("true");
-  await burger.click(); await mnav.waitFor({ state: "hidden" });
+  const navText = await mnav.innerText(); for (const g of ["การตลาด", "ข้อมูล"]) assert.ok(navText.includes(g), "ไม่มีหัวข้อกลุ่ม " + g);
+  const aside = m.page.locator("#side-menu");
+  await burger.click(); await m.page.locator("#side-menu[data-compact]").waitFor(); await expanded("false");
+  assert.ok((await aside.boundingBox()).width < 80, "เมนูย่อไม่เหลือแถบไอคอน"); assert.ok(!(await mnav.innerText()).includes("Facebook Page"), "เมนูย่อยังแสดงชื่อ");
+  assert.equal(await mnav.getByRole("link", { name: "คู่มือนำเข้าข้อมูล" }).getAttribute("href"), "/settings/import-guide"); // ไอคอนยังกดได้ (ชื่ออยู่ใน aria-label)
   if (process.env.SHOT_DIR) await m.page.screenshot({ path: process.env.SHOT_DIR + "/menu-desktop-hidden.png" });
   await m.page.reload(); await m.page.getByRole("heading", { name: "คู่มือนำเข้าข้อมูล" }).waitFor(); await m.page.waitForTimeout(300);
-  assert.ok(!(await mnav.isVisible()), "จอใหญ่ไม่จำค่าซ่อนเมนู"); await expanded("false");
-  await burger.click(); await mnav.waitFor({ state: "visible" });
-  ok("ปุ่มเบอร์เกอร์: มือถือปิดไว้ก่อน กดเปิด/กดลิงก์ปิด/Esc/พื้นหลังปิด ไม่ล้นจอ · จอใหญ่เปิดไว้ก่อน กดซ่อน/แสดง และจำค่าหลังโหลดหน้าใหม่");
+  await m.page.locator("#side-menu[data-compact]").waitFor(); await expanded("false");
+  await burger.click(); await m.page.locator("#side-menu:not([data-compact])").waitFor(); await expanded("true");
+  ok("ปุ่มเบอร์เกอร์: มือถือปิดไว้ก่อน กดเปิด/กดลิงก์ปิด/Esc/พื้นหลังปิด ไม่ล้นจอ · จอใหญ่เมนูแบ่งกลุ่ม เปิดไว้ก่อน กดย่อเหลือไอคอน/ขยาย และจำค่าหลังโหลดหน้าใหม่");
   ok("ตั้งค่า (Marketing): คู่มือนำเข้าข้อมูล / คำอธิบายตัวเลข หน้าแรกเป็นสารบัญอย่างเดียว · กดแต่ละหัวข้อเปิดหน้าของหัวข้อนั้น (6 + 5 หน้า) เนื้อหาครบ · หัวข้อที่ไม่มี = 404 · ตั้งค่าระบบไม่เห็นและเข้าไม่ได้ · มือถือไม่ล้น");
   await m.page.goto(BASE + "/"); await m.page.getByText(/ข้อมูลเดือน .*: ครบ \d+\/9/).first().waitFor(); // Marketing: ไม่มีแถวยอดขาย
   assert.equal(await m.page.getByRole("heading", { name: "ติดตามลูกค้า (ฝ่ายขาย)" }).count(), 0); assert.ok(await m.page.getByText("แก้ไขเป้า").isVisible());

@@ -1,10 +1,11 @@
+import { thDayMonth, thMonth } from "@/lib/thdate";
 // กราฟแบบ SVG/CSS ล้วน เรนเดอร์ฝั่ง Server ไม่ต้องใช้ไลบรารีเพิ่ม
 const fmt = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
-const dm = (iso: string) => (iso.length >= 10 ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : iso);
-const my = (m: string) => (m.length >= 7 ? `${m.slice(5, 7)}/${m.slice(0, 4)}` : m);
+const dm = (iso: string) => thDayMonth(iso);
+const my = (m: string) => thMonth(m);
 
-export function Pending({ text = "รอข้อมูล" }: { text?: string }) {
-  return <p className="rounded-md border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">{text}</p>;
+export function Pending({ text = "รอข้อมูล", href }: { text?: string; href?: string }) {
+  return <p className="rounded-md border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">{text}{href && <> · <a href={href} className="underline">นำเข้าข้อมูล</a></>}</p>;
 }
 
 export function BarList({ items, unit = "", title }: { items: { label: string; value: number }[]; unit?: string; title: string }) {

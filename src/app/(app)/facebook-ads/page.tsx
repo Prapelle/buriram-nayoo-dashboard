@@ -1,4 +1,6 @@
+import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
 import Link from "next/link";
+import { Note } from "@/components/Note";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { DataTable } from "@/components/DataTable";
@@ -49,7 +51,7 @@ export default async function FacebookAdsPage({ searchParams }: { searchParams: 
     <section className="max-w-7xl space-y-4">
       <div>
         <h1 className="text-2xl font-bold">Facebook Ads</h1>
-        <p className="text-sm text-slate-500">อัปเดตล่าสุด: {last ? new Date(last).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", dateStyle: "short", timeStyle: "short" }) : "ยังไม่มีข้อมูล"} · นำเข้าได้ที่ <Link href="/import" className="underline">นำเข้า CSV</Link></p>
+        <p className="text-sm text-slate-500">อัปเดตล่าสุด: {last ? thDateTime(last) : "ยังไม่มีข้อมูล"} · นำเข้าได้ที่ <Link href="/import" className="underline">นำเข้า CSV</Link></p>
       </div>
       <form method="get" className="flex flex-wrap items-end gap-3 text-sm">
         <label><span className="mb-1 block text-xs text-slate-500">ค้นหา</span><input name="q" defaultValue={q} placeholder="ชื่อ Ad / Ad set" className={inp} /></label>
@@ -68,8 +70,8 @@ export default async function FacebookAdsPage({ searchParams }: { searchParams: 
       {rows.length === 0 ? <p className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center text-slate-500">ยังไม่มีข้อมูล — นำเข้า Facebookads.csv ที่หน้า นำเข้า CSV</p>
         : <DataTable cols={COLS} rows={shown} base="/facebook-ads" params={params} sort={sort} dir={dir} page={v.page} pages={v.pages} total={v.total} />}
       {collisions.length > 0 && <p role="status" className="rounded-md bg-amber-50 p-3 text-sm text-amber-800">พบชื่อ Action ที่ซ้ำกันเมื่อตัด prefix ({collisions.join(", ")}) จึงแสดงชื่อเต็มของต้นฉบับแทน เพื่อไม่รวมต่างประเภทกัน</p>}
-      <p className="text-xs text-slate-500">• ชื่อ Action แสดงแบบตัด prefix "actions:" / "Action:" ออก (ค่าต้นฉบับยังเก็บใน Google Sheet และอยู่ในคอลัมน์ result_indicator_raw ของไฟล์ Export)</p>
-      <p className="text-xs text-slate-500">• ไฟล์นี้ไม่มี Ad ID: โฆษณาที่ชื่อและ Ad set ซ้ำกันถูกแยกด้วยลำดับในไฟล์ · ค่า "ว่าง" คือต้นฉบับไม่มีข้อมูล ไม่ใช่ 0</p>
+      <Note className="" href="/settings/metrics/performance" label="หมายเหตุข้อมูล">• ชื่อ Action แสดงแบบตัด prefix "actions:" / "Action:" ออก (ค่าต้นฉบับยังเก็บใน Google Sheet และอยู่ในคอลัมน์ result_indicator_raw ของไฟล์ Export)</Note>
+      <Note className="" href="/settings/metrics/performance" label="หมายเหตุข้อมูล">• ไฟล์นี้ไม่มี Ad ID: โฆษณาที่ชื่อและ Ad set ซ้ำกันถูกแยกด้วยลำดับในไฟล์ · ค่า "ว่าง" คือต้นฉบับไม่มีข้อมูล ไม่ใช่ 0</Note>
     </section>
   );
 }

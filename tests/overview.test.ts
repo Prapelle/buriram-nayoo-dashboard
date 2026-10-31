@@ -36,7 +36,7 @@ assert.equal(k.paid.value, 37557.54); assert.equal(k.paid.state, "value"); asser
 ok("ไม่มีข้อมูล Google Ads → Total = 37,557.54 พร้อมสถานะ ข้อมูลไม่ครบ (Google = รอข้อมูล ไม่ใช่ 0)");
 const gHalf = google.map((x) => ({ ...x, report_end: "2026-09-15" }));
 ({ k } = run({ google: gHalf }));
-assert.equal(k.paid.incomplete, "Google Ads ไม่มีรายงานช่วง 16/09/2026–30/09/2026"); ok("Google มีรายงานแค่ 1–15 ก.ย. แต่ Meta ครบเดือน → ไม่ครบ ระบุช่วงที่ขาด 16/09–30/09/2026");
+assert.equal(k.paid.incomplete, "Google Ads ไม่มีรายงานช่วง 16 ก.ย. 69–30 ก.ย. 69"); ok("Google มีรายงานแค่ 1–15 ก.ย. แต่ Meta ครบเดือน → ไม่ครบ ระบุช่วงที่ขาด 16 ก.ย. 69–30 ก.ย. 69");
 ({ k } = run({}, { from: "2026-10-01", to: "2026-10-31" })); assert.equal(k.paid.state, "pending"); assert.equal(k.paid.value, null); assert.equal(k.cpl.state, "pending");
 ok("ช่วงที่ไม่มีรายงานโฆษณาเลย → รอข้อมูล (ไม่ใช่ 0 บาท) และ CPL รอข้อมูล");
 ({ k } = run({}, { campaign: google[0].campaign_name })); assert.equal(k.paid.incomplete, undefined); ok("กรองแคมเปญ Google แคมเปญเดียว → ไม่ตีว่า Meta ขาดข้อมูล");
@@ -54,7 +54,7 @@ assert.equal(k.leads.value, 7); assert.ok(r.warnings.some((w) => w.includes("ไ
 console.log("3) CPL (ช่วงเวลาเดียวกัน)");
 ({ k } = run());
 assert.equal(k.cpl.value, r2(PAID / 4)); assert.equal(k.cpl_all.value, r2(PAID / 6)); assert.equal(k.cplq.value, r2(PAID / 1));
-assert.match(k.cpl.note!, /ฐาน 4 Lead ที่รับ 01\/09\/2026–30\/09\/2026/); assert.match(k.cpl_all.note!, /ฐาน 6 Lead/);
+assert.match(k.cpl.note!, /ฐาน 4 Lead ที่รับ 1 ก.ย. 69–30 ก.ย. 69/); assert.match(k.cpl_all.note!, /ฐาน 6 Lead/);
 ok(`ไม่เลือกช่วง → ใช้ช่วงของรายงานโฆษณา 1–30 ก.ย.: CPL จาก Ads = 66,372.36 ÷ 4 = ${r2(PAID / 4).toLocaleString()} · CPL ทั้งหมด ÷ 6 = ${r2(PAID / 6).toLocaleString()} (Lead ต.ค. ไม่นับ)`);
 ({ k } = run({ leads: leads.filter((x) => x.source_channel === "Referral") }));
 assert.equal(k.cpl.state, "na"); assert.equal(k.cpl.value, null); assert.match(k.cpl.note!, /หารด้วย 0 ไม่ได้/); assert.equal(k.cpl_all.value, r2(PAID / 2));

@@ -1,4 +1,6 @@
 "use client";
+import { Skeleton } from "@/components/Skeleton";
+import { Notice } from "@/components/Toast";
 import { useCallback, useEffect, useState } from "react";
 
 type User = { user_id: string; email: string; display_name: string; role: string; active: boolean; updated_at: string; bootstrap: boolean };
@@ -41,7 +43,7 @@ export function UsersManager() {
 
   return (
     <div className="space-y-4">
-      {msg && <p role={msg.type === "error" ? "alert" : "status"} className={`rounded-md p-3 text-sm ${msg.type === "ok" ? "bg-green-50 text-green-800" : "bg-red-50 text-red-700"}`}>{msg.text}</p>}
+      <Notice msg={msg} onClose={() => setMsg(null)} />
 
       <form onSubmit={(e) => { e.preventDefault(); submit(); }} className="grid gap-3 rounded-md bg-slate-50 p-3 sm:grid-cols-2">
         <div className="text-sm font-medium sm:col-span-2">{editing ? `แก้ไข ${editing.email}` : "เพิ่มสมาชิก"}</div>
@@ -59,7 +61,7 @@ export function UsersManager() {
         </div>
       </form>
 
-      {data.state === "loading" && <p className="text-sm text-slate-500">กำลังโหลด...</p>}
+      {data.state === "loading" && <Skeleton kind={"rows"} />}
       {data.state === "error" && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">โหลดรายชื่อไม่ได้: {data.error}</p>}
       {data.state === "ok" && (
         <div className="overflow-x-auto">

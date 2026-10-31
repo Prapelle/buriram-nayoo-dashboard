@@ -1,9 +1,12 @@
 "use client";
+import { Skeleton } from "@/components/Skeleton";
+import { Notice } from "@/components/Toast";
+import { DateInput } from "@/components/DateInput";
 import { useCallback, useEffect, useState } from "react";
+import { thMonth } from "@/lib/thdate";
 
 type Target = { month: string; ad_budget_thb: number | null; lead_target: number | null; notes: string; updated_by: string; updated_at: string };
-const TH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
-const label = (m: string) => `${TH[Number(m.slice(5, 7)) - 1]} ${Number(m.slice(0, 4)) + 543}`;
+const label = (m: string) => thMonth(m);
 const thisMonth = () => new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 7);
 const thb = (n: number | null) => (n === null ? "—" : `฿${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`);
 
@@ -43,12 +46,12 @@ export function TargetsManager({ canEdit }: { canEdit: boolean }) {
 
   return (
     <div className="space-y-5">
-      {msg && <p role={msg.type === "error" ? "alert" : "status"} className={`rounded-md p-3 text-sm ${msg.type === "ok" ? "bg-green-50 text-green-800" : "bg-red-50 text-red-700"}`}>{msg.text}</p>}
+      <Notice msg={msg} onClose={() => setMsg(null)} />
       {canEdit && (
         <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-5">
           <h2 className="font-semibold">{exists ? `แก้ไขเป้าหมาย ${label(form.month)}` : `ตั้งเป้าหมาย ${label(form.month)}`}</h2>
           <div className="grid gap-3 sm:grid-cols-4">
-            <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">เดือน *</span><input type="month" aria-label="เดือน" value={form.month} onChange={(e) => pickMonth(e.target.value)} className={inp("month")} />{errors.month && <span className="text-xs text-red-600">{errors.month}</span>}</label>
+            <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">เดือน *</span><DateInput month aria-label="เดือน" value={form.month} onChange={(e) => pickMonth(e.target.value)} className={inp("month")} />{errors.month && <span className="text-xs text-red-600">{errors.month}</span>}</label>
             <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">งบโฆษณา (บาท)</span><input inputMode="decimal" aria-label="งบโฆษณา (บาท)" value={form.ad_budget_thb} onChange={(e) => setForm({ ...form, ad_budget_thb: e.target.value })} placeholder="เช่น 60000" className={inp("ad_budget_thb")} />{errors.ad_budget_thb && <span className="text-xs text-red-600">{errors.ad_budget_thb}</span>}</label>
             <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">เป้า Lead (ราย)</span><input inputMode="numeric" aria-label="เป้า Lead (ราย)" value={form.lead_target} onChange={(e) => setForm({ ...form, lead_target: e.target.value })} placeholder="เช่น 120" className={inp("lead_target")} />{errors.lead_target && <span className="text-xs text-red-600">{errors.lead_target}</span>}</label>
             <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">หมายเหตุ</span><input aria-label="หมายเหตุ" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className={inp("notes")} /></label>
@@ -59,7 +62,7 @@ export function TargetsManager({ canEdit }: { canEdit: boolean }) {
       )}
       <section className="rounded-lg border border-slate-200 bg-white p-5">
         <h2 className="mb-2 font-semibold">เป้าหมายที่ตั้งไว้</h2>
-        {rows === null ? <p className="text-sm text-slate-500">กำลังโหลด...</p> : rows.length === 0 ? <p className="text-sm text-slate-500">ยังไม่ได้ตั้งเป้าหมาย</p> : (
+        {rows === null ? <Skeleton kind={"rows"} /> : rows.length === 0 ? <p className="text-sm text-slate-500">ยังไม่ได้ตั้งเป้าหมาย</p> : (
           <div className="overflow-x-auto"><table className="w-full text-left text-sm">
             <thead><tr className="border-b text-xs text-slate-500"><th className="py-1.5">เดือน</th><th className="text-right">งบโฆษณา</th><th className="text-right">เป้า Lead</th><th className="pl-3">หมายเหตุ</th><th>แก้ไขล่าสุด</th>{canEdit && <th />}</tr></thead>
             <tbody>{rows.map((t) => (

@@ -9,7 +9,7 @@ export default async function ImportPage() {
   return (
     <section className="max-w-6xl space-y-4">
       <h1 className="text-2xl font-bold">นำเข้า CSV</h1>
-      <p className="text-sm text-slate-500">นำเข้าไฟล์ได้ทุกประเภทที่ระบบรองรับจากหน้านี้ (ไฟล์ Website และรายงานยอดขายยังนำเข้าที่หน้า Website / Sales ได้ตามเดิม) · วิธีดาวน์โหลดไฟล์จากแต่ละแพลตฟอร์ม ดูที่ <Link href="/settings/import-guide" className="underline">คู่มือนำเข้าข้อมูล</Link></p>
+      <p className="text-sm text-slate-500">ลากไฟล์ทุกประเภทมาที่ช่องเดียวด้านล่าง ระบบแยกประเภทให้เอง · วิธีดาวน์โหลดไฟล์จากแต่ละแพลตฟอร์ม ดูที่ <Link href="/settings/import-guide" className="underline">คู่มือนำเข้าข้อมูล</Link></p>
       <ImportWizard role={role} />
     </section>
   );

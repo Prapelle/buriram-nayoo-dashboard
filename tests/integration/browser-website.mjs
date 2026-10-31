@@ -41,8 +41,8 @@ try {
   const readMs = Date.now() - t0;
   const sec = (h) => page.locator("section", { has: page.getByRole("heading", { name: h }) }).last();
   const text = await sec("1. นำเข้าไฟล์ GA4 / Search Console").innerText();
-  assert.ok(text.includes("GA4 — หน้าและหน้าจอ") && text.includes("01/10/2026 – 27/10/2026")); assert.ok(text.includes("views: 35,820")); assert.ok(text.includes("27,361"));
-  assert.ok(text.includes("GA4 — Reports snapshot") && text.includes("01/09/2026 – 30/09/2026") && text.includes("users: 17,443"));
+  assert.ok(text.includes("GA4 — หน้าและหน้าจอ") && text.includes("1 ต.ค. 69 – 27 ต.ค. 69")); assert.ok(text.includes("views: 35,820")); assert.ok(text.includes("27,361"));
+  assert.ok(text.includes("GA4 — Reports snapshot") && text.includes("1 ก.ย. 69 – 30 ก.ย. 69") && text.includes("users: 17,443"));
   ok(`เลือกไฟล์จริง 9 ไฟล์ (GA4 รายหน้า 2 MB + Reports snapshot) → เบราว์เซอร์อ่านและสรุปใน ${(readMs / 1000).toFixed(1)} วินาที · แสดงช่วง 01/10–27/10/2026, Page Views 35,820 และคำเตือนยอดผู้ใช้รายหน้า`);
   await page.getByRole("button", { name: "ตรวจสอบก่อนนำเข้า" }).click();
   await page.getByText(/เพิ่ม 302 · อัปเดต 0 · ข้าม 0/).waitFor();
@@ -61,7 +61,7 @@ try {
   assert.ok(await page.getByRole("button", { name: "ยืนยันนำเข้า" }).isDisabled());
   ok("เลือกไฟล์เดิมซ้ำ → แจ้งว่าเคยนำเข้าแล้ว และปุ่มยืนยันถูกปิดจนกว่า Admin จะติ๊กยืนยัน");
   await page.getByRole("button", { name: "ล้าง" }).click();
-  await page.getByRole("button", { name: "01/10/2026–27/10/2026" }).click();
+  await page.getByRole("button", { name: "1 ต.ค. 69–27 ต.ค. 69" }).click();
   await page.getByLabel("Users *").fill("21000");
   await page.getByRole("button", { name: "บันทึกยอดผู้ใช้" }).click();
   await page.getByText("บันทึกยอดผู้ใช้แล้ว").waitFor();
@@ -93,7 +93,7 @@ try {
   for (const [f, label] of [["Viewers.csv", "Facebook Page — Viewers รายวัน (ระดับเพจ)"], ["Link_clicks.csv", "Facebook Page — Link clicks รายวัน (ระดับเพจ)"]]) {
     await page.goto(BASE + "/import"); await page.getByRole("cell", { name: "ga4_pages.csv" }).waitFor(); // ประวัติโหลดแล้ว = หน้าพร้อมรับไฟล์
     await page.locator('input[type="file"]').first().setInputFiles(FB + f);
-    await page.getByText(/ช่วงรายงานจากไฟล์: 01\/09\/2026\s*–\s*30\/09\/2026/).waitFor();
+    await page.getByText(/ช่วงรายงานจากไฟล์: 1 ก.ย. 69\s*–\s*30 ก.ย. 69/).waitFor();
     assert.equal(await page.locator("select").first().evaluate((el) => el.options[el.selectedIndex].text), label);
     await page.getByRole("button", { name: "ยืนยันนำเข้า (+30 / อัปเดต 0)" }).click();
     await page.getByText("นำเข้าสำเร็จ — เพิ่ม 30 · อัปเดต 0 · ข้าม 0 · ไม่ถูกต้อง 0").waitFor();
@@ -107,7 +107,7 @@ try {
   assert.match(await page.getByRole("link", { name: "Viewers / Link clicks รายวัน (ระดับเพจ)" }).getAttribute("href"), /view=page/);
   await page.goto(BASE + "/facebook-page?view=page&from=2026-09-01&to=2026-09-30"); await page.getByText("93,295").waitFor();
   const fbD = (await page.locator("main").innerText()).replace(/\s+/g, " ");
-  assert.ok(/10\/09\/2026 93,295 375/.test(fbD), fbD.slice(fbD.indexOf("วันที่"), fbD.indexOf("วันที่") + 400));
+  assert.ok(/10 ก.ย. 69 93,295 375/.test(fbD), fbD.slice(fbD.indexOf("วันที่"), fbD.indexOf("วันที่") + 400));
   await page.goto(BASE + "/performance?from=2026-09-01&to=2026-09-30"); await page.getByText("Website Users", { exact: false }).first().waitFor();
   const pfT = (await page.locator("main").innerText()).replace(/\s+/g, " ");
   assert.ok(/Facebook Viewers \(แทน Reach\) 806,272/.test(pfT) && /Reach \(ทุก Social\) .*1,306,272/.test(pfT), pfT.slice(pfT.indexOf("Facebook Page (Organic)"), pfT.indexOf("Facebook Page (Organic)") + 500));

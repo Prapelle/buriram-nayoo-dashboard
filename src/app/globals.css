@@ -1,1 +1,13 @@
 @import "tailwindcss";
+
+/* DateInput: ซ่อนข้อความ mm/dd/yyyy ของเบราว์เซอร์ตอนไม่ได้พิมพ์ (แสดง "31 ต.ค. 69" ทับแทน) */
+input[data-th-date] { color: transparent; }
+input[data-th-date]::-webkit-datetime-edit { color: transparent; }
+
+/* TableSort: หัวคอลัมน์ที่กดเรียงได้ */
+th[data-sortable] { cursor: pointer; user-select: none; white-space: nowrap; }
+th[data-sortable]:hover { color: rgb(15 23 42); }
+th[data-sortable]::after { content: "↕"; margin-left: 0.25rem; opacity: 0.3; font-size: 0.85em; }
+th[data-sortable][aria-sort="ascending"]::after { content: "▲"; opacity: 0.9; }
+th[data-sortable][aria-sort="descending"]::after { content: "▼"; opacity: 0.9; }
+th[data-sortable]:focus-visible { outline: 2px solid rgb(148 163 184); outline-offset: -2px; }

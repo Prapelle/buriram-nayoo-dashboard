@@ -1,4 +1,5 @@
 "use client";
+import { DateInput } from "@/components/DateInput";
 import { useMemo, useState } from "react";
 
 export type DatasetInfo = {
@@ -53,8 +54,8 @@ export function ExportForm({ datasets, channels, campaigns, needs }: { datasets:
           <p className="text-sm"><span className="font-medium">ระดับข้อมูล:</span> {ds.grain}</p>
           <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-700">{ds.note}{ds.sensitive && <span className="ml-1 font-medium text-amber-800">· ข้อมูล{ds.sensitive === "pii" ? "ส่วนบุคคล" : "การเงิน"} การส่งออกทุกครั้งถูกบันทึก Audit Log</span>}</p>
           <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-            <label><span className="mb-1 block text-xs text-slate-500">ตั้งแต่ ({ds.applies.date})</span><input type="date" className={inp + " w-full"} value={f.from} onChange={(e) => { setF({ ...f, from: e.target.value }); setCount({ state: "idle", text: "" }); }} /></label>
-            <label><span className="mb-1 block text-xs text-slate-500">ถึง</span><input type="date" className={inp + " w-full"} value={f.to} onChange={(e) => { setF({ ...f, to: e.target.value }); setCount({ state: "idle", text: "" }); }} /></label>
+            <label><span className="mb-1 block text-xs text-slate-500">ตั้งแต่ ({ds.applies.date})</span><DateInput className={inp + " w-full"} value={f.from} onChange={(e) => { setF({ ...f, from: e.target.value }); setCount({ state: "idle", text: "" }); }} /></label>
+            <label><span className="mb-1 block text-xs text-slate-500">ถึง</span><DateInput className={inp + " w-full"} value={f.to} onChange={(e) => { setF({ ...f, to: e.target.value }); setCount({ state: "idle", text: "" }); }} /></label>
             <label><span className="mb-1 block text-xs text-slate-500">พื้นที่{na(ds.applies.area)}</span>
               <select className={inp + " w-full"} disabled={!ds.applies.area} value={ds.applies.area ? f.area : ""} onChange={(e) => { setF({ ...f, area: e.target.value }); setCount({ state: "idle", text: "" }); }}><option value="">ทั้งหมด</option>{AREAS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
             <label><span className="mb-1 block text-xs text-slate-500">ช่องทาง{na(ds.applies.channel)}</span>

@@ -1,3 +1,4 @@
+import { thDate } from "./thdate";
 // กฎสรุปสถิติ Facebook Page (ใช้ร่วมกันใน Dashboard, หน้า Facebook Page และ Export เพื่อไม่ให้นับซ้ำ)
 // - แถวรายวัน (metric_scope = daily): ค่าของวันนั้น → รวมข้ามวันได้ เฉพาะค่าที่เป็นยอดนับ (ADDITIVE)
 // - แถว Lifetime: ยอดสะสม ณ วันส่งออก → ใช้เฉพาะ snapshot ล่าสุดของแต่ละโพสต์ ห้ามรวมข้ามวัน และห้ามรวมกับยอดรายวัน
@@ -87,7 +88,7 @@ export function perPost(rows: FbRow[], f: Range): (FbRow & { basis: string; days
 // ---- สถิติระดับเพจรายวัน (แท็บ FB_PAGE_INSIGHTS: Viewers / Link clicks จาก Meta Business Suite) ----
 export const VIEWERS_REMARK = "ใช้ Viewers เทียบเคียง Reach";
 const nextDay = (d: string) => { const t = new Date(d + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + 1); return t.toISOString().slice(0, 10); };
-const dmy = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}`;
+const dmy = (d: string) => thDate(d);
 export type PageMetric = { sum: number; days: number; from: string; to: string; cover: string; incomplete?: string };
 /**
  * ผลรวมรายวันของตัวชี้วัดระดับเพจในช่วง (ค่าซ้ำวันเดียวกันใช้แถวที่นำเข้าล่าสุด) · ไม่มีข้อมูลเลย = null

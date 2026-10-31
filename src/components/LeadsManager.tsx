@@ -1,15 +1,22 @@
 "use client";
+import { useIsMobile } from "@/lib/use-mobile";
+import { Skeleton } from "@/components/Skeleton";
+import { Notice } from "@/components/Toast";
+import { DateInput } from "@/components/DateInput";
+import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CHANNELS } from "@/lib/dashboard";
 import { CALL_DEFAULT, normCall } from "@/lib/lead-options";
-import { followUps, STALE_DAYS } from "@/lib/lead-insights";
+import { CLOSED_BUY, CLOSED_CALL, CLOSED_SELL, followUps, STALE_DAYS } from "@/lib/lead-insights";
+import { lineHref, telHref } from "@/lib/contact-links";
 import {
-  areaLabel, BUY_STATUS, CALL_STATUS, CONDITIONS, EDITABLE, NEEDS, PRICE_RANGES, PROPERTY_TYPES, SELL_STATUS,
+  areaLabel, BUY_STATUS, CALL_STATUS, CONDITIONS, EDITABLE, NEEDS, PRICE_RANGES, PROPERTY_TYPES, SELL_NEEDS, SELL_STATUS,
   filterLeads, leadStatusOf, statusFieldOf, statusOptionsOf, todayBkk, type DupMatch, type Lead,
 } from "@/lib/leads";
 
 const PAGE = 25;
-const dmy = (iso: string) => (/^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : "");
+
+const dmy = (iso: string) => (/^\d{4}-\d{2}-\d{2}/.test(iso) ? thDate(iso) : "");
 const STATUS_COLOR: Record<string, string> = {
   Hot: "bg-red-100", Warm: "bg-amber-100", Cold: "bg-sky-100", Archive: "bg-slate-200", Close: "bg-green-100",
   รอติดต่อ: "bg-slate-100", สนใจขาย: "bg-sky-100", นัดทำสัญญา: "bg-amber-100", เซ็นสัญญา: "bg-indigo-100", สัญญาเปิด: "bg-violet-100",
@@ -20,10 +27,15 @@ const CLOSED = ["Close", "Archive", "ขายแล้ว", "ยกเลิก
 const emptyForm = (): Lead => ({ ...Object.fromEntries(EDITABLE.map((k) => [k, ""])), received_at: todayBkk(), area: "", call_status: CALL_DEFAULT });
 const EMPTY_F = { q: "", from: "", to: "", channel: "", need: "", status: "", callStatus: "", staff: "", area: "", service: "" };
 const statusLabel = (need: string) => (statusFieldOf(need) === "buy_status" ? "Buy Status" : statusFieldOf(need) === "sell_status" ? "Sell Status" : "Status");
+const addDays = (d: string, n: number) => { const t = new Date(d + "T00:00:00Z"); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+const FOLLOW_DAYS = 3; // เปลี่ยนสถานะในฟอร์ม → เสนอวันติดตามครั้งถัดไป = วันนี้ + 3 วัน (แก้ได้)
+const isClosedValue = (field: string, v: string) => (field === "call_status" ? CLOSED_CALL : field === "sell_status" ? CLOSED_SELL : CLOSED_BUY).includes(v);
+type SortKey = "lead_code" | "received_at" | "customer_name" | "source_channel" | "need" | "status" | "call_status" | "staff" | "next_follow_up_at";
 type Conflict = { field: string; value: string };
 
 export function LeadsManager() {
   const [data, setData] = useState<{ state: "loading" | "ok" | "error"; rows: Lead[]; staff: string[]; areas: string[]; error?: string }>({ state: "loading", rows: [], staff: [], areas: [] });
+  const mobile = useIsMobile();
   const [f, setF] = useState(EMPTY_F);
   const [page, setPage] = useState(1);
   const [form, setForm] = useState<Lead | null>(null);
@@ -36,7 +48,8 @@ export function LeadsManager() {
   const [msg, setMsg] = useState<{ type: "ok" | "error"; text: string } | null>(null);
   const [rowBusy, setRowBusy] = useState("");
   const [delAsk, setDelAsk] = useState(false);
-  const [more, setMore] = useState(false);
+  const [sortBy, setSortBy] = useState<{ key: SortKey; dir: "asc" | "desc" } | null>(null);
+  const [autoFollow, setAutoFollow] = useState(""); // วันติดตามที่ระบบเสนอให้ (แสดงคำอธิบาย)
 
   const load = useCallback(async () => {
     try {
@@ -58,9 +71,18 @@ export function LeadsManager() {
     const order = new Map(fu[follow].map((r, i) => [r.lead_id, i]));
     return base.filter((r) => ids.has(r.lead_id)).sort((a, b) => order.get(a.lead_id)! - order.get(b.lead_id)!);
   }, [data.rows, f, follow, fu]);
+  // เรียงตามหัวคอลัมน์ (ทุกหน้า ไม่ใช่เฉพาะหน้าที่แสดง) · ค่าว่างอยู่ท้ายเสมอ
+  const sorted = useMemo(() => {
+    if (!sortBy) return shown;
+    const val = (r: Lead) => sortBy.key === "status" ? leadStatusOf(r) : sortBy.key === "call_status" ? (normCall(r.call_status) || CALL_DEFAULT) : String(r[sortBy.key] ?? "");
+    return [...shown].sort((a, b) => {
+      const x = val(a), y = val(b); if (!x && !y) return 0; if (!x) return 1; if (!y) return -1;
+      const c = x.localeCompare(y, "th"); return sortBy.dir === "asc" ? c : -c;
+    });
+  }, [shown, sortBy]);
   const pages = Math.max(1, Math.ceil(shown.length / PAGE));
   const cur = Math.min(page, pages);
-  const slice = shown.slice((cur - 1) * PAGE, cur * PAGE);
+  const slice = sorted.slice((cur - 1) * PAGE, cur * PAGE);
   const today = todayBkk();
 
   async function post(body: object) {
@@ -71,7 +93,7 @@ export function LeadsManager() {
   const openForm = (r: Lead | null) => {
     setForm(r ? { ...emptyForm(), ...Object.fromEntries(EDITABLE.map((k) => [k, r[k] ?? ""])), call_status: normCall(r.call_status) || CALL_DEFAULT, area: areaLabel(r.area) } : emptyForm());
     setEditing(r); setViewing(null); setErrors({}); setDups(null); setNeedAsk(null); setDelAsk(false); setMsg(null);
-    setMore(!!r && ["campaign_name", "next_follow_up_at", "last_contacted_at", "lost_reason"].some((k) => r[k]));
+    setAutoFollow("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -119,11 +141,21 @@ export function LeadsManager() {
   const inp = (k: string) => `w-full rounded-md border px-2 py-1.5 text-sm ${errors[k] ? "border-red-500" : "border-slate-300"}`;
   const err = (k: string) => errors[k] && <span role="alert" className="mt-0.5 block text-xs text-red-600">{errors[k]}</span>;
   const set = (k: string, v: string) => setForm((p) => ({ ...p!, [k]: v }));
-  const field = (k: string, label: string, props: { type?: string; required?: boolean; area?: boolean; list?: string } = {}) => (
+  const field = (k: string, label: string, props: { type?: string; required?: boolean; area?: boolean; list?: string; placeholder?: string; mode?: "tel" | "text" } = {}) => (
     <label key={k} className="text-sm"><span className="mb-1 block text-xs text-slate-600">{label}{props.required && " *"}</span>
-      {props.area ? <textarea rows={2} value={form![k]} onChange={(e) => set(k, e.target.value)} className={inp(k)} />
-        : <input type={props.type ?? "text"} list={props.list} value={form![k]} onChange={(e) => set(k, e.target.value)} className={inp(k)} />}{err(k)}</label>
+      {props.area ? <textarea rows={2} value={form![k]} placeholder={props.placeholder} onChange={(e) => set(k, e.target.value)} className={inp(k)} />
+        : props.type === "date" ? <DateInput aria-label={label} value={form![k]} onChange={(e) => set(k, e.target.value)} className={inp(k)} />
+        : <input type={props.type ?? "text"} list={props.list} value={form![k]} placeholder={props.placeholder} inputMode={props.mode} onChange={(e) => set(k, e.target.value)} className={inp(k)} />}{err(k)}</label>
   );
+  /** เปลี่ยนสถานะในฟอร์ม → ถ้ายังไม่มีวันติดตามในอนาคต เสนอวันนี้ + 3 วัน (สถานะที่จบแล้ว = ไม่เสนอ) */
+  const setStatus = (k: string, v: string) => setForm((p) => {
+    const n = { ...p!, [k]: v };
+    const today = todayBkk();
+    if (v && !isClosedValue(k, v) && v !== (editing?.[k] ?? "") && !(p!.next_follow_up_at && p!.next_follow_up_at > today)) {
+      n.next_follow_up_at = addDays(today, FOLLOW_DAYS); setAutoFollow(n.next_follow_up_at);
+    }
+    return n;
+  });
   const select = (k: string, label: string, opts: [string, string][], o: { required?: boolean; onChange?: (v: string) => void } = {}) => (
     <label key={k} className="text-sm"><span className="mb-1 block text-xs text-slate-600">{label}{o.required && " *"}</span>
       <select value={form![k]} onChange={(e) => (o.onChange ? o.onChange(e.target.value) : set(k, e.target.value))} className={inp(k)}>
@@ -135,7 +167,7 @@ export function LeadsManager() {
   );
   const fdate = (k: "from" | "to", label: string) => (
     <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">{label}</span>
-      <input type="date" value={f[k]} onChange={(e) => { setF({ ...f, [k]: e.target.value }); setPage(1); }} className="rounded-md border border-slate-300 px-2 py-1.5 text-sm" /></label>
+      <DateInput value={f[k]} onChange={(e) => { setF({ ...f, [k]: e.target.value }); setPage(1); }} className="rounded-md border border-slate-300 px-2 py-1.5 text-sm" /></label>
   );
   const pair = (a: string[]): [string, string][] => a.map((x) => [x, x]);
 
@@ -150,7 +182,7 @@ export function LeadsManager() {
 
   return (
     <div className="space-y-5">
-      {msg && <p role={msg.type === "error" ? "alert" : "status"} className={`rounded-md p-3 text-sm ${msg.type === "ok" ? "bg-green-50 text-green-800" : "bg-red-50 text-red-700"}`}>{msg.text}</p>}
+      <Notice msg={msg} onClose={() => setMsg(null)} />
 
       {viewing && !form && (
         <section className="space-y-3 rounded-lg border border-slate-300 bg-white p-5">
@@ -158,15 +190,16 @@ export function LeadsManager() {
             <span className="flex gap-4 text-sm"><button onClick={() => openForm(viewing)} className="underline">แก้ไข</button><button onClick={() => setViewing(null)} className="underline">ปิด</button></span></div>
           <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
             {([
-              ["วันที่รับ Lead", dmy(viewing.received_at)], ["Channel", viewing.source_channel], ["Name", viewing.customer_name], ["Phone", viewing.phone],
-              ["Need", viewing.need], [statusLabel(viewing.need), leadStatusOf(viewing)], ["Type", viewing.property_type], ["Condition", viewing.property_condition],
-              ["Price", viewing.price_range], ["Call Status", viewing.call_status], ["Staff", viewing.staff], ["พื้นที่", areaLabel(viewing.area)],
-              ["ความสนใจ", viewing.interest],
-              ["Line", viewing.line_id], ["Campaign", viewing.campaign_name],
-              ["ติดตามครั้งถัดไป", dmy(viewing.next_follow_up_at)], ["ขั้น Pipeline (คำนวณ)", viewing.status], ["สร้างโดย", `${viewing.created_by} · ${dmy(viewing.created_at)}`], ["แก้ไขล่าสุด", `${viewing.updated_by} · ${dmy(viewing.updated_at)}`],
-            ] as [string, string][]).map(([k, v]) => <div key={k}><dt className="text-xs text-slate-500">{k}</dt><dd>{v || <span className="text-slate-300">—</span>}</dd></div>)}
+              ["วันที่รับ Lead", dmy(viewing.received_at)], ["ช่องทาง", viewing.source_channel], ["ชื่อลูกค้า", viewing.customer_name],
+              ["เบอร์โทร", viewing.phone ? <a href={telHref(viewing.phone)} className="text-sky-700 underline">{viewing.phone}</a> : ""],
+              ["Line", viewing.line_id ? <a href={lineHref(viewing.line_id)} target="_blank" rel="noreferrer" className="text-sky-700 underline">{viewing.line_id}</a> : ""],
+              ["ความต้องการ", viewing.need], [statusLabel(viewing.need), leadStatusOf(viewing)], ["ประเภททรัพย์", viewing.property_type], ["สภาพทรัพย์", viewing.property_condition],
+              ["ช่วงราคา", viewing.price_range], ["Call Status", viewing.call_status], ["Staff", viewing.staff], ["พื้นที่", areaLabel(viewing.area)],
+              ["ความสนใจ", viewing.interest], ["Campaign", viewing.campaign_name],
+              ["ติดต่อล่าสุด", dmy(viewing.last_contacted_at)], ["ติดตามครั้งถัดไป", dmy(viewing.next_follow_up_at)], ["ขั้น Pipeline (คำนวณ)", viewing.status], ["สร้างโดย", `${viewing.created_by} · ${dmy(viewing.created_at)}`], ["แก้ไขล่าสุด", `${viewing.updated_by} · ${dmy(viewing.updated_at)}`],
+            ] as [string, React.ReactNode][]).map(([k, v]) => <div key={k}><dt className="text-xs text-slate-500">{k}</dt><dd>{v || <span className="text-slate-300">—</span>}</dd></div>)}
           </dl>
-          {[["Remark", viewing.need_description], ["Note", viewing.notes], ...(viewing.lost_reason ? [["เหตุผลที่ปิดไม่สำเร็จ", viewing.lost_reason]] : [])].map(([k, v]) => (
+          {[["รายละเอียดเพิ่มเติม (Remark)", viewing.need_description], ["บันทึกภายใน (Note)", viewing.notes], ...(viewing.lost_reason ? [["เหตุผลที่ปิดไม่สำเร็จ", viewing.lost_reason]] : [])].map(([k, v]) => (
             <div key={k} className="text-sm"><div className="text-xs text-slate-500">{k}</div><p className="whitespace-pre-wrap">{v || <span className="text-slate-300">—</span>}</p></div>))}
           {!viewing.need && <p className="rounded-md bg-amber-50 p-2 text-sm text-amber-800">Lead นี้บันทึกก่อนมีช่อง Need — กด แก้ไข เพื่อเลือก Need และสถานะ</p>}
         </section>
@@ -176,40 +209,55 @@ export function LeadsManager() {
         <section className="space-y-4 rounded-lg border border-slate-300 bg-white p-5">
           <div className="flex items-center justify-between"><h2 className="font-semibold">{editing ? `แก้ไข ${editing.lead_code}` : "เพิ่ม Lead ใหม่"}</h2>
             <button onClick={closeForm} className="text-sm underline">ปิด</button></div>
-          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
-            {field("received_at", "Date (วันที่รับ Lead)", { type: "date", required: true })}
-            {select("source_channel", "Channel", pair(CHANNELS), { required: true })}
-            {field("customer_name", "Name", { required: true })}
-            {field("phone", "Phone", { type: "tel" })}
-            {field("line_id", "Line")}
-            {select("need", "Need", pair(NEEDS), { required: true, onChange: changeNeed })}
-            {sf ? select(sf, statusLabel(form.need), pair(statusOptionsOf(form.need)))
-              : <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">Status</span><select disabled className={inp("x") + " bg-slate-50"}><option>เลือก Need ก่อน</option></select></label>}
-            {select("property_type", "Type", pair(PROPERTY_TYPES))}
-            {select("property_condition", "Condition", pair(CONDITIONS))}
-            {select("price_range", "Price", pair(PRICE_RANGES))}
-            {field("interest", "ความสนใจ")}
-            {select("call_status", "Call Status", pair(CALL_STATUS))}
-            {field("staff", "Staff", { list: "staff-list" })}
-            <datalist id="staff-list">{data.staff.map((o) => <option key={o} value={o} />)}</datalist>
-            {field("area", "พื้นที่ (กรอกเองหรือเลือกจากรายการ)", { list: "area-list" })}
-            <datalist id="area-list">{data.areas.map((o) => <option key={o} value={o} />)}</datalist>
-          </div>
-          {prevOther && <p role="status" className="rounded-md bg-amber-50 p-2 text-sm text-amber-800">{statusFieldOf(editing!.need) === "buy_status" ? "Buy Status" : "Sell Status"} เดิม &quot;{prevOther}&quot; ใช้กับ Need &quot;{form.need}&quot; ไม่ได้ — ระบบจะถามยืนยันก่อนล้างค่าเดิมเมื่อกดบันทึก</p>}
-          <div className="grid gap-3 md:grid-cols-2">
-            {field("need_description", "Remark (รายละเอียดเพิ่มเติม)", { area: true })}
-            {field("notes", "Note (บันทึกภายใน)", { area: true })}
-          </div>
-          <div>
-            <button type="button" onClick={() => setMore(!more)} className="text-sm underline">{more ? "ซ่อนข้อมูลเพิ่มเติม" : "ข้อมูลเพิ่มเติม (Campaign, วันติดตาม ฯลฯ)"}</button>
-            {more && (
-              <div className="mt-3 grid gap-3 sm:grid-cols-2 md:grid-cols-4">
-                {field("campaign_name", "Campaign")}
-                {field("last_contacted_at", "ติดต่อล่าสุด", { type: "date" })}{field("next_follow_up_at", "ติดตามครั้งถัดไป", { type: "date" })}
-                {field("lost_reason", "เหตุผลที่ปิดไม่สำเร็จ")}
-              </div>
-            )}
-          </div>
+          {(() => {
+            const need = form.need; const isSell = SELL_NEEDS.includes(need); const isBuy = need && !isSell;
+            const grp = (t: string, body: React.ReactNode, hint?: string) => (
+              <fieldset className="space-y-2 border-t border-slate-100 pt-3 first:border-0 first:pt-0">
+                <legend className="text-sm font-semibold text-slate-800">{t}{hint && <span className="ml-2 text-xs font-normal text-slate-500">{hint}</span>}</legend>
+                <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">{body}</div>
+              </fieldset>);
+            const closedNow = [["call_status", form.call_status], ["buy_status", form.buy_status], ["sell_status", form.sell_status]].some(([k, v]) => v && isClosedValue(k, v) && !["ซื้อสำเร็จ", "ขายแล้ว", "Close"].includes(v));
+            return (<>
+              {grp("1. ข้อมูลติดต่อ", <>
+                {field("received_at", "วันที่รับ Lead", { type: "date", required: true })}
+                {select("source_channel", "ช่องทาง", pair(CHANNELS), { required: true })}
+                {field("customer_name", "ชื่อลูกค้า", { required: true })}
+                {field("phone", "เบอร์โทร", { type: "tel", mode: "tel", placeholder: "08x-xxx-xxxx" })}
+                {field("line_id", "Line", { placeholder: "@line หรือ LINE ID" })}
+                {field("campaign_name", "Campaign (ถ้ามี)")}
+              </>)}
+              {grp("2. ความต้องการ", <>
+                {select("need", "ความต้องการ", pair(NEEDS), { required: true, onChange: changeNeed })}
+                {select("property_type", "ประเภททรัพย์", pair(PROPERTY_TYPES))}
+                {select("price_range", "ช่วงราคา", pair(PRICE_RANGES))}
+                {(isSell || !need || form.property_condition) && select("property_condition", "สภาพทรัพย์", pair(CONDITIONS))}
+                {(isBuy || !need || form.interest) && field("interest", "ความสนใจ", { placeholder: "เช่น ทาวน์โฮมใกล้โรงเรียน" })}
+                {field("area", "พื้นที่ (กรอกเองหรือเลือกจากรายการ)", { list: "area-list" })}
+                <datalist id="area-list">{data.areas.map((o) => <option key={o} value={o} />)}</datalist>
+              </>, !need ? "เลือกความต้องการก่อน ระบบจะแสดงช่องที่เกี่ยวข้อง" : isSell ? "ลูกค้าต้องการขาย" : "ลูกค้าต้องการ" + need)}
+              {grp("3. สถานะการขาย", <>
+                {sf ? select(sf, statusLabel(form.need), pair(statusOptionsOf(form.need)), { onChange: (v) => setStatus(sf, v) })
+                  : <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">สถานะ</span><select disabled className={inp("x") + " bg-slate-50"}><option>เลือกความต้องการก่อน</option></select></label>}
+                {select("call_status", "Call Status", pair(CALL_STATUS), { onChange: (v) => setStatus("call_status", v) })}
+                {field("staff", "Staff", { list: "staff-list" })}
+                <datalist id="staff-list">{data.staff.map((o) => <option key={o} value={o} />)}</datalist>
+                {(closedNow || form.lost_reason) && field("lost_reason", "เหตุผลที่ปิดไม่สำเร็จ")}
+              </>)}
+              {grp("4. การติดตาม", <>
+                {field("last_contacted_at", "ติดต่อล่าสุด", { type: "date" })}
+                <div className="text-sm sm:col-span-1">
+                  {field("next_follow_up_at", "ติดตามครั้งถัดไป", { type: "date" })}
+                  <div className="mt-1 flex flex-wrap gap-1" role="group" aria-label="ตั้งวันติดตาม">
+                    {[1, 3, 7].map((n) => <button key={n} type="button" onClick={() => { set("next_follow_up_at", addDays(todayBkk(), n)); setAutoFollow(""); }} className="rounded-full border border-slate-300 px-2 py-0.5 text-xs hover:bg-slate-100">+{n} วัน</button>)}
+                    {form.next_follow_up_at && <button type="button" onClick={() => { set("next_follow_up_at", ""); setAutoFollow(""); }} className="px-1 text-xs text-slate-500 underline">ล้าง</button>}
+                  </div>
+                </div>
+                <div className="sm:col-span-2 md:col-span-2">{field("need_description", "รายละเอียดเพิ่มเติม (Remark)", { area: true })}</div>
+                <div className="sm:col-span-2 md:col-span-4">{field("notes", "บันทึกภายใน (Note)", { area: true })}</div>
+              </>, autoFollow && form.next_follow_up_at === autoFollow ? `เปลี่ยนสถานะแล้ว — ตั้งวันติดตามให้เป็น ${dmy(autoFollow)} (แก้ได้)` : undefined)}
+            </>);
+          })()}
+          {prevOther && <p role="status" className="rounded-md bg-amber-50 p-2 text-sm text-amber-800">{statusFieldOf(editing!.need) === "buy_status" ? "Buy Status" : "Sell Status"} เดิม &quot;{prevOther}&quot; ใช้กับความต้องการ &quot;{form.need}&quot; ไม่ได้ — ระบบจะถามยืนยันก่อนล้างค่าเดิมเมื่อกดบันทึก</p>}
           {needAsk && (
             <div role="alert" className="space-y-2 rounded-md bg-amber-50 p-3 text-sm text-amber-900">
               <p>{needAsk.msg}</p>
@@ -257,22 +305,52 @@ export function LeadsManager() {
         <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">ค้นหา</span>
           <input value={f.q} onChange={(e) => { setF({ ...f, q: e.target.value }); setPage(1); }} placeholder="ชื่อ / เบอร์ / Line / ความสนใจ / Remark" className="w-56 rounded-md border border-slate-300 px-2 py-1.5 text-sm" /></label>
         {fdate("from", "รับตั้งแต่")}{fdate("to", "ถึง")}
-        {fsel("channel", "Channel", pair(CHANNELS))}{fsel("need", "Need", pair(NEEDS))}{fsel("status", "Status", pair(statusOptsFilter))}
+        {fsel("channel", "ช่องทาง", pair(CHANNELS))}{fsel("need", "ความต้องการ", pair(NEEDS))}{fsel("status", "สถานะ", pair(statusOptsFilter))}
         {fsel("callStatus", "Call Status", pair(CALL_STATUS))}{fsel("staff", "Staff", pair(data.staff))}
         {fsel("area", "พื้นที่", pair(data.areas))}
         {Object.values(f).some(Boolean) && <button onClick={() => { setF(EMPTY_F); setPage(1); }} className="py-1.5 text-sm underline">ล้าง</button>}
-        <button onClick={() => openForm(null)} className="ml-auto rounded-md bg-slate-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-slate-700">+ เพิ่ม Lead</button>
+        <button onClick={() => openForm(null)} className="ml-auto hidden rounded-md bg-slate-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-slate-700 md:block">+ เพิ่ม Lead</button>
       </div>
 
-      {data.state === "loading" && <p className="text-sm text-slate-500">กำลังโหลด...</p>}
+      {data.state === "loading" && <Skeleton kind={"rows"} />}
       {data.state === "error" && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">โหลดข้อมูลไม่ได้: {data.error}</p>}
       {data.state === "ok" && data.rows.length === 0 && <p className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">ยังไม่มี Lead — กด &quot;+ เพิ่ม Lead&quot; เพื่อเริ่มบันทึก</p>}
       {data.state === "ok" && data.rows.length > 0 && shown.length === 0 && <p className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">ไม่มี Lead ที่ตรงกับตัวกรอง</p>}
       {shown.length > 0 && (
         <div className="space-y-2">
-          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+          {/* มือถือ: การ์ด · จอใหญ่: ตาราง */}
+          {mobile && <ul className="space-y-2" aria-label="รายการ Lead">{slice.map((r) => {
+            const st = leadStatusOf(r); const overdue = r.next_follow_up_at && r.next_follow_up_at < today && !CLOSED.includes(st);
+            return (
+              <li key={r.lead_id} className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0"><div className="font-medium">{r.customer_name}</div><div className="text-xs text-slate-500"><span className="font-mono">{r.lead_code}</span> · {dmy(r.received_at)} · {r.source_channel}</div></div>
+                  <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-xs">{r.need || "ยังไม่ระบุ"}</span>
+                </div>
+                <div className="mt-1.5 flex flex-wrap gap-1 text-xs">
+                  {st && <span className={`rounded px-1.5 py-0.5 ${STATUS_COLOR[st] ?? "bg-slate-100"}`}>{st}</span>}
+                  <span className={`rounded px-1.5 py-0.5 ${CALL_COLOR[normCall(r.call_status) || CALL_DEFAULT]}`}>{normCall(r.call_status) || CALL_DEFAULT}</span>
+                  {r.staff && <span className="rounded bg-slate-50 px-1.5 py-0.5 text-slate-600">{r.staff}</span>}
+                </div>
+                {r.interest && <p className="mt-1 line-clamp-2 text-xs text-slate-600">สนใจ: {r.interest}</p>}
+                {r.next_follow_up_at && <p className={`mt-1 text-xs ${overdue ? "font-semibold text-red-600" : "text-slate-600"}`}>ติดตาม {dmy(r.next_follow_up_at)}{overdue && " (เลยกำหนด)"}</p>}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {r.phone && <a href={telHref(r.phone)} className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white">โทร {r.phone}</a>}
+                  {r.line_id && <a href={lineHref(r.line_id)} target="_blank" rel="noreferrer" className="rounded-md bg-green-500 px-3 py-1.5 text-xs font-medium text-white">LINE</a>}
+                  <button onClick={() => { setViewing(r); setForm(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="rounded-md border border-slate-300 px-3 py-1.5 text-xs">ดู</button>
+                  <button onClick={() => openForm(r)} className="rounded-md border border-slate-300 px-3 py-1.5 text-xs">แก้ไข</button>
+                </div>
+              </li>);
+          })}</ul>}
+          {!mobile && <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
             <table className="w-full text-left text-sm">
-              <thead><tr className="border-b bg-slate-50 text-xs text-slate-500"><th className="p-2">รหัส</th><th>Date</th><th>Name</th><th>Phone</th><th>Channel</th><th>Need</th><th>Status</th><th>Type / Price</th><th>Call Status</th><th>Staff</th><th>ติดตามถัดไป</th><th /></tr></thead>
+              <thead><tr className="border-b bg-slate-50 text-xs text-slate-500">
+                {(([["lead_code", "รหัส"], ["received_at", "วันที่รับ"], ["customer_name", "ชื่อ"], [null, "เบอร์"], ["source_channel", "ช่องทาง"], ["need", "ความต้องการ"], ["status", "สถานะ"], [null, "ประเภท / ราคา"], ["call_status", "Call Status"], ["staff", "Staff"], ["next_follow_up_at", "ติดตามถัดไป"]]) as [SortKey | null, string][]).map(([k, l], i) => {
+                  const on = k && sortBy?.key === k;
+                  return <th key={l} className={`whitespace-nowrap ${i === 0 ? "p-2" : "pr-2"}`} aria-sort={on ? (sortBy!.dir === "asc" ? "ascending" : "descending") : undefined}>
+                    {k ? <button type="button" title="กดเพื่อเรียง" onClick={() => { setSortBy(!on ? { key: k, dir: k === "received_at" || k === "next_follow_up_at" ? "desc" : "asc" } : sortBy!.dir === (k === "received_at" || k === "next_follow_up_at" ? "desc" : "asc") ? { key: k, dir: sortBy!.dir === "asc" ? "desc" : "asc" } : null); setPage(1); }} className="hover:text-slate-900">{l}<span className={on ? "ml-1" : "ml-1 opacity-30"}>{on ? (sortBy!.dir === "asc" ? "▲" : "▼") : "↕"}</span></button> : l}
+                  </th>;
+                })}<th /></tr></thead>
               <tbody>{slice.map((r) => {
                 const st = leadStatusOf(r); const opts = statusOptionsOf(r.need); const k = statusFieldOf(r.need);
                 const overdue = r.next_follow_up_at && r.next_follow_up_at < today && !CLOSED.includes(st);
@@ -280,7 +358,7 @@ export function LeadsManager() {
                 return (
                   <tr key={r.lead_id} className="border-b border-slate-100">
                     <td className="whitespace-nowrap p-2 font-mono text-xs">{r.lead_code}</td><td className="whitespace-nowrap">{dmy(r.received_at)}</td>
-                    <td className="max-w-48 truncate" title={r.customer_name}>{r.customer_name}</td><td className="whitespace-nowrap">{r.phone}</td>
+                    <td className="max-w-48 truncate" title={r.customer_name}>{r.customer_name}</td><td className="whitespace-nowrap">{r.phone && <a href={telHref(r.phone)} className="hover:underline">{r.phone}</a>}</td>
                     <td className="whitespace-nowrap">{r.source_channel}</td><td>{r.need || <span className="text-amber-600">ยังไม่ระบุ</span>}</td>
                     <td>{k ? <select aria-label={`${statusLabel(r.need)} ${r.lead_code}`} value={st} disabled={busy} onChange={(e) => quick(r, k, e.target.value)} className={`rounded px-1.5 py-1 text-xs ${STATUS_COLOR[st] ?? "bg-white"}`}><option value="">— ว่าง —</option>{opts.map((s) => <option key={s}>{s}</option>)}</select>
                       : <span className="text-xs text-slate-400">{r.status}</span>}</td>
@@ -292,12 +370,13 @@ export function LeadsManager() {
                   </tr>);
               })}</tbody>
             </table>
-          </div>
+          </div>}
           <div className="flex items-center justify-between text-xs text-slate-500"><span>{shown.length.toLocaleString("en-US")} รายการ · หน้า {cur}/{pages}</span>
             <span className="flex gap-3">{cur > 1 && <button className="underline" onClick={() => setPage(cur - 1)}>ก่อนหน้า</button>}{cur < pages && <button className="underline" onClick={() => setPage(cur + 1)}>ถัดไป</button>}</span></div>
-          <p className="text-xs text-slate-500">• Status แสดงตาม Need: ซื้อ / เช่า / สร้าง ใช้ Buy Status · ขาย ใช้ Sell Status · Dashboard นับ Qualified / Won / Lost จากสถานะเหล่านี้</p>
+          <p className="text-xs text-slate-500">• สถานะแสดงตามความต้องการ: ซื้อ / เช่า / สร้าง ใช้ Buy Status · ขาย ใช้ Sell Status · Dashboard นับ Qualified / Won / Lost จากสถานะเหล่านี้ · กดหัวคอลัมน์เพื่อเรียง</p>
         </div>
       )}
+      {!form && <button onClick={() => openForm(null)} aria-label="เพิ่ม Lead (มือถือ)" className="fixed bottom-5 right-5 z-30 flex h-14 items-center gap-1 rounded-full bg-slate-900 px-5 text-sm font-semibold text-white shadow-lg md:hidden">+ เพิ่ม Lead</button>}
     </div>
   );
 }

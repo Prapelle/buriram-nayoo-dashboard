@@ -1,3 +1,4 @@
+import { thDate, thDateTime } from "./thdate";
 export type Kind = "text" | "int" | "num" | "thb" | "pct" | "date" | "datetime" | "clip";
 export type Col = { key: string; label: string; kind?: Kind; href?: (row: Record<string, string>) => string };
 export type View = { q?: string; searchKeys?: string[]; filters?: Record<string, string>; sort?: string; dir?: "asc" | "desc"; page?: number; size?: number };
@@ -13,8 +14,8 @@ export function fmtCell(kind: Kind | undefined, v: string): string {
     case "num": return isNaN(n) ? v : nf(n, 2);
     case "thb": return isNaN(n) ? v : `฿${nf(n, 2)}`;
     case "pct": return isNaN(n) ? v : `${nf(n, 2)}%`;
-    case "date": return /^\d{4}-\d{2}-\d{2}/.test(v) ? `${v.slice(8, 10)}/${v.slice(5, 7)}/${v.slice(0, 4)}` : v;
-    case "datetime": return /^\d{4}-\d{2}-\d{2}/.test(v) ? `${v.slice(8, 10)}/${v.slice(5, 7)}/${v.slice(0, 4)} ${v.slice(11, 16)}` : v;
+    case "date": return thDate(v);
+    case "datetime": return thDateTime(v);
     case "clip": return v.length > 70 ? v.slice(0, 70) + "…" : v;
     default: return v;
   }

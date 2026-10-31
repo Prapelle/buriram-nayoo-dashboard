@@ -1,3 +1,4 @@
+import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
@@ -42,7 +43,7 @@ export default async function GoogleAdsPage({ searchParams }: { searchParams: Pr
     <section className="max-w-7xl space-y-4">
       <div>
         <h1 className="text-2xl font-bold">Google Ads</h1>
-        <p className="text-sm text-slate-500">อัปเดตล่าสุด: {last ? new Date(last).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", dateStyle: "short", timeStyle: "short" }) : "ยังไม่มีข้อมูล"} · นำเข้าได้ที่ <Link href="/import" className="underline">นำเข้า CSV</Link></p>
+        <p className="text-sm text-slate-500">อัปเดตล่าสุด: {last ? thDateTime(last) : "ยังไม่มีข้อมูล"} · นำเข้าได้ที่ <Link href="/import" className="underline">นำเข้า CSV</Link></p>
       </div>
       <nav aria-label="ประเภทรายงาน" className="flex flex-wrap gap-1.5">
         {TYPES.map((t) => (

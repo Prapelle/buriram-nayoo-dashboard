@@ -47,7 +47,7 @@ assert.equal(changePct(k.g_spend.value, k.g_spend.prev).pct, Math.round(((28814.
 assert.equal(k.m_spend.prev, r2(meta25.reduce((s, r) => s + Number(r.amount_spent_thb || 0), 0))); assert.equal(k.f_eng.prev, 319);
 ok(`มีข้อมูลทดสอบ ก.ย. 2025: Google Spend ปีก่อน ฿${g25.toLocaleString()} (Time series กฎเดียวกัน) · CPC ปีก่อน = Spend ÷ Clicks ปีก่อน · Meta และ Facebook Engagement (319) เทียบได้`);
 ({ k } = perf({ gtime: [...gtime, ...gtime25.filter((r) => r.date <= "2025-09-15")], google: google }, { ...SEP, compare: "yoy" }));
-assert.equal(k.g_spend.prevIncomplete, "ไม่มีข้อมูลรายวัน 15 วัน (16/09/2025–30/09/2025)"); assert.equal(k.g_spend.incomplete, undefined);
+assert.equal(k.g_spend.prevIncomplete, "ไม่มีข้อมูลรายวัน 15 วัน (16 ก.ย. 68–30 ก.ย. 68)"); assert.equal(k.g_spend.incomplete, undefined);
 ok("ปีก่อนมีข้อมูลแค่ครึ่งเดือน → แสดงค่าปีก่อนพร้อม ปีก่อนข้อมูลไม่ครบ (ระบุวันที่ขาด) ไม่เทียบเงียบ ๆ");
 const zero25 = gtime25.map((r) => ({ ...r, cost_thb: "0", clicks: "0" }));
 ({ k } = perf({ gtime: [...gtime, ...zero25] }, { ...SEP, compare: "yoy" }));

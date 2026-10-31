@@ -1,5 +1,9 @@
 "use client";
+import { Skeleton } from "@/components/Skeleton";
+import { Notice } from "@/components/Toast";
+import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
 import Link from "next/link";
+import { BoardScroller, BoardTabs } from "@/components/Board";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AUTO_STATUS, DEV_DEFAULT, DEV_STATUS, productState, TIERS, type Dev, type DevProduct } from "@/lib/developers";
 
@@ -9,11 +13,12 @@ const HEAD: Record<string, string> = {
   "กำลังใช้ Product": "bg-green-300", ใกล้หมดสัญญา: "bg-orange-200", ไม่ให้เข้าพบ: "bg-rose-200",
 };
 const HINT: Record<string, string> = { มีแผนเข้าพบ: "สิ้นเดือนกลับไป เข้าร่วมแล้ว (นับเป็นไม่ให้เข้าพบ)", เข้าพบแล้ว: "สิ้นเดือนกลับไป เข้าร่วมแล้ว", "กำลังใช้ Product": "ระบบย้ายให้ตามวัน Product", ใกล้หมดสัญญา: "เหลือ ≤ 30 วันก่อนหมดอายุ" };
-const dmy = (s?: string) => (s && /^\d{4}-\d{2}-\d{2}/.test(s) ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(2, 4)}` : "");
+const dmy = (s?: string) => (s && /^\d{4}-\d{2}-\d{2}/.test(s) ? thDate(s) : "");
 
 export function DevBoard() {
   const [all, setAll] = useState<Dev[]>([]); const [products, setProducts] = useState<DevProduct[]>([]); const [staff, setStaff] = useState<string[]>([]); const [today, setToday] = useState("");
   const [state, setState] = useState<"loading" | "ok" | "error">("loading");
+  const [tab, setTab] = useState(""); // มือถือ: คอลัมน์ที่แสดง
   const [msg, setMsg] = useState<{ type: "ok" | "error"; text: string; link?: string } | null>(null);
   const [q, setQ] = useState(""); const [staffF, setStaffF] = useState(""); const [tierF, setTierF] = useState("");
   const [busy, setBusy] = useState<Set<string>>(new Set()); const [dragId, setDragId] = useState(""); const [over, setOver] = useState("");
@@ -48,30 +53,32 @@ export function DevBoard() {
 
   return (
     <div className="space-y-3">
-      {msg && <p role={msg.type === "error" ? "alert" : "status"} className={`rounded-md p-3 text-sm ${msg.type === "ok" ? "bg-green-50 text-green-800" : "bg-red-50 text-red-700"}`}>{msg.text}{msg.link && <> · <Link href={msg.link} className="font-medium underline">เพิ่ม Product</Link></>}</p>}
+      <Notice msg={msg && { ...msg, linkText: "เพิ่ม Product" }} onClose={() => setMsg(null)} />
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">ค้นหา</span><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="บริษัท / โครงการ / ผู้ติดต่อ" className="w-56 rounded-md border border-slate-300 px-2 py-1.5 text-sm" /></label>
         <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">Staff</span><select aria-label="กรอง Staff" value={staffF} onChange={(e) => setStaffF(e.target.value)} className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"><option value="">ทั้งหมด</option>{staff.map((s) => <option key={s}>{s}</option>)}</select></label>
         <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">Tier</span><select aria-label="กรอง Tier" value={tierF} onChange={(e) => setTierF(e.target.value)} className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"><option value="">ทั้งหมด</option>{TIERS.map((s) => <option key={s}>{s}</option>)}</select></label>
         <span className="ml-auto text-xs text-slate-500">{shown.length.toLocaleString("en-US")} รายการ · เพิ่ม/แก้ไขรายละเอียดและ Product ที่หน้า <Link href="/developers" className="underline">Developer</Link></span>
       </div>
-      {state === "loading" && <p className="text-sm text-slate-500">กำลังโหลด...</p>}
+      {state === "loading" && <Skeleton kind={"board"} />}
       {state === "ok" && all.length === 0 && <p className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">ยังไม่มี Developer — เพิ่มได้ที่หน้า Developer</p>}
       {state === "ok" && all.length > 0 && (
-        <div className="flex items-start gap-3 overflow-x-auto pb-3">
+        <>
+        <BoardTabs tabs={DEV_STATUS.map((k) => ({ key: k, label: k, count: cols[k].length, cls: HEAD[k] }))} active={tab || DEV_STATUS[0]} onPick={setTab} />
+        <BoardScroller>
           {DEV_STATUS.map((k) => {
             const auto = AUTO_STATUS.includes(k);
             return (
               <div key={k} data-col={k}
                 onDragOver={auto ? undefined : (e) => { if (dragId) { e.preventDefault(); setOver(k); } }} onDragLeave={() => setOver((o) => (o === k ? "" : o))}
                 onDrop={auto ? undefined : (e) => { e.preventDefault(); setOver(""); const id = e.dataTransfer.getData("text/plain") || dragId; setDragId(""); if (id) move(id, k); }}
-                className={`flex max-h-[75vh] w-60 shrink-0 flex-col rounded-lg border bg-slate-50 ${over === k ? "border-slate-900 ring-2 ring-slate-300" : "border-slate-200"}`}>
+                className={`${(tab || DEV_STATUS[0]) === k ? "flex" : "hidden"} max-h-[75vh] w-full shrink-0 flex-col rounded-lg border bg-slate-50 md:flex md:w-60 ${over === k ? "border-slate-900 ring-2 ring-slate-300" : "border-slate-200"}`}>
                 <div className={`rounded-t-lg px-3 py-2 ${HEAD[k]}`}>
                   <div className="flex items-center justify-between text-sm font-semibold"><span>{k}{auto && " 🔒"}</span><span className="rounded-full bg-white/70 px-2 text-xs">{cols[k].length}</span></div>
                   {HINT[k] && <div className="text-[11px] text-slate-700">{HINT[k]}</div>}
                 </div>
                 <ul className="flex-1 space-y-2 overflow-y-auto p-2">
-                  {cols[k].length === 0 && <li className="py-6 text-center text-xs text-slate-400">ว่าง</li>}
+                  {cols[k].length === 0 && <li className="py-6 text-center text-xs text-slate-400">ยังไม่มีบริษัทในสถานะนี้<span className="hidden md:inline"> · ลากการ์ดมาวางได้</span></li>}
                   {cols[k].map((d) => {
                     const lock = locked(d), b = busy.has(d.developer_id), act = (activeOf.get(d.developer_id) ?? []).sort((x, y) => x.end_date.localeCompare(y.end_date));
                     const overdue = d.next_follow_up_at && d.next_follow_up_at < today;
@@ -93,7 +100,8 @@ export function DevBoard() {
                 </ul>
               </div>);
           })}
-        </div>
+        </BoardScroller>
+        </>
       )}
       <p className="text-xs text-slate-500">• ลากการ์ดเพื่อเปลี่ยน Status (มือถือใช้เมนูบนการ์ด) · 🔒 = ระบบย้ายให้เองตามวันของ Product · ปิดการขาย = Win ของเดือนนั้น · ย้ายไป เข้าพบแล้ว → ติดต่อล่าสุด = วันนี้</p>
     </div>
