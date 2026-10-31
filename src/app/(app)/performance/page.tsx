@@ -14,10 +14,10 @@ export const dynamic = "force-dynamic";
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 const iso = (v: string) => (/^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
 const n2 = (v: number | null, thb = false) => (v === null ? <span className="text-slate-400">—</span> : thb ? `฿${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : v.toLocaleString("en-US"));
-const KIND: Record<string, string> = { Paid: "bg-indigo-100 text-indigo-900", Organic: "bg-emerald-100 text-emerald-900", Website: "bg-sky-100 text-sky-900", Compare: "bg-slate-200 text-slate-800" };
+const KIND: Record<string, string> = { Paid: "bg-brand-50 text-brand-800", Organic: "bg-emerald-100 text-emerald-900", Website: "bg-sky-100 text-sky-900", Compare: "bg-slate-200 text-slate-800" };
 const STATUS: Record<string, string> = { ครบ: "text-emerald-700", ไม่ครบ: "text-amber-700", รอข้อมูล: "text-slate-400" };
 const Card = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <div className="rounded-lg border border-slate-200 bg-white p-4"><h3 className="mb-3 text-sm font-semibold">{title}</h3>{children}</div>
+  <div className="rounded-xl border border-slate-200 bg-white p-4"><h3 className="mb-3 text-sm font-semibold">{title}</h3>{children}</div>
 );
 
 export default async function PerformancePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -30,28 +30,28 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
   let p: Performance;
   try { p = computePerformance(await fetchDashboardData(role), f); }
   catch (e) {
-    return <section><h1 className="mb-4 text-2xl font-bold">Marketing Performance</h1><p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">โหลดข้อมูลไม่สำเร็จ: {e instanceof Error ? e.message.slice(0, 200) : "ไม่ทราบสาเหตุ"} — ลอง <Link href="/settings" className="underline">ตั้งค่า → เตรียม Google Sheet</Link></p></section>;
+    return <section><h1 className="mb-4 text-[26px] font-bold tracking-tight">Marketing Performance</h1><p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">โหลดข้อมูลไม่สำเร็จ: {e instanceof Error ? e.message.slice(0, 200) : "ไม่ทราบสาเหตุ"} — ลอง <Link href="/settings" className="underline">ตั้งค่า → เตรียม Google Sheet</Link></p></section>;
   }
-  const inp = "rounded-md border border-slate-300 px-2 py-1.5 text-sm";
+  const inp = "h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm";
   const lbl = (x: string) => (p.trend.gran === "month" ? my(x) : dm(x));
 
   return (
     <section className="max-w-7xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Marketing Performance</h1>
+        <h1 className="text-[26px] font-bold tracking-tight">Marketing Performance</h1>
         <p className="text-sm text-slate-500">
           {p.range ? <>ช่วงที่คำนวณ: <b>{dmyS(p.range.from)} – {dmyS(p.range.to)}</b>{p.defaulted && " (ช่วงของข้อมูลทั้งหมดที่มี)"}</> : "ยังไม่มีข้อมูล"}
           {p.prevRange && <> · เทียบกับ{p.compare === "yoy" ? "ช่วงเดียวกันของปีก่อน" : "ช่วงก่อนหน้า"} {dmyS(p.prevRange.from)} – {dmyS(p.prevRange.to)}</>}
         </p>
       </div>
 
-      <form method="get" action="/performance" className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-white p-4 text-sm">
+      <form method="get" action="/performance" className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm">
         <RangeFields from={f.from} to={f.to} className={inp} remembered={rg.remembered} />
         <label><span className="mb-1 block text-xs text-slate-500">กราฟแนวโน้ม</span>
           <select name="gran" defaultValue={f.gran} className={inp}><option value="day">รายวัน</option><option value="month">รายเดือน</option></select></label>
         <label><span className="mb-1 block text-xs text-slate-500">เปรียบเทียบ</span>
           <select name="compare" defaultValue={f.compare ?? ""} className={inp}><option value="">ไม่เปรียบเทียบ</option><option value="yoy">ปีก่อน (YoY) ช่วงวันที่เดียวกัน</option><option value="prev">ช่วงก่อนหน้า (ยาวเท่ากัน)</option></select></label>
-        <button className="rounded-md bg-slate-900 px-4 py-1.5 font-medium text-white hover:bg-slate-700">ใช้ตัวกรอง</button>
+        <button className="rounded-lg bg-brand-600 px-4 py-1.5 font-medium text-white hover:bg-brand-700">ใช้ตัวกรอง</button>
         {(f.from || f.to || f.compare || f.gran === "month") && <Link href="/performance?range=all" className="py-1.5 underline">ล้าง</Link>}
       </form>
 
@@ -105,7 +105,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
   );
 }
 
-const FUNNEL_COLOR = ["#3b6fd8", "#3aa0e0", "#45c08f", "#f2c94c", "#f2a07b"];
+const FUNNEL_OP = [1, 0.85, 0.7, 0.55, 0.42]; // ธีม: แท่งสีเดียว ไล่ความเข้ม (แทนสีรุ้ง)
 const FUNNEL_W = [100, 86, 72, 58, 44];
 function Change({ v, lowerIsBetter = false }: { v: number | null | undefined; lowerIsBetter?: boolean }) {
   if (v === undefined) return null;
@@ -122,7 +122,7 @@ function FunnelAndChannels({ p }: { p: Performance }) {
       <div className="2xl:col-span-2"><Card title="Customer Funnel">
         <ol className="space-y-1.5">{p.funnel!.map((s, i) => (
           <li key={s.key} className="grid grid-cols-[minmax(0,30%)_1fr_auto] items-center gap-3" title={s.note}>
-            <div className="flex justify-center"><div className="h-9" style={{ width: `${FUNNEL_W[i]}%`, background: FUNNEL_COLOR[i], clipPath: "polygon(0 0, 100% 0, 93% 100%, 7% 100%)" }} /></div>
+            <div className="flex"><div className="h-7 rounded-lg bg-brand-600" style={{ width: `${FUNNEL_W[i]}%`, opacity: FUNNEL_OP[i] }} /></div>
             <div className="min-w-0"><div className="text-sm font-medium">{s.label}</div>
               <div className="line-clamp-2 text-xs text-slate-500" title={s.note}>{s.conv !== null && s.conv !== undefined ? `${s.conv.toLocaleString("en-US")}% ของขั้นก่อนหน้า · ` : ""}{s.note}</div>
               {s.incomplete && s.value !== null && <div className="text-xs text-amber-700">⚠ ข้อมูลไม่ครบ: {s.incomplete}</div>}</div>

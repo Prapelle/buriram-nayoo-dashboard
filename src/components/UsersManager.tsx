@@ -56,7 +56,7 @@ export function UsersManager() {
             {Object.entries(ROLE_LABEL).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select>{err("role")}</label>
         <label className="flex items-center gap-2 self-end pb-1.5 text-sm"><input type="checkbox" checked={form.active} disabled={!!editing && editing.email === data.me} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> ใช้งานได้</label>
         <div className="flex gap-3 sm:col-span-2">
-          <button disabled={busy} className="rounded-md bg-slate-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-40">{busy ? "กำลังบันทึก..." : editing ? "บันทึก" : "+ เพิ่มสมาชิก"}</button>
+          <button disabled={busy} className="rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-40">{busy ? "กำลังบันทึก..." : editing ? "บันทึก" : "+ เพิ่มสมาชิก"}</button>
           {editing && <button type="button" onClick={() => { setEditing(null); setForm(empty); setErrors({}); }} className="text-sm underline">ยกเลิก</button>}
         </div>
       </form>

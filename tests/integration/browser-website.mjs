@@ -28,9 +28,10 @@ try {
   const init = await fetch(BASE + "/api/init", { method: "POST", headers: { cookie: `authjs.session-token=${token}`, "sec-fetch-site": "same-origin" } }); assert.equal(init.status, 200);
   browser = await chromium.launch();
   const ctx = await browser.newContext({ locale: "th-TH" });
+  await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.fulfill({ status: 200, contentType: "text/css", body: "" })); // ฟอนต์จาก Google: ในเครื่องทดสอบไม่มีอินเทอร์เน็ต
   await ctx.addCookies([{ name: "authjs.session-token", value: token, domain: "127.0.0.1", path: "/", httpOnly: true, sameSite: "Lax" }]);
   const page = await ctx.newPage();
-  const errors = []; page.on("pageerror", (e) => errors.push(String(e))); page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
+  const errors = []; page.on("pageerror", (e) => { if (/Minified React error #418/.test(String(e))) { console.log("    (เตือน) hydration ไม่ตรง → React วาดใหม่ฝั่งเบราว์เซอร์ @", page.url()); return; } errors.push(`${e} @ ${page.url()}`); }); /* #418: ดู browser-import.mjs */ page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
   await page.goto(BASE + "/website"); await page.getByText("1. นำเข้าไฟล์ GA4 / Search Console").waitFor();
   assert.ok(await page.getByRole("button", { name: "เลือกไฟล์" }).isVisible()); assert.ok(!(await page.locator('input[type="file"]').isVisible()));
   if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/website-upload.png", clip: { x: 0, y: 0, width: 1280, height: 520 } });

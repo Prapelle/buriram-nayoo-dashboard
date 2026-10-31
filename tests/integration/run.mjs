@@ -170,7 +170,7 @@ try {
   r = await call("/api/website", { as: MKT, method: "POST", body: { action: "commit", batches: [{ ...ga, sha256: "c".repeat(64), summary: [{ ...ga.summary[0], page_views: 9999 }] }] } }); assert.equal(r.status, 422);
   r = await call("/api/website", { as: MKT, method: "POST", body: { action: "manual", manual: { report_start: "2026-10-01", report_end: "2026-10-02", website_users: "1500" } } }); assert.equal(r.status, 200, r.text);
   r = await call("/performance?from=2026-10-01&to=2026-10-02", { as: MKT });
-  assert.ok(/Website Users<\/div>[\s\S]{0,80}>1,500</.test(r.html), "users"); assert.ok(/Website Page Views<\/div>[\s\S]{0,80}>3,000</.test(r.html), "pv"); assert.ok(r.html.includes("1 นาที 0 วินาที"), "duration 60s"); assert.ok(/Search Clicks<\/div>[\s\S]{0,80}>332</.test(r.html), "clicks");
+  assert.ok(/Website Users<\/div>[\s\S]{0,160}>1,500</.test(r.html), "users"); assert.ok(/Website Page Views<\/div>[\s\S]{0,160}>3,000</.test(r.html), "pv"); assert.ok(r.html.includes("1 นาที 0 วินาที"), "duration 60s"); assert.ok(/Search Clicks<\/div>[\s\S]{0,160}>332</.test(r.html), "clicks");
   r = await call("/api/export/website_analytics", { as: MKT }); assert.equal(r.status, 200); assert.ok(r.text.includes("ga4") && r.text.includes("manual"));
   ok("Website", "นำเข้าผ่าน API: พรีวิว → บันทึก · ไฟล์ซ้ำ 409 · ยอดรวมไม่ตรงรายหน้า 422 · กรอก Users 1,500 → หน้า Performance แสดง Users 1,500 / Page Views 3,000 / Duration 1 นาที (90,000 ÷ 1,500) / Search Clicks 332 · Export ได้ · Sales เข้าไม่ได้");
   r = await call("/performance?from=2026-09-01&to=2026-09-30", { as: MKT }); assert.ok(/Website Users[\s\S]{0,200}รอข้อมูล/.test(r.html));
@@ -178,7 +178,7 @@ try {
 
   console.log("7) Marketing Performance + 8) YoY");
   assert.ok(r.html.includes("28,814.82") && r.html.includes("31,513") && r.html.includes("0.91") && r.html.includes("37,557.54"));
-  assert.ok(/Reactions \+ Comments \+ Shares[\s\S]{0,80}319/.test(r.html));
+  assert.ok(/Reactions \+ Comments \+ Shares[\s\S]{0,160}319/.test(r.html));
   ok("Performance", "Google Spend ฿28,814.82 / Clicks 31,513 / CPC ฿0.91 · Meta ฿37,557.54 · Facebook Engagement 319");
   r = await call("/performance?from=2026-09-10&to=2026-09-20", { as: MKT }); assert.ok(r.html.includes("9,613.98") && r.html.includes("9,360"));
   ok("Performance", "กรอง 10–20 ก.ย.: Google Spend ฿9,613.98 / Clicks 9,360 จาก Time series");

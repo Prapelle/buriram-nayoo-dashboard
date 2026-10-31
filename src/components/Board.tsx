@@ -10,7 +10,7 @@ export function BoardTabs({ tabs, active, onPick }: { tabs: { key: string; label
     <div role="tablist" aria-label="สถานะ" className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1 md:hidden">
       {tabs.map((t) => (
         <button key={t.key} type="button" role="tab" aria-selected={active === t.key} onClick={() => onPick(t.key)}
-          className={`shrink-0 rounded-full border px-3 py-1.5 text-xs ${active === t.key ? "border-slate-900 bg-slate-900 text-white" : `border-slate-200 ${t.cls ?? "bg-white"} text-slate-800`}`}>
+          className={`shrink-0 rounded-full border px-3 py-1.5 text-xs ${active === t.key ? "border-brand-600 bg-brand-600 text-white" : `border-slate-200 ${t.cls ?? "bg-white"} text-slate-800`}`}>
           {t.label} <span className={active === t.key ? "text-white/80" : "text-slate-500"}>{t.count}</span>
         </button>
       ))}

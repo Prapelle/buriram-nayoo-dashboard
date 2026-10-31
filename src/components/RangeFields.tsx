@@ -41,7 +41,7 @@ export function RangeFields({ from = "", to = "", className, labelFrom = "ตั
   const submit = () => setTimeout(() => ref.current?.closest("form")?.requestSubmit(), 0);
   const t = today(); const list = presets(t);
   const on = list.find((p) => p.from === a && p.to === b)?.key;
-  const chip = (active: boolean) => `rounded-full border px-2.5 py-1 text-xs ${active ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`;
+  const chip = (active: boolean) => `rounded-full border px-2.5 py-1 text-xs ${active ? "border-brand-600 bg-brand-600 text-white" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-100"}`;
   return (
     <div ref={ref} className="contents">
       <div className="flex w-full flex-wrap items-center gap-1.5" role="group" aria-label="ช่วงวันที่สำเร็จรูป">

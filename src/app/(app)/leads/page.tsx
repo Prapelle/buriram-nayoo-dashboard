@@ -9,7 +9,7 @@ export default async function LeadsPage() {
   return (
     <section className="max-w-7xl space-y-4">
       <div>
-        <h1 className="text-2xl font-bold">Leads</h1>
+        <h1 className="text-[26px] font-bold tracking-tight">Leads</h1>
         <p className="text-sm text-slate-500">บันทึกและติดตามลูกค้า · มีข้อมูลส่วนบุคคล เข้าถึงได้เฉพาะ Admin และ Sales</p>
       </div>
       <LeadsManager />

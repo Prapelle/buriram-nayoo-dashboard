@@ -48,7 +48,7 @@ export default async function FacebookPagePage({ searchParams }: { searchParams:
     ]);
     rows = data.rows; excluded = ex; if (pg) pageRows = pg.rows; else pageTabMissing = true;
   } catch (e) {
-    return <section><h1 className="mb-4 text-2xl font-bold">Facebook Page</h1><p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">โหลดข้อมูลไม่สำเร็จ: {e instanceof Error ? e.message.slice(0, 200) : "ไม่ทราบสาเหตุ"} — ลอง ตั้งค่า → เตรียม Google Sheet</p></section>;
+    return <section><h1 className="mb-4 text-[26px] font-bold tracking-tight">Facebook Page</h1><p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">โหลดข้อมูลไม่สำเร็จ: {e instanceof Error ? e.message.slice(0, 200) : "ไม่ทราบสาเหตุ"} — ลอง ตั้งค่า → เตรียม Google Sheet</p></section>;
   }
   const { kept, excludedPosts } = excludePages(rows, excluded);
   const base = (showAll ? rows : kept).filter((r) => (!type || r.post_type === type) && (!q || [r.title, r.page_name].some((x) => (x ?? "").toLowerCase().includes(q.toLowerCase()))));
@@ -68,16 +68,16 @@ export default async function FacebookPagePage({ searchParams }: { searchParams:
   const allDates = [...rows.map(metricDateOf), ...pageRows.map((r) => String(r.metric_date ?? "").slice(0, 10))].filter(Boolean).sort();
   const types = [...new Set(rows.map((r) => r.post_type).filter(Boolean))].sort();
   const params = { view: view === "posts" ? undefined : view, from, to, q, post_type: type, all: showAll ? "1" : undefined };
-  const inp = "rounded-md border border-slate-300 px-2 py-1.5 text-sm";
+  const inp = "h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm";
   const tab = (id: "posts" | "daily" | "page", label: string) => (
     <Link href={href("/facebook-page", { ...params, view: id === "posts" ? undefined : id, sort: undefined, dir: undefined, page: undefined })} aria-current={view === id ? "page" : undefined}
-      className={`rounded-full px-3 py-1 text-xs ${view === id ? "bg-slate-900 text-white" : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100"}`}>{label}</Link>
+      className={`rounded-full px-3 py-1 text-xs ${view === id ? "bg-brand-600 text-white" : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100"}`}>{label}</Link>
   );
 
   return (
     <section className="max-w-7xl space-y-4">
       <div>
-        <h1 className="text-2xl font-bold">Facebook Page</h1>
+        <h1 className="text-[26px] font-bold tracking-tight">Facebook Page</h1>
         <p className="text-sm text-slate-500">
           {rows.length || pageRows.length ? <>อัปเดตล่าสุด: {last ? thDateTime(last) : "-"} · ข้อมูลสถิติ {fmtCell("date", allDates[0] ?? "")} – {fmtCell("date", allDates[allDates.length - 1] ?? "")}</> : "อัปเดตล่าสุด: ยังไม่มีข้อมูล"}
           {" · "}นำเข้าได้ที่ <Link href="/import" className="underline">นำเข้า CSV</Link>
@@ -92,7 +92,7 @@ export default async function FacebookPagePage({ searchParams }: { searchParams:
         <label><span className="mb-1 block text-xs text-slate-500">ค้นหา</span><input name="q" defaultValue={q} placeholder="ข้อความโพสต์ / ชื่อเพจ" className={inp} /></label>
         <label><span className="mb-1 block text-xs text-slate-500">ประเภทโพสต์</span><select name="post_type" defaultValue={type} className={inp}><option value="">ทั้งหมด</option>{types.map((x) => <option key={x}>{x}</option>)}</select></label>
         {showAll && <input type="hidden" name="all" value="1" />}
-        <button className="rounded-md bg-slate-900 px-4 py-1.5 font-medium text-white">ใช้ตัวกรอง</button>
+        <button className="rounded-lg bg-brand-600 px-4 py-1.5 font-medium text-white">ใช้ตัวกรอง</button>
         {(q || type || from || to) && <Link href={href("/facebook-page", { view: params.view, all: params.all, range: "all" })} className="py-1.5 underline">ล้าง</Link>}
       </form>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -110,7 +110,7 @@ export default async function FacebookPagePage({ searchParams }: { searchParams:
           ["Reactions + Comments + Shares", fmtN(t.reactions_comments_shares)],
           ["Reactions", fmtN(t.reactions)], ["Comments", fmtN(t.comments)], ["Shares", fmtN(t.shares)],
           ["Seconds viewed", fmtN(t.seconds_viewed)],
-        ].map(([l, x]) => <div key={l} className="rounded-lg border border-slate-200 bg-white p-3"><div className="text-xs text-slate-500">{l}</div><div className="text-xl font-bold tabular-nums">{x}</div></div>)}
+        ].map(([l, x]) => <div key={l} className="rounded-xl border border-slate-200 bg-white p-3"><div className="text-xs text-slate-500">{l}</div><div className="text-xl font-bold tabular-nums">{x}</div></div>)}
       </div>
       <p className="text-xs text-slate-500">
         {s.basis === "daily" && <>ฐาน: ผลรวมรายวัน {fmtCell("date", s.daily.from)} – {fmtCell("date", s.daily.to)} ({s.daily.rows} แถว){s.lifetimeOnlyPosts ? ` · ไม่รวม ${s.lifetimeOnlyPosts} โพสต์ที่มีแต่ยอดสะสม (Lifetime)` : ""}</>}

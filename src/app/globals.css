@@ -1,13 +1,51 @@
 @import "tailwindcss";
 
+/* ฟอนต์ IBM Plex Sans Thai (SIL OFL) เก็บไว้ในเว็บเองที่ /fonts — ไม่โหลดจาก Google */
+@font-face { font-family: 'IBM Plex Sans Thai'; font-style: normal; font-display: swap; font-weight: 400; src: url(/fonts/ibm-plex-sans-thai-thai-400-normal.woff2) format('woff2'); unicode-range: U+02D7, U+0303, U+0331, U+0E01-0E5B, U+200C-200D, U+25CC; }
+@font-face { font-family: 'IBM Plex Sans Thai'; font-style: normal; font-display: swap; font-weight: 400; src: url(/fonts/ibm-plex-sans-thai-latin-400-normal.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'IBM Plex Sans Thai'; font-style: normal; font-display: swap; font-weight: 500; src: url(/fonts/ibm-plex-sans-thai-thai-500-normal.woff2) format('woff2'); unicode-range: U+02D7, U+0303, U+0331, U+0E01-0E5B, U+200C-200D, U+25CC; }
+@font-face { font-family: 'IBM Plex Sans Thai'; font-style: normal; font-display: swap; font-weight: 500; src: url(/fonts/ibm-plex-sans-thai-latin-500-normal.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'IBM Plex Sans Thai'; font-style: normal; font-display: swap; font-weight: 600; src: url(/fonts/ibm-plex-sans-thai-thai-600-normal.woff2) format('woff2'); unicode-range: U+02D7, U+0303, U+0331, U+0E01-0E5B, U+200C-200D, U+25CC; }
+@font-face { font-family: 'IBM Plex Sans Thai'; font-style: normal; font-display: swap; font-weight: 600; src: url(/fonts/ibm-plex-sans-thai-latin-600-normal.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: 'IBM Plex Sans Thai'; font-style: normal; font-display: swap; font-weight: 700; src: url(/fonts/ibm-plex-sans-thai-thai-700-normal.woff2) format('woff2'); unicode-range: U+02D7, U+0303, U+0331, U+0E01-0E5B, U+200C-200D, U+25CC; }
+@font-face { font-family: 'IBM Plex Sans Thai'; font-style: normal; font-display: swap; font-weight: 700; src: url(/fonts/ibm-plex-sans-thai-latin-700-normal.woff2) format('woff2'); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+
+/* ธีม (31/10/2026): โครงแบบ A + สีแบบ C — น้ำเงินเป็นสีหลัก, เทาอมฟ้า, ฟอนต์ IBM Plex Sans Thai
+   เปลี่ยนสเกล slate ทั้งชุดให้เป็นเทาอมฟ้า (ทุกหน้าที่ใช้ slate เปลี่ยนตามอัตโนมัติ) และเพิ่มสี brand */
+@theme {
+  --font-sans: "IBM Plex Sans Thai", ui-sans-serif, system-ui, sans-serif;
+  --color-slate-50: #F4F7FD;
+  --color-slate-100: #EDF1F8;
+  --color-slate-200: #E2E8F4;
+  --color-slate-300: #CBD5E6;
+  --color-slate-400: #8693AE;
+  --color-slate-500: #56627F;
+  --color-slate-600: #4A5878;
+  --color-slate-700: #34405C;
+  --color-slate-800: #1F2A44;
+  --color-slate-900: #111B33;
+  --color-brand-50: #EEF4FF;
+  --color-brand-100: #E0E9FF;
+  --color-brand-200: #C9D8FB;
+  --color-brand-300: #A3BDF8;
+  --color-brand-500: #3B76F0;
+  --color-brand-600: #2563EB;
+  --color-brand-700: #1D4ED8;
+  --color-brand-800: #1E3A8A;
+}
+
+body { font-feature-settings: "tnum" 0; }
+.tabular-nums { font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 2px solid var(--color-brand-500); outline-offset: 2px; }
+
 /* DateInput: ซ่อนข้อความ mm/dd/yyyy ของเบราว์เซอร์ตอนไม่ได้พิมพ์ (แสดง "31 ต.ค. 69" ทับแทน) */
 input[data-th-date] { color: transparent; }
 input[data-th-date]::-webkit-datetime-edit { color: transparent; }
 
-/* TableSort: หัวคอลัมน์ที่กดเรียงได้ */
-th[data-sortable] { cursor: pointer; user-select: none; white-space: nowrap; }
-th[data-sortable]:hover { color: rgb(15 23 42); }
-th[data-sortable]::after { content: "↕"; margin-left: 0.25rem; opacity: 0.3; font-size: 0.85em; }
-th[data-sortable][aria-sort="ascending"]::after { content: "▲"; opacity: 0.9; }
-th[data-sortable][aria-sort="descending"]::after { content: "▼"; opacity: 0.9; }
-th[data-sortable]:focus-visible { outline: 2px solid rgb(148 163 184); outline-offset: -2px; }
+/* TableSort: หัวคอลัมน์ที่กดเรียงได้ (ตารางที่มี thead · หัวที่ไม่ใช่ลิงก์/ปุ่ม/ช่องกรอก · ไม่ใช่ table[data-nosort]) — แสดงด้วย CSS ไม่แก้ DOM */
+table:not([data-nosort]) > thead > tr:last-child > th:not(:empty):not(:has(a, button, input, select)) { cursor: pointer; user-select: none; white-space: nowrap; }
+table:not([data-nosort]) > thead > tr:last-child > th:not(:empty):not(:has(a, button, input, select)):hover { color: var(--color-slate-900); }
+table:not([data-nosort]) > thead > tr:last-child > th:not(:empty):not(:has(a, button, input, select))::after { content: "↕"; margin-left: 0.25rem; opacity: 0.3; font-size: 0.85em; }
+table:not([data-nosort]) > thead > tr:last-child > th[aria-sort="ascending"]:not(:empty):not(:has(a, button, input, select))::after { content: "▲"; opacity: 0.9; }
+table:not([data-nosort]) > thead > tr:last-child > th[aria-sort="descending"]:not(:empty):not(:has(a, button, input, select))::after { content: "▼"; opacity: 0.9; }
+th[data-sortable]:focus-visible { outline: 2px solid var(--color-brand-500); outline-offset: -2px; }

@@ -23,7 +23,7 @@ export default async function ExportPage() {
   return (
     <section className="max-w-4xl space-y-4">
       <div>
-        <h1 className="text-2xl font-bold">ส่งออกข้อมูล</h1>
+        <h1 className="text-[26px] font-bold tracking-tight">ส่งออกข้อมูล</h1>
         <p className="text-sm text-slate-500">ดาวน์โหลดเป็น CSV เพื่อใช้ต่อใน Excel / Google Sheets · แต่ละไฟล์เป็นข้อมูลระดับเดียว (ดู ระดับข้อมูล) · ไฟล์กลุ่ม สรุป เป็นตัวเลขที่สรุปแล้ว ห้ามนำไปบวกกับไฟล์ต้นฉบับ</p>
       </div>
       <ExportForm datasets={datasets} channels={CHANNELS} campaigns={campaigns} needs={NEEDS} />

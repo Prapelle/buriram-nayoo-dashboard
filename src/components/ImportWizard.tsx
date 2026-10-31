@@ -141,7 +141,7 @@ export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" 
   const setP = (k: keyof typeof period, v: string) => { setPeriod({ ...period, [k]: v }); runPlan(file, { [k]: v } as Partial<typeof period>); };
   const blocked = !!plan?.fileDuplicate && !override;
   const canCommit = state === "ready" && plan && !plan.periodError && plan.counts.insert + plan.counts.update + plan.counts.skip > 0 && !blocked;
-  const dateInput = "rounded-md border border-slate-300 px-2 py-1.5 text-sm";
+  const dateInput = "h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm";
 
   return (
     <div className="space-y-8">
@@ -149,9 +149,9 @@ export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" 
         <div
           onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)}
           onDrop={(e) => { e.preventDefault(); setDrag(false); pick(e.dataTransfer.files); }}
-          className={`rounded-lg border-2 border-dashed p-8 text-center ${drag ? "border-slate-900 bg-slate-100" : "border-slate-300 bg-white"}`}>
+          className={`rounded-lg border-2 border-dashed p-8 text-center ${drag ? "border-brand-600 bg-slate-100" : "border-slate-300 bg-white"}`}>
           <p className="mb-3 text-slate-600">ลากไฟล์มาวางที่นี่ (เลือกได้หลายไฟล์พร้อมกัน) หรือ</p>
-          <button onClick={() => input.current?.click()} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">เลือกไฟล์</button>
+          <button onClick={() => input.current?.click()} className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">เลือกไฟล์</button>
           <input ref={input} type="file" accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" multiple className="hidden" onChange={(e) => { pick(e.target.files ? [...e.target.files] : null); e.target.value = ""; }} />
           <p className="mt-3 text-xs text-slate-500">ตรวจประเภทอัตโนมัติ: Facebook Page (โพสต์ / Viewers / Link clicks), Facebook Ads, Google Ads, Website (GA4 / Search Console){role === "admin" ? ", รายงานยอดขาย .xlsx" : ""} · ระบบจะยังไม่เขียนข้อมูลจนกว่าจะกดยืนยัน</p>
         </div>
@@ -162,7 +162,7 @@ export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" 
         {state === "error" && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
         {plan && state !== "idle" && state !== "error" && (
-          <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
+          <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-5">
             <div className="flex flex-wrap items-end gap-4">
               <label className="text-sm">
                 <span className="mb-1 block font-medium">ประเภทรายงาน {plan.detected ? <span className="font-normal text-green-700">(ตรวจพบอัตโนมัติ)</span> : <span className="font-normal text-amber-700">(เลือกเอง — header ไม่ตรงกับประเภทนี้)</span>}</span>
@@ -248,10 +248,10 @@ export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" 
 
             {state !== "done" && (
               <div className="flex gap-3">
-                <button onClick={commit} disabled={!canCommit || committing} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-40">
+                <button onClick={commit} disabled={!canCommit || committing} className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-40">
                   {committing ? "กำลังนำเข้า..." : `ยืนยันนำเข้า (+${plan.counts.insert} / อัปเดต ${plan.counts.update})`}
                 </button>
-                <button onClick={reset} disabled={committing} className="rounded-md border border-slate-300 px-4 py-2 text-sm">ยกเลิก</button>
+                <button onClick={reset} disabled={committing} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm">ยกเลิก</button>
               </div>
             )}
           </div>
@@ -267,13 +267,13 @@ export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" 
           </div>
         )}
         {queue.length > 0 && (state === "done" || state === "error" || state === "idle") && (
-          <button onClick={nextInQueue} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700">ไฟล์ถัดไป: {queue[0].name}</button>
+          <button onClick={nextInQueue} className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">ไฟล์ถัดไป: {queue[0].name}</button>
         )}
       </section>
 
       {webIn && <WebsiteManager key={webIn.id} isAdmin={role === "admin"} importOnly incoming={webIn} />}
       {salesIn && role === "admin" && (
-        <section className="space-y-2 rounded-lg border border-slate-200 bg-white p-5">
+        <section className="space-y-2 rounded-xl border border-slate-200 bg-white p-5">
           <h2 className="font-semibold">ไฟล์รายงานยอดขาย (Sales)</h2>
           <SalesImport key={salesIn.id} incoming={salesIn} embedded />
         </section>
@@ -286,7 +286,7 @@ export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" 
         {history.state === "error" && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">โหลดประวัติไม่ได้: {history.error}</p>}
         {history.state === "ok" && history.rows.length === 0 && <p className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">ยังไม่มีประวัติการนำเข้า</p>}
         {history.state === "ok" && history.rows.length > 0 && (
-          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
             <table className="w-full text-left text-sm">
               <thead><tr className="border-b bg-slate-50 text-xs text-slate-500"><th className="p-2">เวลา</th><th>ไฟล์</th><th>ประเภท</th><th>ช่วง</th><th>สถานะ</th><th>เพิ่ม/อัปเดต/ข้าม/ผิด</th><th>โดย</th></tr></thead>
               <tbody>{history.rows.map((b) => (

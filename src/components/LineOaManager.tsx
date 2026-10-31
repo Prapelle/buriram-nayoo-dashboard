@@ -64,7 +64,7 @@ export function LineOaManager() {
 
   return (
     <div className="space-y-8">
-      <section className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
+      <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-5">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">{editing ? `แก้ไขข้อมูลเดือน ${my(form.report_month)}` : "เพิ่ม / แก้ไขข้อมูลรายเดือน"}</h2>
           {(editing || form.report_month) && <button onClick={reset} className="text-sm underline">ล้างฟอร์ม</button>}
@@ -91,7 +91,7 @@ export function LineOaManager() {
             {k === "notes" ? <textarea rows={3} value={form[k]} onChange={(e) => setForm({ ...form, [k]: e.target.value })} className={inp(k)} />
               : <input value={form[k]} onChange={(e) => setForm({ ...form, [k]: e.target.value })} className={inp(k)} />}{err(k)}</label>
         ))}
-        <button onClick={save} disabled={saving || !form.report_month} className="rounded-md bg-slate-900 px-5 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-40">
+        <button onClick={save} disabled={saving || !form.report_month} className="rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-40">
           {saving ? "กำลังบันทึก..." : editing ? "บันทึกการแก้ไข" : "บันทึก"}
         </button>
       </section>
@@ -102,7 +102,7 @@ export function LineOaManager() {
         {list.state === "error" && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">โหลดข้อมูลไม่ได้: {list.error}</p>}
         {list.state === "ok" && list.rows.length === 0 && <p className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">ยังไม่มีข้อมูล LINE OA — กรอกฟอร์มด้านบนเพื่อเพิ่มเดือนแรก</p>}
         {list.state === "ok" && list.rows.length > 0 && (
-          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
             <table className="w-full text-left text-sm">
               <thead><tr className="border-b bg-slate-50 text-xs text-slate-500"><th className="p-2">เดือน</th>{SHOW.map(([, l]) => <th key={l} className="text-right">{l}</th>)}<th className="pl-4">แก้ไขล่าสุด</th><th /></tr></thead>
               <tbody>{list.rows.map((r) => (

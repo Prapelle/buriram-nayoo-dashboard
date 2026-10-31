@@ -21,7 +21,7 @@ export function InitButton() {
   return (
     <div className="space-y-3">
       <button onClick={run} disabled={state === "loading"}
-        className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50">
+        className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">
         {state === "loading" ? "กำลังตรวจสอบ..." : "เตรียม Google Sheet (รันซ้ำได้)"}
       </button>
       {state === "error" && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p>}

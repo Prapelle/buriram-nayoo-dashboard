@@ -54,11 +54,18 @@ function headerCells(table: HTMLTableElement) {
   const row = table.tHead.rows[table.tHead.rows.length - 1]; if (!row) return [];
   return Array.from(row.cells).filter((th) => th.tagName === "TH" && th.textContent?.trim() && !th.querySelector("a,button,input,select"));
 }
+// ไม่แก้ DOM ก่อนผู้ใช้โต้ตอบ (กัน hydration ไม่ตรงกับ HTML จาก Server ของส่วนที่ยังโหลดเข้ามา)
+// ลูกศร ↕ แสดงด้วย CSS (globals.css) · tabindex ใส่ตอนผู้ใช้เริ่มใช้แป้นพิมพ์
+const eligible = (th: Element | null): th is HTMLTableCellElement => {
+  if (!th || th.tagName !== "TH") return false;
+  const table = th.closest("table") as HTMLTableElement | null;
+  return !!table && headerCells(table).includes(th as HTMLTableCellElement);
+};
 function mark(root: ParentNode) {
   root.querySelectorAll?.("table").forEach((t) => {
     for (const th of headerCells(t as HTMLTableElement)) {
       if (th.dataset.sortable !== undefined) continue;
-      th.dataset.sortable = ""; th.tabIndex = 0; th.title = th.title || "กดเพื่อเรียงข้อมูล";
+      th.dataset.sortable = ""; th.tabIndex = 0;
     }
   });
 }
@@ -81,17 +88,18 @@ function clickHeader(th: HTMLTableCellElement) {
 
 export function TableSort() {
   useEffect(() => {
-    mark(document);
+    let keyboard = false;
     const onClick = (e: Event) => {
-      const th = (e.target as Element).closest?.("th[data-sortable]") as HTMLTableCellElement | null;
-      if (!th) return;
+      if (e instanceof KeyboardEvent && !keyboard && e.key === "Tab") { keyboard = true; mark(document); }
+      const th = (e.target as Element).closest?.("th") as HTMLTableCellElement | null;
+      if (!eligible(th)) return;
       if (e instanceof KeyboardEvent) { if (e.key !== "Enter" && e.key !== " ") return; e.preventDefault(); }
       clickHeader(th);
     };
     document.addEventListener("click", onClick); document.addEventListener("keydown", onClick);
     const mo = new MutationObserver((list) => {
       for (const m of list) {
-        m.addedNodes.forEach((n) => { if (n.nodeType === 1) mark(n as Element); });
+        if (keyboard) m.addedNodes.forEach((n) => { if (n.nodeType === 1) mark(n as Element); });
         const tb = (m.target as Element).closest?.("tbody") as HTMLTableSectionElement | null;
         if (tb && !busy.has(tb) && states.has(tb)) { const st = states.get(tb)!; st.orig = Array.from(tb.rows); apply(tb); } // React วาดแถวใหม่ → เรียงซ้ำ
       }

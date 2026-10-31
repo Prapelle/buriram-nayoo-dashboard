@@ -84,16 +84,16 @@ export function SalesImport({ incoming, embedded = false }: { incoming?: { file:
 
   const locked = state === "committing" || state === "done";
   const canCommit = state === "ready" && plan && plan.needs.length === 0 && plan.counts.insert + plan.counts.update + plan.counts.duplicate > 0 && (mode === "skip" || confirmUpdate);
-  const inp = "rounded-md border border-slate-300 px-2 py-1.5 text-sm";
+  const inp = "h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm";
 
   return (
     <div className="space-y-8">
       <section className="space-y-4">
         {!embedded && (
         <div onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)} onDrop={(e) => { e.preventDefault(); setDrag(false); pick(e.dataTransfer.files[0]); }}
-          className={`rounded-lg border-2 border-dashed p-8 text-center ${drag ? "border-slate-900 bg-slate-100" : "border-slate-300 bg-white"}`}>
+          className={`rounded-lg border-2 border-dashed p-8 text-center ${drag ? "border-brand-600 bg-slate-100" : "border-slate-300 bg-white"}`}>
           <p className="mb-3 text-slate-600">ลากไฟล์รายงานยอดขาย (.xlsx) มาวางที่นี่ หรือ</p>
-          <button onClick={() => input.current?.click()} disabled={locked} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-40">เลือกไฟล์</button>
+          <button onClick={() => input.current?.click()} disabled={locked} className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-40">เลือกไฟล์</button>
           <input ref={input} type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="hidden" onChange={(e) => pick(e.target.files?.[0])} />
           <p className="mt-3 text-xs text-slate-500">ระบบหาหัวตารางจากชื่อคอลัมน์เอง · อ่านไฟล์ในเบราว์เซอร์ · ยังไม่เขียนข้อมูลจนกว่าจะกดยืนยัน</p>
         </div>
@@ -103,7 +103,7 @@ export function SalesImport({ incoming, embedded = false }: { incoming?: { file:
         {state === "error" && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
         {plan && state !== "idle" && state !== "reading" && (
-          <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-5">
+          <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-5">
             <div className="grid gap-3 md:grid-cols-4 text-sm">
               <label className="md:col-span-2"><span className="mb-1 block text-xs text-slate-500">บริษัทผู้ขาย</span><input className={inp + " w-full"} value={edit.companyName} disabled={locked} onChange={(e) => setEdit({ ...edit, companyName: e.target.value })} onBlur={() => runPlan()} /></label>
               <label><span className="mb-1 block text-xs text-slate-500">เลขผู้เสียภาษีผู้ขาย (13 หลัก) *</span><input className={inp + " w-full"} value={edit.taxId} disabled={locked} inputMode="numeric" onChange={(e) => setEdit({ ...edit, taxId: e.target.value })} onBlur={() => runPlan()} /></label>
@@ -152,8 +152,8 @@ export function SalesImport({ incoming, embedded = false }: { incoming?: { file:
                   {mode === "update" && <label className="ml-6 flex items-center gap-2 text-amber-800"><input type="checkbox" checked={confirmUpdate} onChange={(e) => setConfirmUpdate(e.target.checked)} /> ยืนยันว่าต้องการเขียนทับรายการเดิม {plan.counts.update} รายการ</label>}
                 </fieldset>
                 <div className="flex gap-3">
-                  <button onClick={commit} disabled={!canCommit} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-40">{state === "committing" ? "กำลังนำเข้า..." : `ยืนยันนำเข้า (เพิ่ม ${plan.counts.insert}${mode === "update" ? ` / อัปเดต ${plan.counts.update}` : ""})`}</button>
-                  <button onClick={reset} disabled={state === "committing"} className="rounded-md border border-slate-300 px-4 py-2 text-sm">ยกเลิก</button>
+                  <button onClick={commit} disabled={!canCommit} className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-40">{state === "committing" ? "กำลังนำเข้า..." : `ยืนยันนำเข้า (เพิ่ม ${plan.counts.insert}${mode === "update" ? ` / อัปเดต ${plan.counts.update}` : ""})`}</button>
+                  <button onClick={reset} disabled={state === "committing"} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm">ยกเลิก</button>
                 </div>
               </div>
             )}
@@ -173,7 +173,7 @@ export function SalesImport({ incoming, embedded = false }: { incoming?: { file:
         {hist.state === "error" && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">โหลดประวัติไม่ได้: {hist.error}</p>}
         {hist.state === "ok" && hist.rows.length === 0 && <p className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">ยังไม่มีประวัติการนำเข้า</p>}
         {hist.state === "ok" && hist.rows.length > 0 && (
-          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white"><table className="w-full text-left text-sm">
+          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white"><table className="w-full text-left text-sm">
             <thead><tr className="border-b bg-slate-50 text-xs text-slate-500"><th className="p-2">เวลา</th><th>ไฟล์</th><th>ช่วงรายงาน</th><th>สถานะ</th><th>เพิ่ม/อัปเดต/ซ้ำ/ผิด</th><th className="text-right">ยอดนำเข้า</th><th className="pl-3">โดย</th></tr></thead>
             <tbody>{hist.rows.map((b) => (<tr key={b.batch_id} className="border-b border-slate-100"><td className="whitespace-nowrap p-2">{when(b.imported_at)}</td><td className="max-w-56 truncate">{b.source_file}</td><td className="whitespace-nowrap">{dmy(b.report_start)}–{dmy(b.report_end)}</td>
               <td><span className={`rounded px-1.5 py-0.5 text-xs ${b.status === "success" ? "bg-green-100 text-green-800" : b.status === "failed" ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-800"}`}>{b.status}</span></td>

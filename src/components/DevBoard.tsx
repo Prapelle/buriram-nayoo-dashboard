@@ -55,9 +55,9 @@ export function DevBoard() {
     <div className="space-y-3">
       <Notice msg={msg && { ...msg, linkText: "เพิ่ม Product" }} onClose={() => setMsg(null)} />
       <div className="flex flex-wrap items-end gap-3">
-        <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">ค้นหา</span><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="บริษัท / โครงการ / ผู้ติดต่อ" className="w-56 rounded-md border border-slate-300 px-2 py-1.5 text-sm" /></label>
-        <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">Staff</span><select aria-label="กรอง Staff" value={staffF} onChange={(e) => setStaffF(e.target.value)} className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"><option value="">ทั้งหมด</option>{staff.map((s) => <option key={s}>{s}</option>)}</select></label>
-        <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">Tier</span><select aria-label="กรอง Tier" value={tierF} onChange={(e) => setTierF(e.target.value)} className="rounded-md border border-slate-300 px-2 py-1.5 text-sm"><option value="">ทั้งหมด</option>{TIERS.map((s) => <option key={s}>{s}</option>)}</select></label>
+        <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">ค้นหา</span><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="บริษัท / โครงการ / ผู้ติดต่อ" className="w-56 h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm" /></label>
+        <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">Staff</span><select aria-label="กรอง Staff" value={staffF} onChange={(e) => setStaffF(e.target.value)} className="h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm"><option value="">ทั้งหมด</option>{staff.map((s) => <option key={s}>{s}</option>)}</select></label>
+        <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">Tier</span><select aria-label="กรอง Tier" value={tierF} onChange={(e) => setTierF(e.target.value)} className="h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm"><option value="">ทั้งหมด</option>{TIERS.map((s) => <option key={s}>{s}</option>)}</select></label>
         <span className="ml-auto text-xs text-slate-500">{shown.length.toLocaleString("en-US")} รายการ · เพิ่ม/แก้ไขรายละเอียดและ Product ที่หน้า <Link href="/developers" className="underline">Developer</Link></span>
       </div>
       {state === "loading" && <Skeleton kind={"board"} />}
@@ -72,7 +72,7 @@ export function DevBoard() {
               <div key={k} data-col={k}
                 onDragOver={auto ? undefined : (e) => { if (dragId) { e.preventDefault(); setOver(k); } }} onDragLeave={() => setOver((o) => (o === k ? "" : o))}
                 onDrop={auto ? undefined : (e) => { e.preventDefault(); setOver(""); const id = e.dataTransfer.getData("text/plain") || dragId; setDragId(""); if (id) move(id, k); }}
-                className={`${(tab || DEV_STATUS[0]) === k ? "flex" : "hidden"} max-h-[75vh] w-full shrink-0 flex-col rounded-lg border bg-slate-50 md:flex md:w-60 ${over === k ? "border-slate-900 ring-2 ring-slate-300" : "border-slate-200"}`}>
+                className={`${(tab || DEV_STATUS[0]) === k ? "flex" : "hidden"} max-h-[75vh] w-full shrink-0 flex-col rounded-lg border bg-slate-50 md:flex md:w-60 ${over === k ? "border-brand-600 ring-2 ring-slate-300" : "border-slate-200"}`}>
                 <div className={`rounded-t-lg px-3 py-2 ${HEAD[k]}`}>
                   <div className="flex items-center justify-between text-sm font-semibold"><span>{k}{auto && " 🔒"}</span><span className="rounded-full bg-white/70 px-2 text-xs">{cols[k].length}</span></div>
                   {HINT[k] && <div className="text-[11px] text-slate-700">{HINT[k]}</div>}

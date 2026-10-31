@@ -8,7 +8,7 @@ export default async function SaleDeveloperPage() {
   return (
     <section className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold">Sale developer</h1>
+        <h1 className="text-[26px] font-bold tracking-tight">Sale developer</h1>
         <p className="text-sm text-slate-500">ติดตามการขายโฆษณาให้โครงการหมู่บ้าน ตาม Status · การ์ดมาจากหน้า Developer · เข้าถึงได้เฉพาะ Admin และ Sales</p>
       </div>
       <DevBoard />

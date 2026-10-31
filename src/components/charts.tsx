@@ -5,17 +5,17 @@ const dm = (iso: string) => thDayMonth(iso);
 const my = (m: string) => thMonth(m);
 
 export function Pending({ text = "รอข้อมูล", href }: { text?: string; href?: string }) {
-  return <p className="rounded-md border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">{text}{href && <> · <a href={href} className="underline">นำเข้าข้อมูล</a></>}</p>;
+  return <p className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-6 text-center text-sm text-slate-500">{text}{href && <> · <a href={href} className="font-medium text-brand-700 underline">นำเข้าข้อมูล</a></>}</p>;
 }
 
 export function BarList({ items, unit = "", title }: { items: { label: string; value: number }[]; unit?: string; title: string }) {
   const max = Math.max(...items.map((i) => i.value), 1);
   return (
     <ul role="list" aria-label={title} className="space-y-2">
-      {items.map((i) => (
+      {items.map((i, idx) => (
         <li key={i.label} className="text-sm">
           <div className="mb-0.5 flex justify-between gap-2"><span className="truncate">{i.label}</span><span className="tabular-nums text-slate-600">{unit}{fmt(i.value)}</span></div>
-          <div className="h-2.5 rounded bg-slate-100"><div className="h-2.5 rounded bg-slate-800" style={{ width: `${(i.value / max) * 100}%` }} /></div>
+          <div className="h-2.5 rounded-full bg-slate-100"><div className="h-2.5 rounded-full bg-brand-600" style={{ width: `${(i.value / max) * 100}%`, opacity: 1 - Math.min(idx, 4) * 0.15 }} /></div>
         </li>
       ))}
     </ul>
@@ -30,15 +30,15 @@ export function StackedMonths({ rows }: { rows: { month: string; meta: number; g
         {rows.map((r) => (
           <div key={r.month} className="flex min-w-10 flex-1 flex-col items-center justify-end gap-1">
             <span className="text-xs tabular-nums text-slate-600">{fmt(r.meta + r.google)}</span>
-            <div className="flex w-full max-w-16 flex-col justify-end overflow-hidden rounded-t" style={{ height: `${((r.meta + r.google) / max) * 130}px` }}>
-              <div className="bg-slate-400" style={{ height: `${(r.google / (r.meta + r.google || 1)) * 100}%` }} />
-              <div className="bg-slate-800" style={{ height: `${(r.meta / (r.meta + r.google || 1)) * 100}%` }} />
+            <div className="flex w-full max-w-16 flex-col justify-end overflow-hidden rounded-t-md" style={{ height: `${((r.meta + r.google) / max) * 130}px` }}>
+              <div className="bg-brand-300" style={{ height: `${(r.google / (r.meta + r.google || 1)) * 100}%` }} />
+              <div className="bg-brand-600" style={{ height: `${(r.meta / (r.meta + r.google || 1)) * 100}%` }} />
             </div>
             <span className="text-xs text-slate-500">{my(r.month)}</span>
           </div>
         ))}
       </div>
-      <p className="mt-2 flex gap-4 text-xs text-slate-600"><span><i className="mr-1 inline-block h-2 w-2 bg-slate-800" />Meta Ads</span><span><i className="mr-1 inline-block h-2 w-2 bg-slate-400" />Google Ads</span></p>
+      <p className="mt-2 flex gap-4 text-xs text-slate-600"><span><i className="mr-1 inline-block h-2 w-2 rounded-sm bg-brand-600" />Meta Ads</span><span><i className="mr-1 inline-block h-2 w-2 rounded-sm bg-brand-300" />Google Ads</span></p>
     </div>
   );
 }
@@ -52,11 +52,13 @@ export function LineChart({ points, label, unit = "" }: { points: { x: string; y
   const ticks = [0, Math.floor((points.length - 1) / 2), points.length - 1].filter((v, i, a) => a.indexOf(v) === i);
   return (
     <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${label}: ${points.map((p) => `${p.x} ${fmt(p.y)}`).join(", ")}`} className="w-full">
-      <line x1={P} y1={H - P} x2={W - P} y2={H - P} stroke="#cbd5e1" />
-      <path d={d} fill="none" stroke="#1e293b" strokeWidth="2" />
-      {points.length <= 31 && points.map((p, i) => <circle key={i} cx={xs(i)} cy={ys(p.y)} r="2.5" fill="#1e293b" />)}
-      {ticks.map((i) => <text key={i} x={xs(i)} y={H - 6} fontSize="11" textAnchor="middle" fill="#64748b">{points[i].x}</text>)}
-      <text x={P} y={14} fontSize="11" fill="#64748b">สูงสุด {unit}{fmt(max)}</text>
+      {[0.5, 1].map((f) => <line key={f} x1={P} y1={ys(max * f)} x2={W - P} y2={ys(max * f)} stroke="#E2E8F4" strokeDasharray="3 4" />)}
+      <line x1={P} y1={H - P} x2={W - P} y2={H - P} stroke="#CBD5E6" />
+      {points.length > 1 && <path d={`${d} L${xs(points.length - 1).toFixed(1)},${H - P} L${xs(0).toFixed(1)},${H - P} Z`} fill="#2563EB" opacity="0.08" />}
+      <path d={d} fill="none" stroke="#2563EB" strokeWidth="2" strokeLinejoin="round" />
+      {points.length <= 31 && points.map((p, i) => <circle key={i} cx={xs(i)} cy={ys(p.y)} r="2.5" fill="#2563EB" />)}
+      {ticks.map((i) => <text key={i} x={xs(i)} y={H - 6} fontSize="11" textAnchor="middle" fill="#56627F">{points[i].x}</text>)}
+      <text x={P} y={14} fontSize="11" fill="#56627F">สูงสุด {unit}{fmt(max)}</text>
     </svg>
   );
 }

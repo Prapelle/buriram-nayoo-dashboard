@@ -21,7 +21,7 @@ export default async function LeadReportPage({ searchParams }: { searchParams: P
   const rg = await rangeOf(sp); const from = rg.from, to = rg.to;
   let rows: Record<string, string>[];
   try { rows = leadsInRange((await fetchDashboardData(role)).leads, from, to); }
-  catch (e) { return <section><h1 className="mb-4 text-2xl font-bold">รายงาน Lead</h1><p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">โหลดข้อมูลไม่สำเร็จ: {e instanceof Error ? e.message.slice(0, 200) : ""}</p></section>; }
+  catch (e) { return <section><h1 className="mb-4 text-[26px] font-bold tracking-tight">รายงาน Lead</h1><p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">โหลดข้อมูลไม่สำเร็จ: {e instanceof Error ? e.message.slice(0, 200) : ""}</p></section>; }
   const staff = staffPerformance(rows);
   const total: StaffRow = staff.reduce((t, s) => ({ ...t, leads: t.leads + s.leads, qualified: t.qualified + s.qualified, siteVisits: t.siteVisits + s.siteVisits, contractSold: t.contractSold + s.contractSold, bought: t.bought + s.bought }),
     { staff: "รวม", leads: 0, qualified: 0, qualifiedPct: null, siteVisits: 0, leadsPerVisit: null, contractSold: 0, leadsPerContract: null, bought: 0 });
@@ -29,22 +29,22 @@ export default async function LeadReportPage({ searchParams }: { searchParams: P
   total.qualifiedPct = total.leads ? r1((total.qualified / total.leads) * 100) : null; total.leadsPerVisit = total.siteVisits ? r1(total.leads / total.siteVisits) : null; total.leadsPerContract = total.contractSold ? r1(total.leads / total.contractSold) : null;
   const lost = lostReasons(rows);
   const reasons = LOST_REASONS.map((x) => x.key as string).filter((k) => lost.byReason.some((b) => b.reason === k));
-  const inp = "rounded-md border border-slate-300 px-2 py-1.5 text-sm";
+  const inp = "h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm";
   const th = "px-2 py-1.5 text-right font-medium";
 
   return (
     <section className="max-w-6xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">รายงาน Lead</h1>
+        <h1 className="text-[26px] font-bold tracking-tight">รายงาน Lead</h1>
         <p className="text-sm text-slate-500">ผลงานรายพนักงาน และเหตุผลที่ไม่สำเร็จ · นับ Lead ตามวันที่รับ{from || to ? "" : " (ทั้งหมด)"} · ตัวเลขรวมเท่านั้น</p>
       </div>
-      <form method="get" className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-white p-4 text-sm">
+      <form method="get" className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm">
         <RangeFields from={from} to={to} className={inp} labelFrom="รับ Lead ตั้งแต่" remembered={rg.remembered} />
-        <button className="rounded-md bg-slate-900 px-4 py-1.5 font-medium text-white hover:bg-slate-700">ใช้ตัวกรอง</button>
+        <button className="rounded-lg bg-brand-600 px-4 py-1.5 font-medium text-white hover:bg-brand-700">ใช้ตัวกรอง</button>
         {(from || to) && <Link href="/lead-report?range=all" className="py-1.5 underline">ล้าง</Link>}
       </form>
 
-      <article className="space-y-2 rounded-lg border border-slate-200 bg-white p-4">
+      <article className="space-y-2 rounded-xl border border-slate-200 bg-white p-4">
         <h2 className="font-semibold">ผลงานรายพนักงาน</h2>
         {!rows.length ? <p className="text-sm text-slate-500">ยังไม่มี Lead ในช่วงนี้</p> : (
           <>
@@ -69,7 +69,7 @@ export default async function LeadReportPage({ searchParams }: { searchParams: P
         <Note className="" href="/settings/metrics/lead-report">Qualified = Call Status รอเข้าชม / เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน · Site Visit = เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน · สัญญา + ขายแล้ว = Sell Status เซ็นสัญญา / สัญญาเปิด / ขายแล้ว · <b>Lead ต่อ 1 ...</b> = Lead ที่รับ ÷ จำนวนนั้น (ยิ่งน้อยยิ่งดี) · — = ยังไม่มี (หารด้วย 0 ไม่ได้)</Note>
       </article>
 
-      <article className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+      <article className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
         <h2 className="font-semibold">เหตุผลที่ไม่สำเร็จ <span className="font-normal text-slate-500">— {lost.lost.toLocaleString("en-US")} จาก {lost.total.toLocaleString("en-US")} Lead{lost.total ? ` (${Math.round((lost.lost / lost.total) * 1000) / 10}%)` : ""}</span></h2>
         {!lost.lost ? <p className="text-sm text-slate-500">ยังไม่มี Lead ที่ไม่สำเร็จในช่วงนี้</p> : <>
           <div className="flex flex-wrap gap-2">{lost.byReason.map((b) => <span key={b.reason} className="rounded-full bg-slate-100 px-3 py-1 text-sm">{b.reason} <b className="tabular-nums">{b.count}</b></span>)}</div>

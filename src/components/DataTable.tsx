@@ -10,7 +10,7 @@ export function DataTable({ cols, rows, base, params, sort, dir, page, pages, to
   if (!rows.length) return <p className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">ไม่มีข้อมูลที่ตรงกับตัวกรอง</p>;
   return (
     <div className="space-y-2">
-      <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b bg-slate-50 text-xs text-slate-500">

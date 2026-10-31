@@ -9,7 +9,7 @@ export default async function SellerLeadsPage() {
   return (
     <section className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold">Seller Leads</h1>
+        <h1 className="text-[26px] font-bold tracking-tight">Seller Leads</h1>
         <p className="text-sm text-slate-500">ลูกค้าที่ต้องการขาย (Need = ขาย) แยกตาม Sell Status · ลากการ์ดไปคอลัมน์ใหม่เพื่อเปลี่ยนสถานะ · มีข้อมูลส่วนบุคคล เข้าถึงได้เฉพาะ Admin และ Sales</p>
       </div>
       <StatusBoard kind="seller" />

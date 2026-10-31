@@ -28,7 +28,7 @@ export default async function SalesDashboardPage({ searchParams }: { searchParam
   let all: TxRow[];
   try { all = (await readColumns("SALES_TRANSACTIONS", { exclude: ["raw_json", "record_id", "row_key", "source_batch_id"] })).rows; }
   catch (e) {
-    return <section><h1 className="mb-4 text-2xl font-bold">Sales</h1><p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">โหลดข้อมูลไม่สำเร็จ: {e instanceof Error ? e.message.slice(0, 200) : "ไม่ทราบสาเหตุ"} — ลอง <Link href="/settings" className="underline">ตั้งค่า → เตรียม Google Sheet</Link></p></section>;
+    return <section><h1 className="mb-4 text-[26px] font-bold tracking-tight">Sales</h1><p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">โหลดข้อมูลไม่สำเร็จ: {e instanceof Error ? e.message.slice(0, 200) : "ไม่ทราบสาเหตุ"} — ลอง <Link href="/settings" className="underline">ตั้งค่า → เตรียม Google Sheet</Link></p></section>;
   }
   const v = computeSales(all, f);
   const sort = one(sp.sort) || "invoice_date", dir = (one(sp.dir) || "desc") as "asc" | "desc";
@@ -42,31 +42,31 @@ export default async function SalesDashboardPage({ searchParams }: { searchParam
   const detail = doc ? all.find((r) => r.invoice_no === doc) : undefined;
   const last = all.map((r) => r.imported_at).filter(Boolean).sort().pop();
   const exportUrl = href("/api/export/sales-transactions", params);
-  const inp = "rounded-md border border-slate-300 px-2 py-1.5 text-sm";
+  const inp = "h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm";
   const sel = (name: string, label: string, val: string | undefined, opts: string[]) => (
     <label><span className="mb-1 block text-xs text-slate-500">{label}</span><select name={name} defaultValue={val ?? ""} className={inp + " max-w-48"}><option value="">ทั้งหมด</option>{opts.map((o) => <option key={o}>{o}</option>)}</select></label>
   );
-  const Card = ({ title, children }: { title: string; children: React.ReactNode }) => <div className="rounded-lg border border-slate-200 bg-white p-4"><h3 className="mb-3 text-sm font-semibold">{title}</h3>{children}</div>;
+  const Card = ({ title, children }: { title: string; children: React.ReactNode }) => <div className="rounded-xl border border-slate-200 bg-white p-4"><h3 className="mb-3 text-sm font-semibold">{title}</h3>{children}</div>;
   const t = v.charts.time;
 
   return (
     <section className="max-w-7xl space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold">Sales — ยอดขายจากรายงานบัญชี</h1>
+          <h1 className="text-[26px] font-bold tracking-tight">Sales — ยอดขายจากรายงานบัญชี</h1>
           <p className="text-sm text-slate-500">อัปเดตล่าสุด: {last ? thDateTime(last) : "ยังไม่มีข้อมูล"}</p>
         </div>
         <div className="flex gap-2 text-sm">
-          <Link href="/sales/import" className="rounded-md bg-slate-900 px-4 py-1.5 font-medium text-white hover:bg-slate-700">นำเข้ารายงานยอดขาย</Link>
+          <Link href="/sales/import" className="rounded-lg bg-brand-600 px-4 py-1.5 font-medium text-white hover:bg-brand-700">นำเข้ารายงานยอดขาย</Link>
           {all.length > 0 && <a href={exportUrl} className="rounded-md border border-slate-300 px-4 py-1.5">Export CSV{Object.values(f).some(Boolean) ? " (ตามตัวกรอง)" : ""}</a>}
         </div>
       </div>
 
-      <form method="get" action="/sales" className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-white p-4 text-sm">
+      <form method="get" action="/sales" className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm">
         <RangeFields from={f.from} to={f.to} className={inp} remembered={rg.remembered} />
         {sel("period", "ช่วงรายงาน", f.period, v.options.periods)}{sel("project", "โปรเจ็ค", f.project, v.options.projects)}{sel("salesperson", "พนักงานขาย", f.salesperson, v.options.people)}{sel("status", "สถานะ", f.status, v.options.statuses)}
         <label><span className="mb-1 block text-xs text-slate-500">ค้นหา</span><input name="q" defaultValue={f.q} placeholder="เลขที่เอกสาร / ลูกค้า" className={inp} /></label>
-        <button className="rounded-md bg-slate-900 px-4 py-1.5 font-medium text-white">ใช้ตัวกรอง</button>
+        <button className="rounded-lg bg-brand-600 px-4 py-1.5 font-medium text-white">ใช้ตัวกรอง</button>
         {Object.values(f).some(Boolean) && <Link href="/sales?range=all" className="py-1.5 underline">ล้าง</Link>}
       </form>
 
@@ -76,7 +76,7 @@ export default async function SalesDashboardPage({ searchParams }: { searchParam
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {v.kpis.map((k) => (
-          <div key={k.key} className="rounded-lg border border-slate-200 bg-white p-4">
+          <div key={k.key} className="rounded-xl border border-slate-200 bg-white p-4">
             <div className="text-xs text-slate-500">{k.label}</div>
             {k.value === null ? <div className="mt-1 text-lg font-semibold text-slate-400">รอข้อมูล</div> : <div className="mt-1 text-2xl font-bold tabular-nums">{k.fmt === "thb" ? thb(k.value) : k.value.toLocaleString("en-US")}</div>}
             {k.note && k.value !== null && <div className="mt-1 text-xs text-slate-500">{k.note}</div>}

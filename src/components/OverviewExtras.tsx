@@ -17,7 +17,7 @@ function Bar({ label, actual, target, pctV, elapsed, unit, note, noteHref }: { l
       <div className="flex items-baseline justify-between gap-2 text-sm"><span className="font-medium">{label}</span>
         <span className="tabular-nums">{actual === null ? <span className="text-slate-400">รอข้อมูล</span> : f(actual)} <span className="text-slate-400">/ {f(target)}</span> {pctV !== null && <b className={pctV > 100 && unit === "thb" ? "text-red-700" : ""}>({pctV}%)</b>}</span></div>
       <div className="relative h-2.5 rounded-full bg-slate-100" role="img" aria-label={`${label} ${pctV ?? 0}% ของเป้า`}>
-        <div className={`h-2.5 rounded-full ${unit === "thb" && (pctV ?? 0) > 100 ? "bg-red-500" : "bg-slate-800"}`} style={{ width: `${w}%` }} />
+        <div className={`h-2.5 rounded-full ${unit === "thb" && (pctV ?? 0) > 100 ? "bg-red-500" : "bg-brand-600"}`} style={{ width: `${w}%` }} />
         {elapsed > 0 && elapsed < 100 && <div className="absolute top-[-3px] h-4 w-0.5 bg-sky-500" style={{ left: `${elapsed}%` }} title={`ผ่านไปแล้ว ${elapsed}% ของเดือน`} />}
       </div>
       {note && <p className="text-xs text-amber-700">⚠ {note}{noteHref && <> · <Link href={noteHref} className="underline">นำเข้ารายงานโฆษณา</Link></>}</p>}
@@ -28,7 +28,7 @@ function Bar({ label, actual, target, pctV, elapsed, unit, note, noteHref }: { l
 export function TargetCard({ p, canEdit }: { p: Progress | null; canEdit: boolean }) {
   if (!p) return canEdit ? <p className="rounded-lg border border-dashed border-slate-300 bg-white p-3 text-sm text-slate-500">ยังไม่ได้ตั้งงบ / เป้า Lead ของเดือนนี้ — <Link href="/settings/targets" className="underline">ตั้งเป้าหมายรายเดือน</Link></p> : null;
   return (
-    <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+    <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
       <div className="flex items-baseline justify-between"><h2 className="text-sm font-semibold">เป้าหมาย {p.label}{p.current && <span className="ml-2 font-normal text-slate-500">(ถึงวันนี้ · ผ่านไป {p.elapsedPct}% ของเดือน — เส้นสีฟ้า)</span>}</h2>
         {canEdit && <Link href="/settings/targets" className="text-xs underline">แก้ไขเป้า</Link>}</div>
       <div className="grid gap-4 md:grid-cols-2">
@@ -47,12 +47,12 @@ export function ChecklistCard({ lists }: { lists: Checklist[] }) {
       {lists.map((c) => {
         const missing = c.items.length - c.done;
         return (
-          <details key={c.month} className="group rounded-lg border border-slate-200 bg-white px-4 py-2.5">
+          <details key={c.month} className={`group rounded-xl border px-4 py-2.5 ${missing ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-white"}`}>
             <summary className="flex cursor-pointer list-none items-center gap-3 text-sm [&::-webkit-details-marker]:hidden">
               <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${missing ? "bg-amber-500" : "bg-emerald-500"}`} aria-hidden="true" />
               <span className="whitespace-nowrap font-semibold">ข้อมูลเดือน {c.label}: ครบ {c.done}/{c.items.length}</span>
-              {missing ? <span className="text-amber-700">· ยังขาด {missing} รายการ</span> : <span className="text-emerald-700">· ครบทุกแหล่ง</span>}
-              <span className="ml-auto flex items-center gap-2 text-xs text-slate-500"><span className="hidden h-1.5 w-20 overflow-hidden rounded-full bg-slate-100 sm:block"><span className="block h-full bg-emerald-500" style={{ width: `${Math.round((c.done / c.items.length) * 100)}%` }} /></span><span className="group-open:hidden">ดูรายการ ▾</span><span className="hidden group-open:inline">ซ่อน ▴</span></span>
+              {missing ? <span className="text-amber-800">· ยังขาด {missing} รายการ</span> : <span className="text-emerald-700">· ครบทุกแหล่ง</span>}
+              <span className="ml-auto flex items-center gap-2 text-xs text-slate-500"><span className="hidden h-1.5 w-20 overflow-hidden rounded-full bg-white sm:block"><span className="block h-full bg-emerald-500" style={{ width: `${Math.round((c.done / c.items.length) * 100)}%` }} /></span><span className="group-open:hidden">ดูรายการ ▾</span><span className="hidden group-open:inline">ซ่อน ▴</span></span>
             </summary>
             <ul className="mt-3 space-y-1.5 text-sm">{c.items.map((x) => (
               <li key={x.key} className="flex items-start gap-2">
@@ -68,18 +68,19 @@ export function ChecklistCard({ lists }: { lists: Checklist[] }) {
 }
 
 export function FollowUpCard({ overdue, today, stale }: { overdue: number; today: number; stale: number }) {
+  // แบบ A: ป้ายซ้าย ตัวเลขขวา · มีรายการ = สีเตือน
   const box = (n: number, label: string, cls: string, q: string) => (
-    <Link href={`/leads?follow=${q}`} className={`rounded-lg border p-3 ${n ? cls : "border-slate-200 bg-white text-slate-500"}`}>
-      <div className="text-xs">{label}</div><div className="text-2xl font-bold tabular-nums">{n.toLocaleString("en-US")}</div>
+    <Link href={`/leads?follow=${q}`} className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 transition-colors ${n ? cls : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>
+      <span className="text-sm">{label}</span><span className="text-2xl font-bold tabular-nums">{n.toLocaleString("en-US")}</span>
     </Link>
   );
   return (
     <div className="space-y-2">
       <h2 className="text-sm font-semibold text-slate-700">ติดตามลูกค้า (ฝ่ายขาย)</h2>
-      <div className="grid grid-cols-3 gap-3">
-        {box(overdue, "เลยกำหนดติดตาม", "border-red-200 bg-red-50 text-red-900", "overdue")}
-        {box(today, "ต้องติดตามวันนี้", "border-amber-200 bg-amber-50 text-amber-900", "today")}
-        {box(stale, `ค้างเกิน ${STALE_DAYS} วัน (ไม่มีวันติดตาม)`, "border-slate-300 bg-slate-50 text-slate-800", "stale")}
+      <div className="grid gap-3 sm:grid-cols-3">
+        {box(overdue, "เลยกำหนดติดตาม", "border-red-200 bg-red-50 text-red-900 hover:bg-red-100", "overdue")}
+        {box(today, "ต้องติดตามวันนี้", "border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100", "today")}
+        {box(stale, `ค้างเกิน ${STALE_DAYS} วัน (ไม่มีวันติดตาม)`, "border-slate-300 bg-slate-100 text-slate-800 hover:bg-slate-200", "stale")}
       </div>
     </div>
   );

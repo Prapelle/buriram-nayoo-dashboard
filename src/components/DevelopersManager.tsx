@@ -143,7 +143,7 @@ export function DevelopersManager() {
   );
   const fsel = (k: keyof typeof f, label: string, opts: readonly string[]) => (
     <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">{label}</span>
-      <select aria-label={`กรอง ${label}`} value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} className="max-w-44 rounded-md border border-slate-300 px-2 py-1.5 text-sm"><option value="">ทั้งหมด</option>{opts.map((o) => <option key={o}>{o}</option>)}</select></label>
+      <select aria-label={`กรอง ${label}`} value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} className="max-w-44 h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm"><option value="">ทั้งหมด</option>{opts.map((o) => <option key={o}>{o}</option>)}</select></label>
   );
   const activeOf = (d: Dev) => (prodsOf.get(d.developer_id) ?? []).filter((p) => productState(p, data.today) !== "expired").sort((a, b) => a.end_date.localeCompare(b.end_date));
   const lockedStatus = editing && (AUTO_STATUS.includes(editing.status) || activeOf(editing).some((p) => productState(p, data.today) === "active"));
@@ -173,7 +173,7 @@ export function DevelopersManager() {
             </div>
           )}
           <div className="flex flex-wrap items-center gap-3">
-            <button onClick={() => save()} disabled={busy} className="rounded-md bg-slate-900 px-5 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-40">{busy ? "กำลังบันทึก..." : "บันทึก"}</button>
+            <button onClick={() => save()} disabled={busy} className="rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-40">{busy ? "กำลังบันทึก..." : "บันทึก"}</button>
             {editing && !delAsk && <button onClick={() => setDelAsk(true)} className="text-sm text-red-700 underline">ลบรายการนี้</button>}
             {editing && delAsk && <span className="text-sm text-red-700">ลบ {editing.dev_code} และ Product ทั้งหมดของรายการนี้? <button onClick={del} disabled={busy} className="ml-2 rounded bg-red-700 px-2 py-1 text-white">ยืนยันลบ</button> <button onClick={() => setDelAsk(false)} className="ml-1 underline">ยกเลิก</button></span>}
           </div>
@@ -189,7 +189,7 @@ export function DevelopersManager() {
           </dl>
           {[["Remark", viewing.remark], ["Note", viewing.notes]].map(([k, v]) => <div key={k} className="text-sm"><div className="text-xs text-slate-500">{k}</div><p className="whitespace-pre-wrap">{v || <span className="text-slate-300">—</span>}</p></div>)}
           <div className="space-y-2">
-            <div className="flex items-center justify-between"><h3 className="text-sm font-semibold">Product ที่ใช้อยู่</h3>{!prod && <button onClick={() => { setProd(emptyProd()); setProdErr({}); }} className="rounded-md bg-slate-900 px-3 py-1 text-xs text-white">+ เพิ่ม Product</button>}</div>
+            <div className="flex items-center justify-between"><h3 className="text-sm font-semibold">Product ที่ใช้อยู่</h3>{!prod && <button onClick={() => { setProd(emptyProd()); setProdErr({}); }} className="rounded-lg bg-brand-600 px-3 py-1 text-xs text-white">+ เพิ่ม Product</button>}</div>
             {(() => {
               const ps = prodsOf.get(viewing.developer_id) ?? [];
               const cur = ps.filter((p) => productState(p, data.today) !== "expired").sort((a, b) => a.end_date.localeCompare(b.end_date)), old = ps.filter((p) => productState(p, data.today) === "expired").sort((a, b) => b.end_date.localeCompare(a.end_date));
@@ -217,7 +217,7 @@ export function DevelopersManager() {
                 </div>
                 {Object.values(prodErr).length > 0 && <p className="text-xs text-red-600">{Object.values(prodErr).join(" · ")}</p>}
                 <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <button onClick={saveProd} disabled={busy} className="rounded-md bg-slate-900 px-4 py-1.5 text-white disabled:opacity-40">บันทึก Product</button><button onClick={() => setProd(null)} className="underline">ยกเลิก</button>
+                  <button onClick={saveProd} disabled={busy} className="rounded-lg bg-brand-600 px-4 py-1.5 text-white disabled:opacity-40">บันทึก Product</button><button onClick={() => setProd(null)} className="underline">ยกเลิก</button>
                   <span className="ml-auto flex items-center gap-1"><input aria-label="ชื่อ Product ใหม่" value={newType} onChange={(e) => setNewType(e.target.value)} placeholder="ชนิด Product ใหม่" className="w-40 rounded-md border border-slate-300 px-2 py-1 text-xs" /><button onClick={addType} disabled={busy || !newType.trim()} className="rounded-md border border-slate-300 px-2 py-1 text-xs disabled:opacity-40">+ เพิ่มชนิด</button></span>
                 </div>
                 <p className="text-xs text-slate-500">Product ที่เริ่มแล้ว → Status เป็น กำลังใช้ Product (เหลือ ≤ 30 วัน = ใกล้หมดสัญญา) · หมดอายุทุกตัว → กลับไป เข้าร่วมแล้ว และย้ายไป Product ที่เคยใช้ · ยังไม่ถึงวันเริ่ม → คงที่ ปิดการขาย</p>
@@ -230,14 +230,14 @@ export function DevelopersManager() {
       <nav aria-label="รายการติดตาม" className="flex flex-wrap items-center gap-2 text-sm">
         <span className="text-xs text-slate-500">ติดตาม:</span>
         {([["overdue", "เลยกำหนด", fu.overdue.length, "bg-red-600"], ["today", "วันนี้", fu.today.length, "bg-amber-500"], ["stale", `ค้างเกิน ${DEV_STALE_DAYS} วัน`, fu.stale.length, "bg-slate-600"]] as const).map(([k, l, n, c]) => (
-          <button key={k} aria-pressed={follow === k} onClick={() => setFollow(follow === k ? "" : k)} className={`rounded-full px-3 py-1 text-xs ${follow === k ? "bg-slate-900 text-white" : "bg-white ring-1 ring-slate-200 hover:bg-slate-100"}`}>{l} <span className={`ml-1 rounded-full px-1.5 text-white ${n ? c : "bg-slate-300"}`}>{n}</span></button>))}
+          <button key={k} aria-pressed={follow === k} onClick={() => setFollow(follow === k ? "" : k)} className={`rounded-full px-3 py-1 text-xs ${follow === k ? "bg-brand-600 text-white" : "bg-white ring-1 ring-slate-200 hover:bg-slate-100"}`}>{l} <span className={`ml-1 rounded-full px-1.5 text-white ${n ? c : "bg-slate-300"}`}>{n}</span></button>))}
         {follow && <button onClick={() => setFollow("")} className="text-xs underline">แสดงทั้งหมด</button>}
       </nav>
       <div className="flex flex-wrap items-end gap-3">
-        <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">ค้นหา</span><input value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} placeholder="บริษัท / โครงการ / ผู้ติดต่อ / เบอร์ / Line" className="w-64 rounded-md border border-slate-300 px-2 py-1.5 text-sm" /></label>
+        <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">ค้นหา</span><input value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} placeholder="บริษัท / โครงการ / ผู้ติดต่อ / เบอร์ / Line" className="w-64 h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm" /></label>
         {fsel("status", "Status", DEV_STATUS)}{fsel("tier", "Tier", TIERS)}{fsel("staff", "Staff", data.staff)}{fsel("product", "Product ที่ใช้อยู่", data.productTypes)}
         {Object.values(f).some(Boolean) && <button onClick={() => setF({ q: "", status: "", tier: "", staff: "", product: "" })} className="py-1.5 text-sm underline">ล้าง</button>}
-        <button onClick={() => openForm(null)} className="ml-auto rounded-md bg-slate-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-slate-700">+ เพิ่ม Developer</button>
+        <button onClick={() => openForm(null)} className="ml-auto rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">+ เพิ่ม Developer</button>
       </div>
 
       {data.devs.length === 0 ? <p className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">ยังไม่มี Developer — กด &quot;+ เพิ่ม Developer&quot; หรือนำเข้ารายชื่อจากไฟล์ด้านล่าง</p> : (
@@ -245,20 +245,20 @@ export function DevelopersManager() {
         {mobile && <ul className="space-y-2" aria-label="รายการ Developer">{rows.map((d) => {
           const act = activeOf(d); const over = d.next_follow_up_at && d.next_follow_up_at < data.today;
           return (
-            <li key={d.developer_id} className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
+            <li key={d.developer_id} className="rounded-xl border border-slate-200 bg-white p-3 text-sm">
               <div className="flex items-start justify-between gap-2"><div className="min-w-0"><div className="font-medium">{d.company_name || d.project_main || "—"}</div><div className="text-xs text-slate-500"><span className="font-mono">{d.dev_code}</span>{d.contact_name && ` · ${d.contact_name}`}</div></div>
                 <span className={`shrink-0 rounded px-1.5 py-0.5 text-xs ${ST_COLOR[d.status || DEV_DEFAULT] ?? "bg-slate-100"}`}>{d.status || DEV_DEFAULT}</span></div>
               {act.map((p) => <div key={p.product_id} className="mt-1 text-xs">{p.product} <span className="text-slate-500">ถึง {dmy(p.end_date)}</span></div>)}
               {d.next_follow_up_at && <p className={`mt-1 text-xs ${over ? "font-semibold text-red-600" : "text-slate-600"}`}>ติดต่อ {dmy(d.next_follow_up_at)}</p>}
               <div className="mt-2 flex flex-wrap gap-2">
-                {d.phone && <a href={telHref(d.phone)} className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white">โทร {d.phone}</a>}
-                {d.line_id && <a href={lineHref(d.line_id)} target="_blank" rel="noreferrer" className="rounded-md bg-green-500 px-3 py-1.5 text-xs font-medium text-white">LINE</a>}
-                <button onClick={() => { setViewId(d.developer_id); setForm(null); setProd(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="rounded-md border border-slate-300 px-3 py-1.5 text-xs">ดู</button>
-                <button onClick={() => openForm(d)} className="rounded-md border border-slate-300 px-3 py-1.5 text-xs">แก้ไข</button>
+                {d.phone && <a href={telHref(d.phone)} className="inline-flex h-11 flex-1 items-center justify-center rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white">โทร {d.phone}</a>}
+                {d.line_id && <a href={lineHref(d.line_id)} target="_blank" rel="noreferrer" className="inline-flex h-11 flex-1 items-center justify-center rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-800">LINE</a>}
+                <button onClick={() => { setViewId(d.developer_id); setForm(null); setProd(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="inline-flex h-11 items-center rounded-lg border border-slate-300 px-3 text-sm">ดู</button>
+                <button onClick={() => openForm(d)} className="inline-flex h-11 items-center rounded-lg border border-slate-300 px-3 text-sm">แก้ไข</button>
               </div>
             </li>);
         })}</ul>}
-        {!mobile && <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        {!mobile && <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
           <table className="w-full min-w-[960px] text-left text-sm">
             <thead><tr className="border-b bg-slate-50 text-xs text-slate-500"><th className="p-2">รหัส</th><th>บริษัท / โครงการหลัก</th><th>ผู้ติดต่อ</th><th>เบอร์ / Line</th><th>Tier</th><th>Status</th><th>Product ที่ใช้อยู่</th><th>Staff</th><th>ติดต่อครั้งถัดไป</th><th /></tr></thead>
             <tbody>{rows.map((d) => {
@@ -280,9 +280,9 @@ export function DevelopersManager() {
         </>
       )}
 
-      <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+      <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
         <div className="flex flex-wrap items-end justify-between gap-3"><h2 className="font-semibold">สรุปรายเดือน (ต่อ Staff)</h2>
-          <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">เดือน</span><DateInput month aria-label="เดือนของสรุป" value={month} onChange={(e) => setMonth(e.target.value)} className="rounded-md border border-slate-300 px-2 py-1.5 text-sm" /></label></div>
+          <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">เดือน</span><DateInput month aria-label="เดือนของสรุป" value={month} onChange={(e) => setMonth(e.target.value)} className="h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm" /></label></div>
         {report.length === 0 ? <p className="text-sm text-slate-500">ยังไม่มีการเปลี่ยน Status ในเดือนนี้</p> : (
           <div className="overflow-x-auto"><table className="w-full min-w-[560px] text-sm">
             <thead><tr className="border-b text-xs text-slate-500"><th className="py-1.5 text-left font-medium">Staff</th><th className="text-right font-medium">นัดเข้าพบ</th><th className="text-right font-medium">เข้าพบแล้ว</th><th className="text-right font-medium">ไม่ให้เข้าพบ / นัดไม่สำเร็จ</th><th className="text-right font-medium">Win (ปิดการขาย)</th><th className="text-right font-medium">ยอด Product ที่เริ่มเดือนนี้</th></tr></thead>
@@ -296,18 +296,18 @@ export function DevelopersManager() {
         )}
       </section>
 
-      <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+      <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
         <h2 className="font-semibold">นำเข้ารายชื่อ Developer จากไฟล์</h2>
         <p className="text-sm text-slate-600">ไฟล์ .csv หรือ .xlsx ที่แถวแรกเป็นหัวคอลัมน์ตามฟอร์ม (ชื่อบริษัท, โครงการหลัก, ชื่อผู้ติดต่อ, เบอร์, Line, Tier, Staff, Status ...) · รายการที่ซ้ำกับที่มีอยู่จะถูกข้าม · ระบบยังไม่เขียนข้อมูลจนกว่าจะกดยืนยัน</p>
         <div className="flex flex-wrap items-center gap-3 text-sm">
-          <label className="cursor-pointer rounded-md bg-slate-900 px-4 py-1.5 font-medium text-white hover:bg-slate-700">เลือกไฟล์<input type="file" accept=".csv,text/csv,.xlsx" aria-label="ไฟล์รายชื่อ Developer" className="hidden" onChange={(e) => { pickImport(e.target.files?.[0]); e.target.value = ""; }} /></label>
+          <label className="cursor-pointer rounded-lg bg-brand-600 px-4 py-1.5 font-medium text-white hover:bg-brand-700">เลือกไฟล์<input type="file" accept=".csv,text/csv,.xlsx" aria-label="ไฟล์รายชื่อ Developer" className="hidden" onChange={(e) => { pickImport(e.target.files?.[0]); e.target.value = ""; }} /></label>
           <button onClick={downloadTemplate} className="underline">ดาวน์โหลดไฟล์ตัวอย่าง</button>
         </div>
         {imp?.plan && (
           <div className="space-y-2 text-sm">
             <p><b>{imp.name}</b>: เพิ่ม {imp.plan.counts.insert} · ซ้ำ (ข้าม) {imp.plan.counts.duplicate} · ไม่ถูกต้อง {imp.plan.counts.invalid}{imp.plan.committed && " — นำเข้าแล้ว"}</p>
             {imp.plan.results.filter((r) => r.status !== "insert").slice(0, 20).map((r) => <p key={r.n} className="text-xs text-amber-800">แถว {r.n} {r.name}: {r.status === "duplicate" ? `ซ้ำกับ ${r.matches?.join(", ")}` : Object.values(r.errors ?? {}).join(" · ")}</p>)}
-            {!imp.plan.committed && imp.plan.counts.insert > 0 && <button onClick={commitImport} disabled={busy} className="rounded-md bg-slate-900 px-4 py-1.5 text-white disabled:opacity-40">ยืนยันนำเข้า {imp.plan.counts.insert} รายการ</button>}
+            {!imp.plan.committed && imp.plan.counts.insert > 0 && <button onClick={commitImport} disabled={busy} className="rounded-lg bg-brand-600 px-4 py-1.5 text-white disabled:opacity-40">ยืนยันนำเข้า {imp.plan.counts.insert} รายการ</button>}
           </div>
         )}
       </section>

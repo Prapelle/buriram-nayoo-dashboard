@@ -9,7 +9,7 @@ const H = ({ children }: { children: React.ReactNode }) => <h2 className="mt-6 t
 export default function PrivacyPage() {
   return (
     <main className="mx-auto max-w-3xl space-y-3 p-6 text-sm leading-relaxed text-slate-700">
-      <h1 className="text-2xl font-bold text-slate-900">นโยบายความเป็นส่วนตัว (Privacy Policy)</h1>
+      <h1 className="text-[26px] font-bold tracking-tight text-slate-900">นโยบายความเป็นส่วนตัว (Privacy Policy)</h1>
       <p className="text-slate-500">Buriram NAYOO Marketing Dashboard · ปรับปรุงล่าสุด 30 ตุลาคม 2026</p>
       <p>Buriram NAYOO Marketing Dashboard (&quot;ระบบ&quot;) เป็นเครื่องมือภายในสำหรับทีมการตลาดและฝ่ายขายของบุรีรัมย์น่าอยู่ ใช้ได้เฉพาะผู้ที่ผู้ดูแลระบบเพิ่มสิทธิ์ไว้แล้วเท่านั้น</p>
 

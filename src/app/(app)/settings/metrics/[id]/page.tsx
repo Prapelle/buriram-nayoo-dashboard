@@ -17,13 +17,13 @@ export default async function MetricsTopic({ params }: { params: Promise<{ id: s
     <section className="max-w-5xl space-y-4">
       <Link href="/settings/metrics" className="text-sm underline">← สารบัญคำอธิบายตัวเลข</Link>
       {!s ? (
-        <article className="space-y-2 rounded-lg border border-slate-200 bg-white p-5">
+        <article className="space-y-2 rounded-xl border border-slate-200 bg-white p-5">
           <h1 className="text-xl font-bold">สถานะของตัวเลข</h1>
           <dl className="space-y-2 text-sm">{STATES.map(([k, v]) => <div key={k} className="grid gap-1 sm:grid-cols-[12rem_1fr]"><dt className="font-medium">{k}</dt><dd className="text-slate-700">{v}</dd></div>)}</dl>
           <p className="text-xs text-slate-500">หลักการ: ไม่มีข้อมูลจะไม่แสดงเป็น 0 · ทุกสูตรใช้ข้อมูลช่วงวันที่เดียวกัน · ผลรวม Reach / Viewers หลายวันนับคนซ้ำ ไม่ใช่จำนวนคนไม่ซ้ำ · นำเข้าไฟล์เดิมซ้ำไม่ทำให้ตัวเลขเพิ่ม</p>
         </article>
       ) : (
-        <article className="space-y-3 rounded-lg border border-slate-200 bg-white p-5">
+        <article className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
           <div>
             <h1 className="text-xl font-bold">{s.title}{s.page && <Link href={s.page} className="ml-2 text-sm font-normal underline">เปิดหน้า</Link>}</h1>
             {s.intro && <p className="text-sm text-slate-500">{s.intro}</p>}

@@ -89,33 +89,49 @@ export function AppShell({ items, email, role, signOutAction, children }: {
     const b = badges[n.href] ?? 0;
     return (
       <Link key={n.href + n.label} href={n.href} prefetch={false} aria-current={active ? "page" : undefined} title={compact ? n.label : undefined} aria-label={compact ? n.label : undefined}
-        className={`flex items-center gap-2.5 rounded-md text-sm ${compact ? "justify-center px-0 py-2" : sub ? "ml-3 px-3 py-1.5" : "px-3 py-2"} ${active ? "bg-slate-900 text-white" : sub ? "text-slate-600 hover:bg-slate-100" : "text-slate-700 hover:bg-slate-100"}`}>
-        <span className="relative"><Icon name={n.icon} />{compact && b > 0 && <span className="absolute -right-2 -top-2 h-2.5 w-2.5 rounded-full bg-red-500" />}</span>
+        className={`flex items-center gap-2.5 rounded-md text-sm ${compact ? "justify-center px-0 py-2" : sub ? "ml-3 px-3 py-1.5" : "px-3 py-2"} ${active ? "bg-brand-50 font-semibold text-brand-700 shadow-[inset_3px_0_0_var(--color-brand-600)]" : sub ? "text-slate-600 hover:bg-slate-100" : "text-slate-700 hover:bg-slate-100"}`}>
+        <span className="relative"><Icon name={n.icon} />{compact && b > 0 && <span className="absolute -right-2 -top-2 h-2.5 w-2.5 rounded-full bg-red-600" />}</span>
         {!compact && <span className="min-w-0 flex-1 truncate">{n.label}</span>}
-        {!compact && b > 0 && <span title="Lead ที่ต้องติดตาม (เลยกำหนด + วันนี้)" className={`rounded-full px-1.5 text-[11px] font-semibold ${active ? "bg-white text-slate-900" : "bg-red-500 text-white"}`}>{b}</span>}
+        {!compact && b > 0 && <span title="Lead ที่ต้องติดตาม (เลยกำหนด + วันนี้)" className="min-w-5 rounded-full bg-red-600 px-1.5 text-center text-[11px] font-bold text-white">{b}</span>}
       </Link>
     );
   };
 
+  // แถบเมนูด้านล่างบนมือถือ: ฝ่ายขาย/Admin = งานลูกค้า · Marketing = งานข้อมูล
+  const flat = items.flatMap((n) => n.children ?? [n]);
+  const BOTTOM: Record<string, [string, string][]> = {
+    sales: [["/", "ภาพรวม"], ["/leads", "Leads"], ["/buyer-leads", "Buyer"], ["/seller-leads", "Seller"], ["/lead-report", "รายงาน"]],
+    admin: [["/", "ภาพรวม"], ["/leads", "Leads"], ["/buyer-leads", "Buyer"], ["/seller-leads", "Seller"], ["/lead-report", "รายงาน"]],
+    marketing: [["/", "ภาพรวม"], ["/performance", "Performance"], ["/import", "นำเข้า"], ["/lead-report", "รายงาน"]],
+  };
+  const bottom = (BOTTOM[role] ?? []).map(([h, short]) => { const n = flat.find((x) => x.href === h); return n ? { ...n, short } : null; }).filter((x): x is NavItem & { short: string } => !!x);
+
   let lastGroup: string | undefined;
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-30 flex h-12 items-center gap-3 border-b border-slate-200 bg-white px-3">
+      <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-slate-200 bg-white px-3 md:px-4">
         <button type="button" onClick={toggle} aria-controls="side-menu" aria-expanded={expanded}
           aria-label={expanded ? "ปิดเมนู" : "เปิดเมนู"} title={expanded ? "ปิดเมนู" : "เปิดเมนู"}
-          className="flex h-9 w-9 items-center justify-center rounded-md text-slate-700 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400">
+          className="flex h-10 w-10 items-center justify-center rounded-lg text-slate-700 hover:bg-slate-100">
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
             <path d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <span className="text-lg font-bold">Buriram NAYOO</span>
+        <Link href="/" prefetch={false} className="flex items-center gap-2.5 text-slate-900">
+          <span aria-hidden="true" className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 font-bold text-white">N</span>
+          <span className="text-[17px] font-bold">Buriram NAYOO</span>
+        </Link>
+        <div className="ml-auto flex items-center gap-2.5 text-sm text-slate-600">
+          <span className="hidden max-w-48 truncate sm:inline">{email}</span>
+          <span title={`${email} · สิทธิ์ ${role}`} className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-100 font-semibold text-brand-800">{(email[0] ?? "?").toUpperCase()}</span>
+        </div>
       </header>
 
       <div className="flex">
-        {mobileOpen && <div className="fixed inset-0 top-12 z-30 bg-slate-900/40 md:hidden" onClick={() => setMobileOpen(false)} aria-hidden="true" />}
+        {mobileOpen && <div className="fixed inset-0 top-14 z-30 bg-slate-900/40 md:hidden" onClick={() => setMobileOpen(false)} aria-hidden="true" />}
         <aside id="side-menu" data-compact={compact ? "" : undefined}
-          className={`fixed bottom-0 left-0 top-12 z-40 flex w-64 shrink-0 flex-col gap-4 overflow-y-auto border-r border-slate-200 bg-white transition-transform duration-200
-            md:sticky md:z-auto md:h-[calc(100vh-3rem)] md:translate-x-0 md:transition-none ${compact ? "p-2 md:w-16" : "p-4 md:w-64"}
+          className={`fixed bottom-0 left-0 top-14 z-40 flex w-64 shrink-0 flex-col gap-4 overflow-y-auto border-r border-slate-200 bg-white transition-transform duration-200
+            md:sticky md:z-auto md:h-[calc(100vh-3.5rem)] md:translate-x-0 md:transition-none ${compact ? "p-2 md:w-16" : "p-4 md:w-64"}
             ${mobileOpen ? "visible translate-x-0" : "invisible -translate-x-full md:visible"}`}>
           <nav aria-label="เมนูหลัก" className="flex flex-col gap-0.5">
             {items.map((n) => {
@@ -141,8 +157,22 @@ export function AppShell({ items, email, role, signOutAction, children }: {
             <form action={signOutAction}><button className="underline">ออกจากระบบ</button></form>
           </div>
         </aside>
-        <main className="min-w-0 flex-1 p-4 md:p-8">{children}</main>
+        <main className={`min-w-0 flex-1 p-4 md:p-8 ${bottom.length ? "pb-24 md:pb-8" : ""}`}>{children}</main>
       </div>
+      {/* มือถือ: แถบเมนูด้านล่าง (เมนูที่ใช้บ่อยตามบทบาท) */}
+      {bottom.length > 0 && (
+        <nav aria-label="เมนูลัด" className="fixed inset-x-0 bottom-0 z-30 grid h-16 border-t border-slate-200 bg-white md:hidden" style={{ gridTemplateColumns: `repeat(${bottom.length}, minmax(0, 1fr))` }}>
+          {bottom.map((n) => {
+            const on = n.href === "/" ? path === "/" : path.startsWith(n.href); const b = badges[n.href] ?? 0;
+            return (
+              <Link key={n.href} href={n.href} prefetch={false} aria-current={on ? "page" : undefined}
+                className={`relative flex flex-col items-center justify-center gap-0.5 text-[11px] ${on ? "font-semibold text-brand-700" : "text-slate-600"}`}>
+                <span className="relative"><Icon name={n.icon} />{b > 0 && <span className="absolute -right-2.5 -top-1.5 min-w-4 rounded-full bg-red-600 px-1 text-center text-[10px] font-bold leading-4 text-white">{b}</span>}</span>
+                {n.short ?? n.label}
+              </Link>);
+          })}
+        </nav>
+      )}
       <TableSort />
     </div>
   );

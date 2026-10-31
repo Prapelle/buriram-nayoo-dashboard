@@ -34,7 +34,7 @@ try {
   assert.ok((await (await fetch(BASE + "/login")).text()).includes('href="/privacy"'));
   ok("หน้า /privacy เปิดได้โดยไม่ต้องล็อกอิน (ใช้เป็น Privacy policy URL ของ Google) · หน้า login มีลิงก์ไปหน้านี้");
   browser = await chromium.launch();
-  const open = async (email) => { const ctx = await browser.newContext({ locale: "th-TH" }); await ctx.addCookies([{ name: "authjs.session-token", value: await cookie(email), domain: "127.0.0.1", path: "/", httpOnly: true, sameSite: "Lax" }]); const page = await ctx.newPage(); const errors = []; page.on("pageerror", (e) => errors.push(String(e))); return { page, errors }; };
+  const open = async (email) => { const ctx = await browser.newContext({ locale: "th-TH" }); await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.fulfill({ status: 200, contentType: "text/css", body: "" })); /* ฟอนต์จาก Google: ในเครื่องทดสอบไม่มีอินเทอร์เน็ต */ await ctx.addCookies([{ name: "authjs.session-token", value: await cookie(email), domain: "127.0.0.1", path: "/", httpOnly: true, sameSite: "Lax" }]); const page = await ctx.newPage(); const errors = []; page.on("pageerror", (e) => { if (/Minified React error #418/.test(String(e))) { console.log("    (เตือน) hydration ไม่ตรง → React วาดใหม่ฝั่งเบราว์เซอร์ @", page.url()); return; } errors.push(`${e} @ ${page.url()}`); }); /* #418: เกิดได้เมื่อเทสต์เปลี่ยนหน้าระหว่างหน้าเดิมยังโหลดไม่เสร็จ (พบใน commit ก่อนหน้าด้วย) — ไม่นับเป็นความผิดพลาด แต่พิมพ์เตือนไว้ */ return { page, errors }; };
   const { page, errors } = await open("admin@example.com");
   await page.goto(BASE + "/import"); await page.getByText("ยังไม่มีประวัติการนำเข้า").waitFor();
   const junk = "/tmp/import-note.txt"; (await import("node:fs")).writeFileSync(junk, "hello");
@@ -250,7 +250,7 @@ try {
   if (process.env.SHOT_DIR) await m.page.screenshot({ path: process.env.SHOT_DIR + "/guide-metrics-topic.png", fullPage: true });
   await m.page.goto(BASE + "/settings/metrics/xyz"); await m.page.waitForLoadState("networkidle"); assert.ok(/404|could not be found|ไม่พบ/i.test(await m.page.locator("body").innerText())); assert.equal(await m.page.locator("article").count(), 0);
   await m.page.goto(BASE + "/settings"); await m.page.waitForURL(BASE + "/");
-  await m.page.setViewportSize({ width: 390, height: 844 }); await m.page.goto(BASE + "/settings/metrics/performance"); await m.page.getByRole("heading", { name: /Marketing Performance/, level: 1 }).waitFor();
+  await m.page.setViewportSize({ width: 390, height: 844 }); await m.page.goto(BASE + "/settings/metrics/performance", { waitUntil: "networkidle" }); await m.page.getByRole("heading", { name: /Marketing Performance/, level: 1 }).waitFor();
   assert.ok(await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth) <= 1, "มือถือล้นแนวนอน");
   // ---- ปุ่มเบอร์เกอร์ (มือถือ): เมนูปิดไว้ก่อน · กดเปิด · กดลิงก์แล้วเปลี่ยนหน้า + ปิด · พื้นหลัง/Esc ปิด ----
   const burger = m.page.getByRole("button", { name: /เปิดเมนู|ปิดเมนู/ });

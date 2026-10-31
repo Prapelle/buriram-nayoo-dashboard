@@ -99,7 +99,7 @@ export function WebsiteManager({ isAdmin, importOnly = false, incoming }: { isAd
   const snapKeys = new Set(snapRows.map((r) => `${r.report_start}|${r.report_end}`));
   const manualRows = (data?.summary ?? []).filter((r) => r.source === "manual");
   const gscDays = (data?.summary ?? []).filter((r) => r.source === "search_console").map((r) => r.report_start).sort();
-  const inp = "rounded-md border border-slate-300 px-2 py-1.5 text-sm";
+  const inp = "h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm";
   const dupAny = plans?.some((p) => p.fileDuplicate);
 
   return (
@@ -107,15 +107,15 @@ export function WebsiteManager({ isAdmin, importOnly = false, incoming }: { isAd
       <Notice msg={msg} onClose={() => setMsg(null)} />
       {data?.error && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">{data.error}</p>}
 
-      <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-5">
+      <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
         <h2 className="font-semibold">{importOnly ? "ไฟล์เว็บไซต์ (GA4 / Search Console)" : "1. นำเข้าไฟล์ GA4 / Search Console"}</h2>
         {incoming ? <p className="text-sm text-slate-600">ไฟล์เว็บไซต์ที่เลือกจากช่องด้านบน — ตรวจประเภทและช่วงวันที่ แล้วกด ตรวจสอบก่อนนำเข้า</p> : <p className="text-sm text-slate-600">เลือกได้หลายไฟล์พร้อมกัน (CSV): GA4 → <b>Reports snapshot</b> (มียอดผู้ใช้จริง — แนะนำ) และ/หรือ หน้าและหน้าจอ (Pages and screens) · Search Console → ส่งออก Performance แล้วเลือกไฟล์ทั้งหมดในโฟลเดอร์ (Chart, Pages, Queries, Countries, Devices, Search appearance และ <b>Filters</b> ที่ใช้บอกช่วงวันที่) · ระบบอ่านไฟล์ในเครื่องของคุณก่อน แล้วส่งเฉพาะยอดสรุปขึ้นระบบ</p>}
         {!incoming && (
         <div onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)}
           onDrop={(e) => { e.preventDefault(); setDrag(false); if (!reading && !busy) pick(e.dataTransfer.files); }}
-          className={`rounded-lg border-2 border-dashed p-6 text-center ${drag ? "border-slate-900 bg-slate-100" : "border-slate-300 bg-slate-50"}`}>
+          className={`rounded-lg border-2 border-dashed p-6 text-center ${drag ? "border-brand-600 bg-slate-100" : "border-slate-300 bg-slate-50"}`}>
           <p className="mb-3 text-sm text-slate-600">ลากไฟล์ CSV มาวางที่นี่ (หลายไฟล์พร้อมกันได้) หรือ</p>
-          <button type="button" onClick={() => fileInput.current?.click()} disabled={reading || busy} className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50">เลือกไฟล์</button>
+          <button type="button" onClick={() => fileInput.current?.click()} disabled={reading || busy} className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">เลือกไฟล์</button>
           <input ref={fileInput} type="file" accept=".csv,text/csv" multiple disabled={reading || busy} onChange={(e) => { pick(e.target.files); e.target.value = ""; }} className="hidden" />
           {files.length > 0 && <p className="mt-2 text-xs text-slate-500">เลือกแล้ว {files.length} ไฟล์</p>}
         </div>
@@ -137,8 +137,8 @@ export function WebsiteManager({ isAdmin, importOnly = false, incoming }: { isAd
             {assembled.errors.map((e, i) => <p key={i} role="alert" className="rounded-md bg-amber-50 p-2 text-sm text-amber-900">{e}</p>)}
             {plans && <ul className="space-y-1 rounded-md bg-slate-50 p-3 text-sm">{plans.map((p) => <li key={p.filename}><b>{p.label}</b> ({dmy(p.period.start)}–{dmy(p.period.end)}): เพิ่ม {p.counts.insert} · อัปเดต {p.counts.update} · ข้าม {p.counts.skip}{p.fileDuplicate && <span className="text-amber-800"> · ไฟล์นี้เคยนำเข้าแล้วเมื่อ {thDateTime(p.fileDuplicate.uploadedAt)}</span>}</li>)}</ul>}
             <div className="flex flex-wrap items-center gap-3">
-              {!plans ? <button disabled={busy || !assembled.batches.length || assembled.errors.length > 0} onClick={() => plan(assembled.batches)} className="rounded-md bg-slate-900 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-40">ตรวจสอบก่อนนำเข้า</button>
-                : <button disabled={busy || (dupAny && !override)} onClick={commit} className="rounded-md bg-slate-900 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-40">{busy ? "กำลังนำเข้า..." : "ยืนยันนำเข้า"}</button>}
+              {!plans ? <button disabled={busy || !assembled.batches.length || assembled.errors.length > 0} onClick={() => plan(assembled.batches)} className="rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-40">ตรวจสอบก่อนนำเข้า</button>
+                : <button disabled={busy || (dupAny && !override)} onClick={commit} className="rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-40">{busy ? "กำลังนำเข้า..." : "ยืนยันนำเข้า"}</button>}
               {dupAny && isAdmin && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={override} onChange={(e) => setOverride(e.target.checked)} /> ยืนยันนำเข้าซ้ำ (Admin — ยอดจะอัปเดตตามคีย์ ไม่ถูกบวกซ้ำ)</label>}
               {dupAny && !isAdmin && <span className="text-sm text-amber-800">มีไฟล์ที่เคยนำเข้าแล้ว ให้ Admin เป็นผู้ยืนยัน</span>}
               <button onClick={() => { setFiles([]); setPlans(null); setFileErrors([]); }} className="text-sm underline">ล้าง</button>
@@ -148,7 +148,7 @@ export function WebsiteManager({ isAdmin, importOnly = false, incoming }: { isAd
       </section>
 
       {!importOnly && <>
-      <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-5">
+      <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
         <h2 className="font-semibold">2. ยอดผู้ใช้เว็บไซต์ (กรอกเอง)</h2>
         <p className="text-sm text-slate-600"><b>ไม่ต้องกรอก ถ้านำเข้าไฟล์ GA4 Reports snapshot ของช่วงเดียวกันแล้ว</b> (ไฟล์นั้นมี Active users จริง) · ใช้เมื่อมีแต่ไฟล์ หน้าและหน้าจอ ซึ่งไม่มียอดผู้ใช้รวม — ดูยอด <b>Active users</b> ของช่วงเดียวกันใน GA4 แล้วกรอกที่นี่</p>
         {ga4Periods.some((r) => !snapKeys.has(`${r.report_start}|${r.report_end}`)) && <p className="text-xs text-slate-500">ช่วงของไฟล์ GA4 รายหน้าที่ยังไม่มียอดผู้ใช้จาก Snapshot: {ga4Periods.filter((r) => !snapKeys.has(`${r.report_start}|${r.report_end}`)).map((r) => <button key={r.row_key} type="button" className="mr-2 underline" onClick={() => setManual({ ...manual, report_start: r.report_start, report_end: r.report_end })}>{dmy(r.report_start)}–{dmy(r.report_end)}</button>)} (กดเพื่อใช้ช่วงนี้ — ช่วงต้องตรงกับไฟล์จึงจะคำนวณร่วมกันได้)</p>}
@@ -160,11 +160,11 @@ export function WebsiteManager({ isAdmin, importOnly = false, incoming }: { isAd
           <label><span className="mb-1 block text-xs text-slate-500">เวลามีส่วนร่วมเฉลี่ยต่อผู้ใช้ (วินาที — เมื่อไม่มีไฟล์ GA4)</span><input inputMode="decimal" className={inp + " w-full"} value={manual.avg_engagement_sec_per_user} onChange={(e) => setManual({ ...manual, avg_engagement_sec_per_user: e.target.value.replace(/[^\d.]/g, "") })} /></label>
           <label><span className="mb-1 block text-xs text-slate-500">หมายเหตุ</span><input className={inp + " w-full"} value={manual.notes} onChange={(e) => setManual({ ...manual, notes: e.target.value })} /></label>
         </div>
-        <button disabled={busy || !manual.report_start || !manual.report_end || !manual.website_users} onClick={saveManual} className="rounded-md bg-slate-900 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-40">บันทึกยอดผู้ใช้</button>
+        <button disabled={busy || !manual.report_start || !manual.report_end || !manual.website_users} onClick={saveManual} className="rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white disabled:opacity-40">บันทึกยอดผู้ใช้</button>
         {manualRows.length > 0 && <ul className="text-sm text-slate-600">{manualRows.map((r) => <li key={r.row_key}>{dmy(r.report_start)}–{dmy(r.report_end)}: Users {fmt(r.website_users)}{r.page_views ? ` · Page Views ${fmt(r.page_views)}` : ""}{r.avg_engagement_sec_per_user ? ` · ${dur(Number(r.avg_engagement_sec_per_user))}` : ""}{r.notes ? ` · ${r.notes}` : ""}</li>)}</ul>}
       </section>
 
-      <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-5">
+      <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
         <h2 className="font-semibold">3. ข้อมูลที่นำเข้าแล้ว</h2>
         {!data ? <Skeleton kind={"rows"} /> : (
           <>

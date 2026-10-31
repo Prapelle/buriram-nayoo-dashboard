@@ -38,7 +38,8 @@ export function TargetsManager({ canEdit }: { canEdit: boolean }) {
       const r = await fetch("/api/targets", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...form, updated_at_seen: prev?.updated_at ?? undefined }) });
       const j = await r.json();
       if (!r.ok) { setErrors(j.fields ?? {}); throw new Error(j.error ?? "บันทึกไม่สำเร็จ"); }
-      setMsg({ type: "ok", text: `${j.created ? "บันทึก" : "แก้ไข"}เป้าหมาย ${label(form.month)} แล้ว` }); await load();
+      await load(); // โหลดค่าที่บันทึกก่อน แล้วค่อยแจ้งผล (กันค่าที่พิมพ์ต่อทันทีถูกเขียนทับด้วยค่าที่โหลดมา)
+      setMsg({ type: "ok", text: `${j.created ? "บันทึก" : "แก้ไข"}เป้าหมาย ${label(form.month)} แล้ว` });
     } catch (e) { setMsg({ type: "error", text: e instanceof Error ? e.message : "เกิดข้อผิดพลาด" }); } finally { setBusy(false); }
   }
   const inp = (k: string) => `w-full rounded-md border px-2 py-1.5 text-sm ${errors[k] ? "border-red-400" : "border-slate-300"}`;
@@ -48,7 +49,7 @@ export function TargetsManager({ canEdit }: { canEdit: boolean }) {
     <div className="space-y-5">
       <Notice msg={msg} onClose={() => setMsg(null)} />
       {canEdit && (
-        <section className="space-y-3 rounded-lg border border-slate-200 bg-white p-5">
+        <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
           <h2 className="font-semibold">{exists ? `แก้ไขเป้าหมาย ${label(form.month)}` : `ตั้งเป้าหมาย ${label(form.month)}`}</h2>
           <div className="grid gap-3 sm:grid-cols-4">
             <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">เดือน *</span><DateInput month aria-label="เดือน" value={form.month} onChange={(e) => pickMonth(e.target.value)} className={inp("month")} />{errors.month && <span className="text-xs text-red-600">{errors.month}</span>}</label>
@@ -56,11 +57,11 @@ export function TargetsManager({ canEdit }: { canEdit: boolean }) {
             <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">เป้า Lead (ราย)</span><input inputMode="numeric" aria-label="เป้า Lead (ราย)" value={form.lead_target} onChange={(e) => setForm({ ...form, lead_target: e.target.value })} placeholder="เช่น 120" className={inp("lead_target")} />{errors.lead_target && <span className="text-xs text-red-600">{errors.lead_target}</span>}</label>
             <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">หมายเหตุ</span><input aria-label="หมายเหตุ" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className={inp("notes")} /></label>
           </div>
-          <button onClick={save} disabled={busy} className="rounded-md bg-slate-900 px-5 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-40">{busy ? "กำลังบันทึก..." : "บันทึกเป้าหมาย"}</button>
+          <button onClick={save} disabled={busy} className="rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-40">{busy ? "กำลังบันทึก..." : "บันทึกเป้าหมาย"}</button>
           <p className="text-xs text-slate-500">เว้นว่าง = ไม่ตั้งเป้า · บันทึกเดือนเดิมซ้ำ = แก้ค่าเดิม · ผลเทียบเป้าแสดงที่หน้า ภาพรวมการตลาด</p>
         </section>
       )}
-      <section className="rounded-lg border border-slate-200 bg-white p-5">
+      <section className="rounded-xl border border-slate-200 bg-white p-5">
         <h2 className="mb-2 font-semibold">เป้าหมายที่ตั้งไว้</h2>
         {rows === null ? <Skeleton kind={"rows"} /> : rows.length === 0 ? <p className="text-sm text-slate-500">ยังไม่ได้ตั้งเป้าหมาย</p> : (
           <div className="overflow-x-auto"><table className="w-full text-left text-sm">

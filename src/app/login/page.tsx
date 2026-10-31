@@ -13,7 +13,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 p-6">
       <div>
-        <h1 className="text-2xl font-bold">Buriram NAYOO</h1>
+        <h1 className="text-[26px] font-bold tracking-tight">Buriram NAYOO</h1>
         <p className="text-sm text-slate-600">Marketing Dashboard — เฉพาะผู้ได้รับอนุญาต</p>
       </div>
       {error && (

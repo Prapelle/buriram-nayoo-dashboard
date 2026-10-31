@@ -9,12 +9,12 @@ export default async function ImportGuideIndex() {
   return (
     <section className="max-w-4xl space-y-5">
       <div>
-        <h1 className="text-2xl font-bold">คู่มือนำเข้าข้อมูล</h1>
+        <h1 className="text-[26px] font-bold tracking-tight">คู่มือนำเข้าข้อมูล</h1>
         <p className="text-sm text-slate-500">เลือกแพลตฟอร์มเพื่อดูวิธีดาวน์โหลดไฟล์ แล้วนำเข้าที่หน้า <Link href="/import" className="underline">นำเข้า CSV</Link></p>
       </div>
       <nav aria-label="สารบัญ" className="grid gap-3 sm:grid-cols-2">
         {GUIDES.map((g) => (
-          <Link key={g.id} href={`/settings/import-guide/${g.id}`} className="rounded-lg border border-slate-200 bg-white p-4 hover:border-slate-400 hover:bg-slate-50">
+          <Link key={g.id} href={`/settings/import-guide/${g.id}`} className="rounded-xl border border-slate-200 bg-white p-4 hover:border-slate-400 hover:bg-slate-50">
             <div className="font-semibold">{g.title}</div>
             <div className="mt-1 text-xs text-slate-500">{g.where}</div>
             <div className="mt-1 text-xs text-slate-500">ผู้นำเข้า: {g.who} · {g.when}</div>

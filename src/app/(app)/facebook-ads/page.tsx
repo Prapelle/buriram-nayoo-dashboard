@@ -25,7 +25,7 @@ export default async function FacebookAdsPage({ searchParams }: { searchParams: 
 
   let rows: Record<string, string>[];
   try { rows = (await readColumns("META_ADS", { only: [...COLS.map((c) => c.key), "imported_at"] })).rows; }
-  catch (e) { return <section><h1 className="mb-4 text-2xl font-bold">Facebook Ads</h1><p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">โหลดข้อมูลไม่สำเร็จ: {e instanceof Error ? e.message.slice(0, 200) : "ไม่ทราบสาเหตุ"} — ลอง ตั้งค่า → เตรียม Google Sheet</p></section>; }
+  catch (e) { return <section><h1 className="mb-4 text-[26px] font-bold tracking-tight">Facebook Ads</h1><p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">โหลดข้อมูลไม่สำเร็จ: {e instanceof Error ? e.message.slice(0, 200) : "ไม่ทราบสาเหตุ"} — ลอง ตั้งค่า → เตรียม Google Sheet</p></section>; }
 
   // ชื่อ Action ที่แสดง: ตัด prefix actions:/Action: — ตัวกรองยังใช้ค่าดิบ ตัวเลขจึงไม่เปลี่ยน
   const label = actionLabels(rows.map((r) => r.result_indicator));
@@ -41,7 +41,7 @@ export default async function FacebookAdsPage({ searchParams }: { searchParams: 
   const opts = (k: string) => [...new Set(rows.map((r) => r[k]).filter(Boolean))].sort();
   const last = rows.map((r) => r.imported_at).filter(Boolean).sort().pop();
   const params = { q, ad_delivery: delivery, result_indicator: ind, ad_set_name: adset };
-  const inp = "rounded-md border border-slate-300 px-2 py-1.5 text-sm";
+  const inp = "h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm";
   const sel = (name: string, text: string, val: string) => (
     <label><span className="mb-1 block text-xs text-slate-500">{text}</span><select name={name} defaultValue={val} className={inp + " max-w-52"}><option value="">ทั้งหมด</option>{opts(name).map((o) => <option key={o} value={o}>{name === "result_indicator" ? label.get(o.trim()) ?? o : o}</option>)}</select></label>
   );
@@ -50,18 +50,18 @@ export default async function FacebookAdsPage({ searchParams }: { searchParams: 
   return (
     <section className="max-w-7xl space-y-4">
       <div>
-        <h1 className="text-2xl font-bold">Facebook Ads</h1>
+        <h1 className="text-[26px] font-bold tracking-tight">Facebook Ads</h1>
         <p className="text-sm text-slate-500">อัปเดตล่าสุด: {last ? thDateTime(last) : "ยังไม่มีข้อมูล"} · นำเข้าได้ที่ <Link href="/import" className="underline">นำเข้า CSV</Link></p>
       </div>
       <form method="get" className="flex flex-wrap items-end gap-3 text-sm">
         <label><span className="mb-1 block text-xs text-slate-500">ค้นหา</span><input name="q" defaultValue={q} placeholder="ชื่อ Ad / Ad set" className={inp} /></label>
         {sel("ad_set_name", "Ad set", adset)}{sel("ad_delivery", "สถานะ", delivery)}{sel("result_indicator", "Action", ind)}
-        <button className="rounded-md bg-slate-900 px-4 py-1.5 font-medium text-white">ใช้ตัวกรอง</button>
+        <button className="rounded-lg bg-brand-600 px-4 py-1.5 font-medium text-white">ใช้ตัวกรอง</button>
         {(q || delivery || ind || adset) && <Link href="/facebook-ads" className="py-1.5 underline">ล้าง</Link>}
       </form>
       <div className="grid gap-3 lg:grid-cols-3">
-        <div className="rounded-lg border border-slate-200 bg-white p-3"><div className="text-xs text-slate-500">ค่าใช้จ่ายรวม (ตามตัวกรอง) · {v.total} แถว</div><div className="text-2xl font-bold tabular-nums">{v.total ? `฿${spend.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "รอข้อมูล"}</div></div>
-        <div className="rounded-lg border border-slate-200 bg-white p-3 lg:col-span-2">
+        <div className="rounded-xl border border-slate-200 bg-white p-3"><div className="text-xs text-slate-500">ค่าใช้จ่ายรวม (ตามตัวกรอง) · {v.total} แถว</div><div className="text-2xl font-bold tabular-nums">{v.total ? `฿${spend.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "รอข้อมูล"}</div></div>
+        <div className="rounded-xl border border-slate-200 bg-white p-3 lg:col-span-2">
           <div className="mb-1 text-xs text-slate-500">Results แยกตาม Action (ไม่รวมต่างประเภทเป็นตัวเลขเดียว)</div>
           {by.size ? <table className="w-full text-sm"><tbody>{[...by].sort((a, b) => b[1].spend - a[1].spend).map(([k, x]) => (
             <tr key={k} className="border-b border-slate-100"><td className="py-1 pr-2">{k}</td><td className="text-right tabular-nums">{k === "(ไม่มีผลลัพธ์)" ? "—" : fmtCell("int", String(x.results))}</td><td className="text-right tabular-nums text-slate-500">{x.rows} แถว · ฿{x.spend.toLocaleString("en-US", { maximumFractionDigits: 2 })}</td></tr>))}</tbody></table> : <p className="text-sm text-slate-400">รอข้อมูล</p>}

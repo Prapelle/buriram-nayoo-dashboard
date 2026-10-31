@@ -97,9 +97,9 @@ export function StatusBoard({ kind }: { kind: "seller" | "buyer" }) {
       <Notice msg={msg} onClose={() => setMsg(null)} />
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">ค้นหา</span>
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ชื่อ / เบอร์ / รหัส / Remark" className="w-56 rounded-md border border-slate-300 px-2 py-1.5 text-sm" /></label>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ชื่อ / เบอร์ / รหัส / Remark" className="w-56 h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm" /></label>
         <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">Staff</span>
-          <select value={staffF} onChange={(e) => setStaffF(e.target.value)} className="max-w-40 rounded-md border border-slate-300 px-2 py-1.5 text-sm"><option value="">ทั้งหมด</option>{staff.map((s) => <option key={s}>{s}</option>)}</select></label>
+          <select value={staffF} onChange={(e) => setStaffF(e.target.value)} className="max-w-40 h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm"><option value="">ทั้งหมด</option>{staff.map((s) => <option key={s}>{s}</option>)}</select></label>
         {(q || staffF) && <button onClick={() => { setQ(""); setStaffF(""); }} className="py-1.5 text-sm underline">ล้าง</button>}
         <span className="ml-auto text-xs text-slate-500">{shown.length.toLocaleString("en-US")} รายการ · เพิ่ม/แก้ไขรายละเอียดที่หน้า <Link href="/leads" className="underline">Leads</Link></span>
       </div>
@@ -118,7 +118,7 @@ export function StatusBoard({ kind }: { kind: "seller" | "buyer" }) {
                 onDragOver={isOther ? undefined : (e) => { if (dragId) { e.preventDefault(); setOver(k); } }}
                 onDragLeave={() => setOver((o) => (o === k ? "" : o))}
                 onDrop={isOther ? undefined : (e) => { e.preventDefault(); setOver(""); const id = e.dataTransfer.getData("text/plain") || dragId; setDragId(""); if (id) move(id, k); }}
-                className={`${(colKeys.includes(tab) ? tab : colKeys[0]) === k ? "flex" : "hidden"} max-h-[75vh] w-full shrink-0 flex-col rounded-lg border bg-slate-50 md:flex md:w-64 ${over === k ? "border-slate-900 ring-2 ring-slate-300" : "border-slate-200"}`}>
+                className={`${(colKeys.includes(tab) ? tab : colKeys[0]) === k ? "flex" : "hidden"} max-h-[75vh] w-full shrink-0 flex-col rounded-lg border bg-slate-50 md:flex md:w-64 ${over === k ? "border-brand-600 ring-2 ring-slate-300" : "border-slate-200"}`}>
                 <div className={`flex items-center justify-between rounded-t-lg px-3 py-2 text-sm font-semibold ${HEAD[k]}`}>
                   <span>{isOther ? "ค่าเดิมที่ไม่รู้จัก" : k}</span><span className="rounded-full bg-white/70 px-2 text-xs">{list.length}</span>
                 </div>

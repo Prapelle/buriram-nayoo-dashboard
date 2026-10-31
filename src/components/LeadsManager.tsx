@@ -163,11 +163,11 @@ export function LeadsManager() {
   );
   const fsel = (k: keyof typeof f, label: string, opts: [string, string][]) => (
     <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">{label}</span>
-      <select value={f[k]} onChange={(e) => { setF({ ...f, [k]: e.target.value, ...(k === "need" ? { status: "" } : {}) }); setPage(1); }} className="max-w-40 rounded-md border border-slate-300 px-2 py-1.5 text-sm"><option value="">ทั้งหมด</option>{opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
+      <select value={f[k]} onChange={(e) => { setF({ ...f, [k]: e.target.value, ...(k === "need" ? { status: "" } : {}) }); setPage(1); }} className="max-w-40 h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm"><option value="">ทั้งหมด</option>{opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
   );
   const fdate = (k: "from" | "to", label: string) => (
     <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">{label}</span>
-      <DateInput value={f[k]} onChange={(e) => { setF({ ...f, [k]: e.target.value }); setPage(1); }} className="rounded-md border border-slate-300 px-2 py-1.5 text-sm" /></label>
+      <DateInput value={f[k]} onChange={(e) => { setF({ ...f, [k]: e.target.value }); setPage(1); }} className="h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm" /></label>
   );
   const pair = (a: string[]): [string, string][] => a.map((x) => [x, x]);
 
@@ -271,7 +271,7 @@ export function LeadsManager() {
               <div className="flex gap-3"><button onClick={() => save({ confirmDuplicate: true })} disabled={saving} className="rounded-md bg-amber-700 px-3 py-1.5 text-white">บันทึกต่อ (เป็นรายการแยก)</button><button onClick={() => setDups(null)} className="underline">กลับไปแก้ไข</button></div>
             </div>
           )}
-          <button onClick={() => save()} disabled={saving} className="rounded-md bg-slate-900 px-5 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-40">{saving ? "กำลังบันทึก..." : "บันทึก"}</button>
+          <button onClick={() => save()} disabled={saving} className="rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-40">{saving ? "กำลังบันทึก..." : "บันทึก"}</button>
           {editing && (
             <div className="border-t pt-4">
               {!delAsk
@@ -295,7 +295,7 @@ export function LeadsManager() {
           <span className="text-xs text-slate-500">ติดตามลูกค้า:</span>
           {([["overdue", "เลยกำหนด", fu.overdue.length, "bg-red-600"], ["today", "วันนี้", fu.today.length, "bg-amber-500"], ["stale", `ค้างเกิน ${STALE_DAYS} วัน`, fu.stale.length, "bg-slate-600"]] as const).map(([k, l, n, c]) => (
             <button key={k} onClick={() => { setFollow(follow === k ? "" : k); setPage(1); }} aria-pressed={follow === k}
-              className={`rounded-full px-3 py-1 text-xs ${follow === k ? "bg-slate-900 text-white" : "bg-white ring-1 ring-slate-200 hover:bg-slate-100"}`}>
+              className={`rounded-full px-3 py-1 text-xs ${follow === k ? "bg-brand-600 text-white" : "bg-white ring-1 ring-slate-200 hover:bg-slate-100"}`}>
               {l} <span className={`ml-1 rounded-full px-1.5 text-white ${n ? c : "bg-slate-300"}`}>{n}</span></button>))}
           {follow && <button onClick={() => setFollow("")} className="text-xs underline">แสดงทั้งหมด</button>}
           <span className="text-xs text-slate-400">ไม่นับ Lead ที่จบแล้ว (ซื้อสำเร็จ / กู้ไม่ผ่าน / ไม่สนใจ / ขายแล้ว / ยกเลิก / บ้านไม่พร้อมขาย / Archive / Close)</span>
@@ -303,13 +303,13 @@ export function LeadsManager() {
       )}
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">ค้นหา</span>
-          <input value={f.q} onChange={(e) => { setF({ ...f, q: e.target.value }); setPage(1); }} placeholder="ชื่อ / เบอร์ / Line / ความสนใจ / Remark" className="w-56 rounded-md border border-slate-300 px-2 py-1.5 text-sm" /></label>
+          <input value={f.q} onChange={(e) => { setF({ ...f, q: e.target.value }); setPage(1); }} placeholder="ชื่อ / เบอร์ / Line / ความสนใจ / Remark" className="w-56 h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm" /></label>
         {fdate("from", "รับตั้งแต่")}{fdate("to", "ถึง")}
         {fsel("channel", "ช่องทาง", pair(CHANNELS))}{fsel("need", "ความต้องการ", pair(NEEDS))}{fsel("status", "สถานะ", pair(statusOptsFilter))}
         {fsel("callStatus", "Call Status", pair(CALL_STATUS))}{fsel("staff", "Staff", pair(data.staff))}
         {fsel("area", "พื้นที่", pair(data.areas))}
         {Object.values(f).some(Boolean) && <button onClick={() => { setF(EMPTY_F); setPage(1); }} className="py-1.5 text-sm underline">ล้าง</button>}
-        <button onClick={() => openForm(null)} className="ml-auto hidden rounded-md bg-slate-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-slate-700 md:block">+ เพิ่ม Lead</button>
+        <button onClick={() => openForm(null)} className="ml-auto hidden rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700 md:block">+ เพิ่ม Lead</button>
       </div>
 
       {data.state === "loading" && <Skeleton kind={"rows"} />}
@@ -322,7 +322,7 @@ export function LeadsManager() {
           {mobile && <ul className="space-y-2" aria-label="รายการ Lead">{slice.map((r) => {
             const st = leadStatusOf(r); const overdue = r.next_follow_up_at && r.next_follow_up_at < today && !CLOSED.includes(st);
             return (
-              <li key={r.lead_id} className="rounded-lg border border-slate-200 bg-white p-3 text-sm">
+              <li key={r.lead_id} className="rounded-xl border border-slate-200 bg-white p-3 text-sm">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0"><div className="font-medium">{r.customer_name}</div><div className="text-xs text-slate-500"><span className="font-mono">{r.lead_code}</span> · {dmy(r.received_at)} · {r.source_channel}</div></div>
                   <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-xs">{r.need || "ยังไม่ระบุ"}</span>
@@ -335,14 +335,14 @@ export function LeadsManager() {
                 {r.interest && <p className="mt-1 line-clamp-2 text-xs text-slate-600">สนใจ: {r.interest}</p>}
                 {r.next_follow_up_at && <p className={`mt-1 text-xs ${overdue ? "font-semibold text-red-600" : "text-slate-600"}`}>ติดตาม {dmy(r.next_follow_up_at)}{overdue && " (เลยกำหนด)"}</p>}
                 <div className="mt-2 flex flex-wrap gap-2">
-                  {r.phone && <a href={telHref(r.phone)} className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white">โทร {r.phone}</a>}
-                  {r.line_id && <a href={lineHref(r.line_id)} target="_blank" rel="noreferrer" className="rounded-md bg-green-500 px-3 py-1.5 text-xs font-medium text-white">LINE</a>}
-                  <button onClick={() => { setViewing(r); setForm(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="rounded-md border border-slate-300 px-3 py-1.5 text-xs">ดู</button>
-                  <button onClick={() => openForm(r)} className="rounded-md border border-slate-300 px-3 py-1.5 text-xs">แก้ไข</button>
+                  {r.phone && <a href={telHref(r.phone)} className="inline-flex h-11 flex-1 items-center justify-center rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white">โทร {r.phone}</a>}
+                  {r.line_id && <a href={lineHref(r.line_id)} target="_blank" rel="noreferrer" className="inline-flex h-11 flex-1 items-center justify-center rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-800">LINE</a>}
+                  <button onClick={() => { setViewing(r); setForm(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="inline-flex h-11 items-center rounded-lg border border-slate-300 px-3 text-sm">ดู</button>
+                  <button onClick={() => openForm(r)} className="inline-flex h-11 items-center rounded-lg border border-slate-300 px-3 text-sm">แก้ไข</button>
                 </div>
               </li>);
           })}</ul>}
-          {!mobile && <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+          {!mobile && <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
             <table className="w-full text-left text-sm">
               <thead><tr className="border-b bg-slate-50 text-xs text-slate-500">
                 {(([["lead_code", "รหัส"], ["received_at", "วันที่รับ"], ["customer_name", "ชื่อ"], [null, "เบอร์"], ["source_channel", "ช่องทาง"], ["need", "ความต้องการ"], ["status", "สถานะ"], [null, "ประเภท / ราคา"], ["call_status", "Call Status"], ["staff", "Staff"], ["next_follow_up_at", "ติดตามถัดไป"]]) as [SortKey | null, string][]).map(([k, l], i) => {
@@ -376,7 +376,7 @@ export function LeadsManager() {
           <p className="text-xs text-slate-500">• สถานะแสดงตามความต้องการ: ซื้อ / เช่า / สร้าง ใช้ Buy Status · ขาย ใช้ Sell Status · Dashboard นับ Qualified / Won / Lost จากสถานะเหล่านี้ · กดหัวคอลัมน์เพื่อเรียง</p>
         </div>
       )}
-      {!form && <button onClick={() => openForm(null)} aria-label="เพิ่ม Lead (มือถือ)" className="fixed bottom-5 right-5 z-30 flex h-14 items-center gap-1 rounded-full bg-slate-900 px-5 text-sm font-semibold text-white shadow-lg md:hidden">+ เพิ่ม Lead</button>}
+      {!form && <button onClick={() => openForm(null)} aria-label="เพิ่ม Lead (มือถือ)" className="fixed bottom-20 right-4 z-30 flex h-13 items-center gap-1 rounded-full bg-brand-600 px-5 text-sm font-semibold text-white shadow-lg shadow-brand-600/30 md:hidden">+ เพิ่ม Lead</button>}
     </div>
   );
 }

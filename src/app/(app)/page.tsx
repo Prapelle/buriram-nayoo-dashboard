@@ -4,6 +4,7 @@ import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Note } from "@/components/Note";
+import { PageHeader, btn } from "@/components/PageHeader";
 import { auth } from "@/auth";
 import { fetchDashboardData } from "@/lib/dashboard-data";
 import { CHANNELS, SERVICES, computeDashboardCompared, dmyS, type Dashboard, type Filters } from "@/lib/dashboard";
@@ -26,7 +27,7 @@ const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) 
 const iso = (v: string) => (/^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
 
 const Card = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <div className="rounded-lg border border-slate-200 bg-white p-4"><h3 className="mb-3 text-sm font-semibold">{title}</h3>{children}</div>
+  <div className="rounded-xl border border-slate-200 bg-white p-4"><h3 className="mb-3 text-sm font-semibold">{title}</h3>{children}</div>
 );
 
 export default async function OverviewPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -60,7 +61,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
   } catch (e) {
     return (
       <section>
-        <h1 className="mb-4 text-2xl font-bold">ภาพรวมการตลาด</h1>
+        <h1 className="mb-4 text-[26px] font-bold tracking-tight">ภาพรวมการตลาด</h1>
         <p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">
           โหลดข้อมูลไม่สำเร็จ: {e instanceof Error ? e.message.slice(0, 200) : "ไม่ทราบสาเหตุ"}
           <br />ถ้าเพิ่งอัปเดตระบบ ให้ไปที่ <Link href="/settings" className="underline">ตั้งค่า → เตรียม Google Sheet</Link> อีกครั้ง
@@ -69,22 +70,32 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
     );
   }
   const filtered = Object.values(f).some(Boolean) || !!mode;
-  const inp = "rounded-md border border-slate-300 px-2 py-1.5 text-sm";
+  const inp = "h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm";
   const c = dash.charts;
+  // ป้ายตัวกรองที่ใช้อยู่ (นอกจากช่วงวันที่) — กดเพื่อเอาตัวกรองนั้นออก
+  const qs = (drop: string) => { const u = new URLSearchParams(); for (const [k, v] of Object.entries({ from: f.from, to: f.to, channel: f.channel, campaign: f.campaign, area: f.area, service: f.service, compare: mode })) if (v && k !== drop) u.set(k, v); if (!f.from && !f.to) u.set("range", "all"); return "/?" + u.toString(); };
+  const active = ([["channel", "ช่องทาง", f.channel], ["campaign", "Campaign", f.campaign], ["area", "พื้นที่", f.area && (AREAS.find(([v]) => v === f.area)?.[1] ?? f.area)], ["service", "Service", f.service], ["compare", "เปรียบเทียบ", mode && (mode === "yoy" ? "ปีก่อน" : "ช่วงก่อนหน้า")]] as [string, string, string | undefined][])
+    .filter(([, , v]) => v).map(([k, l, v]) => ({ k, label: `${l}: ${v}`, href: qs(k) }));
   const imp = role !== "sales" ? "/import" : undefined; // ช่องที่ยังไม่มีข้อมูล → ลิงก์ไปนำเข้า
 
   return (
     <section className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">ภาพรวมการตลาด</h1>
-        <p className="text-sm text-slate-500">
-          อัปเดตล่าสุด: {when(dash.lastImport)}
-          {dash.dataRange && <> · ข้อมูลโฆษณาครอบคลุม {dmy(dash.dataRange.start)} – {dmy(dash.dataRange.end)}</>}
-        </p>
-      </div>
+      <PageHeader crumb="หน้าแรก" title="ภาพรวมการตลาด" sub={<>อัปเดตล่าสุด: {when(dash.lastImport)}{dash.dataRange && <> · ข้อมูลโฆษณาครอบคลุม {dmy(dash.dataRange.start)} – {dmy(dash.dataRange.end)}</>}</>}>
+        <Link href="/export" prefetch={false} className={btn.secondary}>ส่งออก</Link>
+        {role !== "sales" && <Link href="/import" prefetch={false} className={btn.primary}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 20h16" /></svg>นำเข้าข้อมูล</Link>}
+      </PageHeader>
 
-      <form method="get" action="/" className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-white p-4 text-sm">
+      <form method="get" action="/" className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm">
         <RangeFields from={f.from} to={f.to} className={inp} remembered={rg.remembered} />
+        <button className="h-9 rounded-lg bg-brand-600 px-4 font-medium text-white hover:bg-brand-700">ใช้ตัวกรอง</button>
+        {filtered && <Link href="/?range=all" className="py-1.5 text-slate-600 underline">ล้างตัวกรอง</Link>}
+        {/* แบบ A: ตัวกรองอื่นเก็บไว้ใน "ตัวกรองเพิ่มเติม" · ตัวกรองที่ใช้อยู่แสดงเป็นป้าย กด × เพื่อลบ */}
+        {active.map((a) => <Link key={a.k} href={a.href} prefetch={false} className="inline-flex h-8 items-center gap-1.5 self-center rounded-full bg-brand-50 px-3 text-[13px] text-brand-800 hover:bg-brand-100">{a.label}<span aria-label="ลบตัวกรอง">×</span></Link>)}
+        <details className="group w-full" open={active.length > 0}>
+          <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-[13px] hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4" /></svg>ตัวกรองเพิ่มเติม{active.length > 0 && ` (${active.length})`}<span aria-hidden="true" className="group-open:rotate-180">▾</span>
+          </summary>
+          <div className="mt-3 flex flex-wrap items-end gap-3">
         <label><span className="mb-1 block text-xs text-slate-500">ช่องทาง</span>
           <select name="channel" defaultValue={f.channel ?? ""} className={inp}><option value="">ทั้งหมด</option>{CHANNELS.map((x) => <option key={x}>{x}</option>)}</select></label>
         <label><span className="mb-1 block text-xs text-slate-500">Campaign / Ad set</span>
@@ -95,8 +106,8 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
           <select name="service" defaultValue={f.service ?? ""} className={inp}><option value="">ทั้งหมด</option>{SERVICES.map((x) => <option key={x}>{x}</option>)}</select></label>
         <label><span className="mb-1 block text-xs text-slate-500">เปรียบเทียบ</span>
           <select name="compare" defaultValue={mode ?? ""} className={inp}><option value="">ไม่เปรียบเทียบ</option><option value="yoy">ปีก่อน (YoY)</option><option value="prev">ช่วงก่อนหน้า</option></select></label>
-        <button className="rounded-md bg-slate-900 px-4 py-1.5 font-medium text-white hover:bg-slate-700">ใช้ตัวกรอง</button>
-        {filtered && <Link href="/?range=all" className="py-1.5 underline">ล้างตัวกรอง</Link>}
+          </div>
+        </details>
       </form>
 
       {!dash.hasAnyData && (

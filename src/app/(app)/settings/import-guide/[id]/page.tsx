@@ -13,7 +13,7 @@ export default async function ImportGuideTopic({ params }: { params: Promise<{ i
   return (
     <section className="max-w-4xl space-y-4">
       <Link href="/settings/import-guide" className="text-sm underline">← สารบัญคู่มือนำเข้าข้อมูล</Link>
-      <article className="space-y-3 rounded-lg border border-slate-200 bg-white p-5">
+      <article className="space-y-3 rounded-xl border border-slate-200 bg-white p-5">
         <h1 className="text-xl font-bold">{g.title}</h1>
         <dl className="grid gap-2 text-sm sm:grid-cols-3">
           <div><dt className="text-xs text-slate-500">ดาวน์โหลดจาก</dt><dd>{g.where}</dd></div>
