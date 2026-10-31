@@ -217,7 +217,27 @@ try {
   await m.page.goto(BASE + "/settings"); await m.page.waitForURL(BASE + "/");
   await m.page.setViewportSize({ width: 390, height: 844 }); await m.page.goto(BASE + "/settings/metrics/performance"); await m.page.getByRole("heading", { name: /Marketing Performance/, level: 1 }).waitFor();
   assert.ok(await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth) <= 1, "มือถือล้นแนวนอน");
+  // ---- ปุ่มเบอร์เกอร์ (มือถือ): เมนูปิดไว้ก่อน · กดเปิด · กดลิงก์แล้วเปลี่ยนหน้า + ปิด · พื้นหลัง/Esc ปิด ----
+  const burger = m.page.getByRole("button", { name: /เปิดเมนู|ปิดเมนู/ });
+  const expanded = async (v) => { for (let i = 0; i < 40; i++) { if ((await burger.getAttribute("aria-expanded")) === v) return; await m.page.waitForTimeout(100); } assert.fail("aria-expanded ไม่เป็น " + v); };
+  const mnav = m.page.getByRole("navigation", { name: "เมนูหลัก" });
+  await expanded("false"); assert.ok(!(await mnav.isVisible()));
+  await burger.click(); await mnav.waitFor({ state: "visible" }); await expanded("true");
+  if (process.env.SHOT_DIR) { await m.page.waitForTimeout(300); await m.page.screenshot({ path: process.env.SHOT_DIR + "/menu-mobile-open.png" }); }
+  assert.ok(await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth) <= 1, "เมนูมือถือทำให้ล้นแนวนอน");
+  await mnav.getByRole("link", { name: "คู่มือนำเข้าข้อมูล" }).click(); await m.page.waitForURL(BASE + "/settings/import-guide");
+  await mnav.waitFor({ state: "hidden" }); await expanded("false");
+  await burger.click(); await mnav.waitFor({ state: "visible" }); await m.page.keyboard.press("Escape"); await mnav.waitFor({ state: "hidden" });
+  await burger.click(); await mnav.waitFor({ state: "visible" }); await m.page.mouse.click(370, 400); await mnav.waitFor({ state: "hidden" });
   await m.page.setViewportSize({ width: 1280, height: 800 });
+  // ---- จอใหญ่: เมนูเปิดไว้ก่อน · กดซ่อน · จำค่าหลังโหลดหน้าใหม่ · กดแสดงอีกครั้ง ----
+  await mnav.waitFor({ state: "visible" }); await expanded("true");
+  await burger.click(); await mnav.waitFor({ state: "hidden" });
+  if (process.env.SHOT_DIR) await m.page.screenshot({ path: process.env.SHOT_DIR + "/menu-desktop-hidden.png" });
+  await m.page.reload(); await m.page.getByRole("heading", { name: "คู่มือนำเข้าข้อมูล" }).waitFor(); await m.page.waitForTimeout(300);
+  assert.ok(!(await mnav.isVisible()), "จอใหญ่ไม่จำค่าซ่อนเมนู"); await expanded("false");
+  await burger.click(); await mnav.waitFor({ state: "visible" });
+  ok("ปุ่มเบอร์เกอร์: มือถือปิดไว้ก่อน กดเปิด/กดลิงก์ปิด/Esc/พื้นหลังปิด ไม่ล้นจอ · จอใหญ่เปิดไว้ก่อน กดซ่อน/แสดง และจำค่าหลังโหลดหน้าใหม่");
   ok("ตั้งค่า (Marketing): คู่มือนำเข้าข้อมูล / คำอธิบายตัวเลข หน้าแรกเป็นสารบัญอย่างเดียว · กดแต่ละหัวข้อเปิดหน้าของหัวข้อนั้น (6 + 5 หน้า) เนื้อหาครบ · หัวข้อที่ไม่มี = 404 · ตั้งค่าระบบไม่เห็นและเข้าไม่ได้ · มือถือไม่ล้น");
   await m.page.goto(BASE + "/"); await m.page.getByText(/ข้อมูลเดือน .*: ครบ \d+\/9/).first().waitFor(); // Marketing: ไม่มีแถวยอดขาย
   assert.equal(await m.page.getByRole("heading", { name: "ติดตามลูกค้า (ฝ่ายขาย)" }).count(), 0); assert.ok(await m.page.getByText("แก้ไขเป้า").isVisible());
