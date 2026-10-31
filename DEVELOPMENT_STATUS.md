@@ -23,7 +23,7 @@
 - ห้ามสมมติว่า Schema ใน Sheet จริงตรงกับโค้ด: ใช้ ตั้งค่า → ตรวจสอบระบบ เพื่อยืนยัน
 
 ## 1) โครงสร้างโปรเจกต์ที่พบจริง
-- **Framework:** Next.js 15 (App Router) + React 19 + TypeScript + Tailwind 4
+- **Framework:** Next.js 16 (App Router, Turbopack) + React 19.2 + TypeScript + Tailwind 4
 - **Hosting:** Cloudflare Workers ผ่าน OpenNext (@opennextjs/cloudflare) Deploy จาก GitHub
 - **ฐานข้อมูล:** Google Sheets ผ่าน REST API ฝั่ง Server (Service Account, JWT ด้วย `jose`) ไม่มี Supabase/ฐานข้อมูลอื่น
 - **Login:** Auth.js (next-auth v5) + Google OAuth อนุญาตเฉพาะอีเมลใน `APP_USERS` (+ `INITIAL_ADMIN_EMAIL`) Role: admin / marketing / sales ตรวจฝั่ง Server ทุก Route (`requireRole`) ปฏิเสธคำขอข้ามเว็บ
@@ -1279,3 +1279,16 @@ Users 17,443 · Page Views 42,450 · PV/User 2.43 · Duration 1 นาที 0 �
   - ลากไปเข้าพบแล้วต้องเลือก เจอหน้า → บันทึกลงประวัติ
 
 **Passed:** 444/444 (รันทั้งชุด 2 รอบติดกัน) · TypeScript + Cloudflare build ผ่าน
+
+## 44) ตรวจทั้งระบบ + แก้ตามผลตรวจ (1/11/2026)
+- **Sales Pipeline (หน้าภาพรวม):** แยก 2 กราฟ คนต้องการซื้อ / คนต้องการขาย · นับแบบสะสม (ขั้นถัดไปไม่เกินขั้นก่อน) · ขั้น Qualified ใช้นิยามเดียวกับการ์ด Qualified (เดิมใช้ช่อง status แบบเก่า ทำให้ Qualified 3 ไม่ตรงกับการ์ด 2)
+  - ซื้อ: Lead ที่รับ → ติดต่อได้แล้วขึ้นไป → Qualified → Walk in → ซื้อสำเร็จ · ขาย: Lead ที่รับ → สนใจขายขึ้นไป → Qualified → ขายแล้ว
+- **การ์ด Leads:** Total Leads · Qualified (รวม) · Leads / Qualified คนต้องการซื้อ · Leads / Qualified คนต้องการขาย
+- **Performance:** Customer Funnel + ตารางช่องทาง แยกแท็บ คนต้องการซื้อ / คนต้องการขาย (`?side=seller`) · ฝั่งซื้อมีขั้น Walk in · ขั้นสุดท้าย = ซื้อสำเร็จ / ขายแล้ว ตามแท็บ · Reach และเข้าเว็บไซต์ใช้ร่วมกัน
+- **ช่องทาง:** ลบชื่อช่องทางเก่า (Facebook Organic, TikTok/YouTube) ออกจากระบบ — ค่าที่ไม่อยู่ในรายการแสดงและนับเป็น Unknown (`canonChannel`) · ไม่แก้ค่าใน Sheet เอง จนกว่าจะบันทึก Lead นั้น · ไฟล์ส่งออก leads.csv คงค่าดิบ แต่ตัวกรองช่องทางใช้ค่าที่แปลงแล้ว
+  - แก้บั๊ก: แถว Unknown ในตารางช่องทางนับได้ 0 เสมอ · ช่องทางที่ไม่ใช่ Facebook Ads / Google Ads (รวม Unknown) = Organic
+- **CPL เป็น N/A:** บอกช่วงที่มีค่าโฆษณา และจำนวน Lead ที่อยู่นอกช่วงนั้น
+- **การ์ด KPI (KpiGrid):** มือถือแถวละ 2 การ์ด · การ์ดที่รอข้อมูลรวมเป็นบรรทัดเดียวท้ายกลุ่ม (กดดูเหตุผลรายตัว)
+- **มือถือ:** หน้า Performance ล้นจอแนวนอน 236px เมื่อมีข้อมูล → แก้ (grid-cols-1 + min-w-0)
+- **อัปเกรด Next.js 15.5 → 16.4.3** (Turbopack) + @opennextjs/cloudflare 1.20.15 — แก้ปัญหา hydration #418 ที่สุ่มเกิดใน 15.5 (React canary ชนกับการแสดง Suspense แบบทยอย ทำให้หน้ากะพริบ/บางครั้ง error parentNode) · ตรวจเปิด 25 หน้า × 2 ขนาดจอ × 2 รอบ = 100 ครั้ง: hydration error 0 · ล้นจอ 0 · error ในหน้า 0
+- **Passed:** 483/483 · TypeScript + Cloudflare build ผ่าน · Worker รันได้ใน wrangler dev (gzip 1.56 MB)

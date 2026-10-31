@@ -1,4 +1,4 @@
-import { LEGACY_CHANNELS } from "./dashboard";
+import { canonChannel } from "./dashboard";
 import { writeAudit } from "./audit";
 import { CALL_DEFAULT, CALL_STATUS, normCall, SELL_DEFAULT, SELL_STATUS } from "./lead-options";
 import { areaLabel, AREA_SUGGEST, contactableFor, findDuplicates, LEAD_COLUMNS, leadStatusOf, nextLeadCode, normalizeEmail, normalizeLine, normalizePhone, pipelineOf, resolveNeedStatus, stampStatus, statusFieldOf, todayBkk, validateLead, type DupMatch, type Lead } from "./leads";
@@ -19,7 +19,7 @@ export async function listLeads() {
   const t = await load();
   const staff = [...new Set(t.LEADS.rows.map((r) => String(r.staff ?? "").trim()).filter(Boolean))].sort();
   const owners = [...new Set(t.APP_USERS.rows.filter((u) => String(u.active).toUpperCase() === "TRUE" && ["admin", "sales"].includes(u.role)).map((u) => u.email))].sort();
-  const rows = t.LEADS.rows.filter((r) => r.lead_id).map(pick)
+  const rows = t.LEADS.rows.filter((r) => r.lead_id).map((r) => { const l = pick(r); l.source_channel = canonChannel(l.source_channel); return l; }) // ชื่อช่องทางเก่า → Unknown (แก้ใน Sheet เมื่อบันทึก Lead นั้น)
     .sort((a, b) => b.received_at.localeCompare(a.received_at) || b.lead_code.localeCompare(a.lead_code));
   // พื้นที่ที่เคยกรอก (ชื่อที่แสดง) ใช้เป็นตัวเลือกช่วยกรอกและตัวกรอง
   const areas = [...new Set([...AREA_SUGGEST, ...rows.map((r) => areaLabel(r.area)).filter(Boolean)])];
@@ -50,9 +50,6 @@ export async function saveLead(input: Record<string, unknown>, actor: string) {
     if (input.updated_at_seen !== prev.updated_at) throw new LeadError(409, "Lead นี้ถูกแก้ไขโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่ก่อนแก้ไข", "STALE");
   }
 
-  // ช่องทางเดิม (Facebook Organic, TikTok/YouTube): Lead เดิมคงค่าไว้ได้ แต่เลือกให้ Lead ใหม่ / เปลี่ยนเป็นค่านี้ไม่ได้
-  if (LEGACY_CHANNELS.includes(v.rec.source_channel) && (!prev || prev.source_channel !== v.rec.source_channel))
-    throw new LeadError(422, "ช่องทางนี้เลิกใช้แล้ว กรุณาเลือกช่องทางใหม่", "VALIDATION", { fields: { source_channel: "ช่องทางนี้เลิกใช้แล้ว" } });
   const contactChanged = !prev || normalizePhone(prev.phone) !== normalizePhone(v.rec.phone) || normalizeEmail(prev.email) !== normalizeEmail(v.rec.email) || normalizeLine(prev.line_id) !== normalizeLine(v.rec.line_id);
   if (contactChanged && input.confirmDuplicate !== true) {
     const matches = findDuplicates(rows.map(pick), v.rec, leadId || undefined);

@@ -1,6 +1,6 @@
 import { batchGet, listTabs } from "./sheets";
 import type { DashData, Row } from "./dashboard";
-import { DEFAULT_EXCLUDED_PAGES } from "./dashboard";
+import { canonChannel, DEFAULT_EXCLUDED_PAGES } from "./dashboard";
 import type { Role } from "./roles";
 
 /** อ่านเฉพาะคอลัมน์ที่ใช้ (ไม่อ่าน raw_json/ข้อความยาว/ข้อมูลส่วนบุคคล) ใช้ API 2 calls รวม */
@@ -56,7 +56,7 @@ export async function fetchDashboardData(role: Role): Promise<DashData> {
     .map((r) => r.imported_at).filter(Boolean).sort().pop() ?? "";
   return {
     meta: byTab.META_ADS, google: byTab.GOOGLE_ADS_CAMPAIGNS, gtime: byTab.GOOGLE_ADS_TIME_SERIES, posts: byTab.FB_PAGE_POSTS,
-    line: byTab.LINE_OA_MONTHLY, leads: byTab.LEADS, sales: byTab.SALES, excludedPages, lastImport,
+    line: byTab.LINE_OA_MONTHLY, leads: byTab.LEADS.map((r) => ({ ...r, source_channel: canonChannel(r.source_channel) })), sales: byTab.SALES, excludedPages, lastImport,
     web: byTab.WEBSITE_ANALYTICS ?? [], webTabMissing, fbPage: byTab.FB_PAGE_INSIGHTS ?? [], targets: byTab.MONTHLY_TARGETS ?? [],
   };
 }

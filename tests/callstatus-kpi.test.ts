@@ -16,7 +16,7 @@ const k = Object.fromEntries(d.groups.flatMap((g) => g.items).map((x) => [x.key,
 
 t("เตรียมข้อมูล: ค่าโฆษณา 9,000 · Lead 9 ราย", () => { assert.equal(k.paid.value, 9000); assert.equal(k.leads.value, 9); });
 t("Qualified Leads = 5 (รอเข้าชม, เข้าชมแล้ว, จอง, ซื้อสำเร็จ, กู้ไม่ผ่าน) · ติดต่อได้แล้วไม่นับ", () => {
-  assert.equal(k.qualified.value, 5); assert.equal(d.charts.leadQualByChannel!.reduce((s, x) => s + x.value, 0), 5); assert.match(k.qualified.note!, /ติดต่อได้แล้วยังไม่นับ/);
+  assert.equal(k.qualified.value, 5); assert.equal(d.charts.leadQualByChannel!.reduce((s, x) => s + x.value, 0), 5); assert.match(k.qualified_buy.note!, /ติดต่อได้แล้วยังไม่นับ/); assert.equal(k.qualified_buy.value, 5); assert.equal(k.qualified_sell.value, 0);
 });
 t("Cost per Site Visit = 9,000 ÷ 4 (เข้าชมแล้ว, จอง, ซื้อสำเร็จ, กู้ไม่ผ่าน) = 2,250", () => { assert.equal(k.cpsv.value, 2250); assert.match(k.cpsv.note!, /เข้าชมแล้ว \/ จอง \/ ซื้อสำเร็จ \/ กู้ไม่ผ่าน/); });
 t("Lead เก่าที่ยังใช้ชื่อเดิม (เข้าชมโครงการแล้ว) ยังนับ Qualified และ Site Visit", () => {
@@ -28,5 +28,18 @@ t("ไม่มีใครเข้าชม → Cost per Site Visit = N/A ไ�
   const d3 = computeDashboard({ ...data, leads: [L("N1", "ติดต่อได้แล้ว"), L("N2", "รอเข้าชม")] }, {}, "admin");
   const k3 = Object.fromEntries(d3.groups.flatMap((g) => g.items).map((x) => [x.key, x]));
   assert.equal(k3.cpsv.state, "na"); assert.equal(k3.cpsv.value, null); assert.equal(k3.qualified.value, 1);
+});
+t("Pipeline สะสม แยกซื้อ/ขาย (1/11/2026): ขั้นถัดไปไม่เกินขั้นก่อน · Qualified ตรงกับการ์ด", () => {
+  const sl = [L("S1", "", { need: "ขาย", sell_status: "ขายแล้ว" }), L("S2", "", { need: "ขาย", sell_status: "เซ็นสัญญา" }), L("S3", "", { need: "ขาย", sell_status: "สนใจขาย" }), L("S4", "", { need: "ขาย", sell_status: "ยกเลิก" })];
+  const dp = computeDashboard({ ...data, leads: [...leads, ...sl] }, {}, "admin"); const kp = Object.fromEntries(dp.groups.flatMap((g) => g.items).map((x) => [x.key, x]));
+  const b = Object.fromEntries(dp.charts.pipelineBuy!.map((x) => [x.label, x.value])), s = Object.fromEntries(dp.charts.pipelineSell!.map((x) => [x.label, x.value]));
+  assert.deepEqual(dp.charts.pipelineBuy!.map((x) => x.value), [9, 6, 5, 4, 1]); assert.equal(b.Qualified, kp.qualified_buy.value);
+  assert.deepEqual(dp.charts.pipelineSell!.map((x) => x.value), [4, 3, 2, 1]); assert.equal(s["Qualified (สัญญา + ขายแล้ว)"], kp.qualified_sell.value);
+  assert.equal(kp.leads_buy.value, 9); assert.equal(kp.leads_sell.value, 4); assert.equal(kp.qualified.value, 7);
+  for (const p of [dp.charts.pipelineBuy!, dp.charts.pipelineSell!]) p.forEach((x, i) => assert.ok(!i || x.value <= p[i - 1].value));
+});
+t("CPL N/A บอกเหตุผลชัด: ค่าโฆษณามีช่วงไหน และ Lead อยู่นอกช่วง", () => {
+  const dn = computeDashboard({ ...data, leads: [L("O1", "รอเข้าชม", { received_at: "2026-10-05" })] }, {}, "admin"); const kn = Object.fromEntries(dn.groups.flatMap((g) => g.items).map((x) => [x.key, x]));
+  assert.equal(kn.cpl.state, "na"); assert.match(kn.cpl.note!, /ค่าโฆษณามีช่วง 1 ก\.ย\. 69.*Lead ที่รับในช่วงนั้น = 0.*มี 1 Lead แต่รับนอกช่วง/);
 });
 console.log("ผ่านทั้งหมด");

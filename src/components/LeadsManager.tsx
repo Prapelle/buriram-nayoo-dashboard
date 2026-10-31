@@ -6,7 +6,7 @@ import { useAsk } from "@/components/AskDialog";
 import { DateInput } from "@/components/DateInput";
 import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ALL_CHANNELS, CHANNELS, channelLabel, LEGACY_CHANNELS } from "@/lib/dashboard";
+import { CHANNELS } from "@/lib/dashboard";
 import { CALL_DEFAULT, normCall } from "@/lib/lead-options";
 import { CLOSED_BUY, CLOSED_CALL, CLOSED_SELL, followUps, STALE_DAYS } from "@/lib/lead-insights";
 import { lineHref, telHref } from "@/lib/contact-links";
@@ -228,7 +228,7 @@ export function LeadsManager() {
             return (<>
               {grp("1. ข้อมูลติดต่อ", <>
                 {field("received_at", "วันที่รับ Lead", { type: "date", required: true })}
-                {select("source_channel", "ช่องทาง", [...pair(CHANNELS), ...(LEGACY_CHANNELS.includes(form.source_channel) ? [[form.source_channel, channelLabel(form.source_channel)] as [string, string]] : [])], { required: true })}
+                {select("source_channel", "ช่องทาง", pair(CHANNELS), { required: true })}
                 {field("customer_name", "ชื่อลูกค้า", { required: true })}
                 {field("phone", "เบอร์โทร", { type: "tel", mode: "tel", placeholder: "08x-xxx-xxxx" })}
                 {field("line_id", "Line", { placeholder: "@line หรือ LINE ID" })}
@@ -313,7 +313,7 @@ export function LeadsManager() {
         <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">ค้นหา</span>
           <input value={f.q} onChange={(e) => { setF({ ...f, q: e.target.value }); setPage(1); }} placeholder="ชื่อ / เบอร์ / Line / ความสนใจ / Remark" className="w-56 h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm" /></label>
         {fdate("from", "รับตั้งแต่")}{fdate("to", "ถึง")}
-        {fsel("channel", "ช่องทาง", ALL_CHANNELS.map((c) => [c, channelLabel(c)] as [string, string]))}{fsel("need", "ความต้องการ", pair(NEEDS))}{fsel("status", "สถานะ", pair(statusOptsFilter))}
+        {fsel("channel", "ช่องทาง", pair(CHANNELS))}{fsel("need", "ความต้องการ", pair(NEEDS))}{fsel("status", "สถานะ", pair(statusOptsFilter))}
         {fsel("callStatus", "Call Status", pair(CALL_STATUS))}{fsel("staff", "Staff", pair(data.staff))}
         {fsel("area", "พื้นที่", pair(data.areas))}
         {Object.values(f).some(Boolean) && <button onClick={() => { setF(EMPTY_F); setPage(1); }} className="py-1.5 text-sm underline">ล้าง</button>}

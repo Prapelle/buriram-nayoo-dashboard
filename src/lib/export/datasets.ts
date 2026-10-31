@@ -2,6 +2,7 @@ import { SPECS } from "../import/specs";
 import type { Role } from "../roles";
 import { TABS } from "../schema";
 import { normalizeActionRows } from "../fbactions";
+import { canonChannel } from "../dashboard";
 
 export type Row = Record<string, string>;
 export type ExportFilters = { from?: string; to?: string; area?: string; channel?: string; campaign?: string; includeExcluded?: boolean; need?: string };
@@ -85,7 +86,7 @@ export const DATASETS: Dataset[] = [
     note: "แต่ละ dimension_type มาจากตารางคนละตารางที่ Google รวมข้อมูลคนละแบบ — ห้ามรวมข้าม dimension_type และห้ามรวมกับไฟล์สรุป · ga4_page รวมหน้า Landing ทุกแบบของหน้าเดียวกันแล้ว" },
   { id: "leads", filename: "leads.csv", label: "Leads", group: "Leads / Sales", tab: "LEADS", columns: tabCols("LEADS"), roles: SALES, sensitive: "pii", grain: "หนึ่งแถวต่อ Lead (lead_id)",
     applies: { date: "วันที่รับ Lead", area: true, channel: true, campaign: true, need: true }, note: "มีข้อมูลส่วนบุคคลของลูกค้า (ชื่อ เบอร์โทร อีเมล) เฉพาะ Admin และ Sales · status คำนวณจาก buy_status / sell_status (ตาม need)",
-    keep: (r, f) => inDay(r.received_at, f) && areaOk(r, f) && (!f.channel || r.source_channel === f.channel) && (!f.campaign || r.campaign_name === f.campaign) && (!f.need || r.need === f.need) },
+    keep: (r, f) => inDay(r.received_at, f) && areaOk(r, f) && (!f.channel || canonChannel(r.source_channel) === f.channel) && (!f.campaign || r.campaign_name === f.campaign) && (!f.need || r.need === f.need) },
   { id: "sales", filename: "sales.csv", label: "Sales — ดีล (กรอกด้วยมือ)", group: "Leads / Sales", tab: "SALES", columns: tabCols("SALES"), roles: SALES, sensitive: "financial", grain: "หนึ่งแถวต่อดีล (sale_id)",
     applies: { date: "วันที่ปิดการขาย", area: false, channel: true, campaign: true }, note: "ข้อมูลการเงินและลูกค้า เฉพาะ Admin และ Sales (Deal Value ไม่ใช่รายได้บริษัท)",
     keep: (r, f) => inDay(r.closing_date, f) && (!f.channel || r.source_channel === f.channel) && (!f.campaign || r.campaign_name === f.campaign) },

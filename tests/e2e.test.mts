@@ -233,7 +233,7 @@ assert.equal(filterLeads(all, { q: "081 234" }).length, 2); assert.equal(filterL
 assert.equal(filterLeads(all, { q: `LD-${year}-0002` }).length, 1); assert.equal(filterLeads(all, { service: "Product" }).length, 3); assert.equal(normalizePhone("812345678"), "0812345678");
 ok("ค้นหา (ชื่อ/รหัส/เบอร์คนละรูปแบบ) และกรอง ช่องทาง/พื้นที่/สถานะ/บริการ ทำงานถูกต้อง");
 const dl = computeDashboard(await fetchDashboardData("admin"), {}, "admin"); const kl = Object.fromEntries(dl.groups.flatMap((g) => g.items).map((k) => [k.key, k]));
-assert.equal(kl.leads.value, 3); assert.equal(kl.qualified.value, 0); /* Qualified = Call Status รอเข้าชม — Lead ในส่วนนี้ยังไม่มีใครติดต่อได้ */ assert.deepEqual(dl.charts.pipeline!.map((p) => p.label), ["New", "Qualified"]); assert.equal(dl.charts.leadsByChannel![0].label, "Facebook Ads");
+assert.equal(kl.leads.value, 3); assert.equal(kl.qualified.value, 0); /* Qualified = Call Status รอเข้าชม — Lead ในส่วนนี้ยังไม่มีใครติดต่อได้ */ assert.equal((dl.charts.pipelineBuy?.[0].value ?? 0) + (dl.charts.pipelineSell?.[0].value ?? 0), 3); assert.equal(dl.charts.pipelineBuy?.find((p) => p.label === "Qualified")?.value ?? 0, 0); assert.equal(dl.charts.leadsByChannel![0].label, "Facebook Ads");
 const ml = await fetchDashboardData("marketing"); assert.ok(ml.leads.every((r) => !("phone" in r) && !("email" in r) && !("customer_name" in r))); ok("Dashboard นับ Lead/Qualified/Pipeline ถูก และข้อมูล Marketing ไม่มี PII (ชื่อ/เบอร์/อีเมล)");
 assert.ok(col("AUDIT_LOG", "action").includes("lead_create") && col("AUDIT_LOG", "action").includes("lead_status_change")); ok("Audit Log: lead_create / lead_status_change");
 void validateLead; 
@@ -523,13 +523,14 @@ console.log("15a2) ช่องทางใหม่ + ค่าเดิม (31
   await assert.rejects(saveLead({ ...base, customer_name: "ค่าเดิม", phone: "0861231234", need: "ซื้อ", source_channel: "Facebook Organic" }, "s@x.com"), (e: unknown) => e instanceof LeadError && e.code === "VALIDATION" && "source_channel" in ((e as LeadError).extra.fields ?? {}));
   const fm = (await saveLead({ ...base, customer_name: "ทักแชท", phone: "0861231235", need: "ซื้อ", source_channel: "Facebook Message" }, "s@x.com")).lead; assert.equal(fm.source_channel, "Facebook Message");
   for (const c of ["Facebook Comment", "TikTok", "YouTube"]) assert.ok(validateLead({ ...base, need: "ซื้อ", source_channel: c }).ok, c);
-  // Lead เดิมที่เป็นค่าเดิม แก้ช่องอื่นแล้วบันทึกได้ (คงช่องทางเดิม)
+  // ชื่อช่องทางเก่าใน Sheet (1/11/2026 ลบชื่อเก่า): แสดงเป็น Unknown · บันทึก Lead นั้น = เขียน Unknown ลง Sheet · ภาพรวมนับเป็น Unknown
   const lt = tabs.get("LEADS")!; const LH = lt.rows[0]; const ri = lt.rows.findIndex((x) => x[LH.indexOf("lead_id")] === fm.lead_id);
   lt.rows[ri][LH.indexOf("source_channel")] = "TikTok/YouTube";
-  const old = (await listLeads()).rows.find((r) => r.lead_id === fm.lead_id)!;
-  const kept = (await saveLead({ ...old, staff: "พี่เอ", lead_id: old.lead_id, updated_at_seen: old.updated_at }, "s@x.com")).lead; assert.equal(kept.source_channel, "TikTok/YouTube");
+  const old = (await listLeads()).rows.find((r) => r.lead_id === fm.lead_id)!; assert.equal(old.source_channel, "Unknown");
+  assert.equal(lt.rows[ri][LH.indexOf("source_channel")], "TikTok/YouTube"); // แค่แสดง ไม่แก้ Sheet เอง
+  const kept = (await saveLead({ ...old, staff: "พี่เอ", lead_id: old.lead_id, updated_at_seen: old.updated_at }, "s@x.com")).lead; assert.equal(kept.source_channel, "Unknown");
   const { deleteLead: del } = await import("../src/lib/leads-service"); await del(kept.lead_id, kept.updated_at, "admin@example.com");
-  ok("เลือกช่องทางเดิม (Facebook Organic / TikTok/YouTube) ให้ Lead ใหม่ไม่ได้ · Facebook Message / Comment / TikTok / YouTube ใช้ได้ · Lead เดิมแก้ไขได้โดยคงช่องทางเดิม");
+  ok("ชื่อช่องทางเก่า (Facebook Organic / TikTok/YouTube) เลือกไม่ได้ · Facebook Message / Comment / TikTok / YouTube ใช้ได้ · Lead ที่มีชื่อเก่าใน Sheet แสดงเป็น Unknown (ไม่แก้ Sheet จนกว่าจะบันทึก)");
 }
 console.log("15b2) หน้า Leads: ช่อง Line (30/10/2026)");
 {

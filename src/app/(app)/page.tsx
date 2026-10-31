@@ -9,7 +9,7 @@ import { auth } from "@/auth";
 import { fetchDashboardData } from "@/lib/dashboard-data";
 import { ALL_CHANNELS, channelLabel, SERVICES, computeDashboardCompared, dmyS, type Dashboard, type Filters } from "@/lib/dashboard";
 import type { CompareMode, DRange } from "@/lib/compare";
-import { KpiCard } from "@/components/KpiCard";
+import { KpiGrid } from "@/components/KpiCard";
 import { BarList, LineChart, Pending, StackedMonths, dm, my } from "@/components/charts";
 import { ChecklistCard, FollowUpCard, TargetCard } from "@/components/OverviewExtras";
 import { buildChecklist, type Checklist } from "@/lib/data-checklist";
@@ -127,7 +127,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
       {dash.groups.map((g) => (
         <div key={g.title}>
           <h2 className="mb-2 text-sm font-semibold text-slate-700">{g.title}</h2>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">{g.items.map((k) => <KpiCard key={k.key} k={k} importHref={role !== "sales" ? "/import" : undefined} />)}</div>
+          <KpiGrid items={g.items} importHref={role !== "sales" ? "/import" : undefined} />
         </div>
       ))}
 
@@ -137,7 +137,8 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
         <Card title="Lead ซื้อ / เช่า / สร้าง แยกตาม Buy Status">{c.buyStatus ? <BarList items={c.buyStatus} title="Lead แยกตาม Buy Status" /> : <Pending text="ยังไม่มี Lead ที่ Need เป็น ซื้อ / เช่า / สร้าง" href={imp} />}</Card>
         <Card title="Lead ขาย แยกตาม Sell Status">{c.sellStatus ? <BarList items={c.sellStatus} title="Lead แยกตาม Sell Status" /> : <Pending text="ยังไม่มี Lead ที่ Need เป็น ขาย" href={imp} />}</Card>
         <Card title="Qualified Leads แยกตามช่องทาง (ซื้อ: รอเข้าชมขึ้นไป · ขาย: สัญญา + ขายแล้ว)">{c.leadQualByChannel ? <BarList items={c.leadQualByChannel} title="Qualified Leads แยกตามช่องทาง" /> : <Pending text="ยังไม่มี Lead" href={imp} />}</Card>
-        <Card title="Sales Pipeline (คำนวณจาก Buy/Sell Status)">{c.pipeline ? <BarList items={c.pipeline} title="Sales Pipeline" /> : <Pending href={imp} />}</Card>
+        <Card title="Sales Pipeline — คนต้องการซื้อ / เช่า / สร้าง (สะสม)">{c.pipelineBuy ? <BarList items={c.pipelineBuy} title="Sales Pipeline คนต้องการซื้อ" /> : <Pending text="ยังไม่มี Lead คนต้องการซื้อ / เช่า / สร้าง ในช่วงนี้" />}</Card>
+        <Card title="Sales Pipeline — คนต้องการขาย (สะสม)">{c.pipelineSell ? <BarList items={c.pipelineSell} title="Sales Pipeline คนต้องการขาย" /> : <Pending text="ยังไม่มี Lead คนต้องการขาย ในช่วงนี้" />}</Card>
         <Card title="LINE OA Growth (เพื่อนทั้งหมดสิ้นเดือน)">
           {c.lineGrowth && c.lineGrowth.some((r) => r.friendsEnd !== null)
             ? <LineChart label="เพื่อน LINE OA" points={c.lineGrowth.filter((r) => r.friendsEnd !== null).map((r) => ({ x: my(r.month), y: r.friendsEnd! }))} />

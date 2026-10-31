@@ -110,13 +110,23 @@ console.log("8) Customer Funnel + ประสิทธิภาพแต่ล�
   assert.equal(by.reach.value, fk.m_reach.value! + fk.f_reach.value!); assert.match(by.reach.note, /ไม่ใช่ Unique Reach/);
   assert.equal(by.visits.value, 22409); assert.match(by.visits.note, /Sessions/);
   assert.equal(by.leads.value, 7); assert.equal(by.qualified.value, 4); assert.equal(by.sold.value, 2);
-  assert.equal(by.qualified.conv, r2(4 / 7 * 100)); assert.equal(by.sold.conv, 50); assert.equal(by.leads.change, undefined);
-  ok(`Funnel ก.ย.: Reach ${by.reach.value!.toLocaleString()} (Meta + Facebook Page) → เข้าเว็บ 22,409 Sessions → Leads 7 (ไม่นับซ้ำ/นอกช่วง) → Qualified 4 (รอเข้าชม/เข้าชม/ซื้อสำเร็จ) → ขายได้ 2`);
+  assert.equal(by.walkin.value, 3); assert.equal(by.qualified.conv, r2(4 / 7 * 100)); assert.equal(by.walkin.conv, 75); assert.equal(by.sold.conv, r2(2 / 3 * 100)); assert.equal(by.leads.change, undefined);
+  ok(`Funnel ก.ย.: Reach ${by.reach.value!.toLocaleString()} (Meta + Facebook Page) → เข้าเว็บ 22,409 Sessions → Leads 7 (ไม่นับซ้ำ/นอกช่วง) → Qualified 4 (รอเข้าชม/เข้าชม/ซื้อสำเร็จ) → Walk in 3 → ขายได้ 2 (สะสม ขั้นถัดไปไม่เกินขั้นก่อน)`);
   const ch = Object.fromEntries(fp.channels!.map((c) => [c.channel, c]));
   assert.equal(ch["Meta Ads"].leads, 4); assert.equal(ch["Meta Ads"].cpl, r2(37557.54 / 4)); assert.equal(ch["Meta Ads"].cpql, r2(37557.54 / 2)); assert.equal(ch["Meta Ads"].sold, 1);
   assert.equal(ch["Google Ads"].cpl, r2(28814.82 / 2)); assert.equal(ch["Google Ads"].qualified, 1);
   assert.equal(ch["LINE OA"].kind, "Organic"); assert.equal(ch["LINE OA"].cpl, null); assert.equal(ch["LINE OA"].leads, 1); assert.equal(ch["LINE OA"].sold, 1);
   ok(`ค่าใช้จ่าย/Lead: Meta ฿${ch["Meta Ads"].cpl} (4 Lead จาก Facebook Ads) · Google ฿${ch["Google Ads"].cpl} · LINE OA ไม่มีค่าโฆษณา → ไม่คำนวณ (ไม่ใช่ 0)`);
+  // แท็บคนต้องการขาย (1/11/2026): Lead ขายแยกจาก Funnel คนต้องการซื้อ · Qualified = เซ็นสัญญา / สัญญาเปิด / ขายแล้ว · ขั้นสุดท้าย = ขายแล้ว · ไม่มี Walk in
+  const S = (id: string, ch: string, st: string): Row => ({ lead_id: id, received_at: "2026-09-10", source_channel: ch, need: "ขาย", sell_status: st, call_status: "ซื้อสำเร็จ" });
+  const mix = [...fl, S("S1", "Facebook Ads", "ขายแล้ว"), S("S2", "Facebook Ads", "สนใจขาย"), S("S3", "Unknown", "สัญญาเปิด")];
+  const bb = Object.fromEntries(run({ leads: mix, web }).p.funnel!.map((x) => [x.key, x])); assert.equal(bb.leads.value, 7); assert.equal(bb.sold.value, 2);
+  const { p: sp } = run({ leads: mix, web }, { from: "2026-09-01", to: "2026-09-30", side: "seller" });
+  const bs = Object.fromEntries(sp.funnel!.map((x) => [x.key, x]));
+  assert.equal(bs.leads.value, 3); assert.equal(bs.qualified.value, 2); assert.equal(bs.sold.value, 1); assert.equal(bs.walkin, undefined); assert.equal(bs.visits.value, 22409);
+  const cs = Object.fromEntries(sp.channels!.map((c) => [c.channel, c]));
+  assert.equal(cs["Meta Ads"].leads, 2); assert.equal(cs["Meta Ads"].sold, 1); assert.equal(cs["Unknown"].leads, 1); assert.equal(cs["Unknown"].kind, "Organic");
+  ok("แท็บคนต้องการขาย: Leads 3 · Qualified 2 · ขายแล้ว 1 (ไม่ปนกับคนต้องการซื้อ 7) · Unknown นับเป็น Organic และนับ Lead ได้");
   const { p: e } = run({ leads: [], web: [], posts: [], meta: [] });
   const be = Object.fromEntries(e.funnel!.map((x) => [x.key, x]));
   assert.equal(be.reach.value, null); assert.equal(be.visits.value, null); assert.equal(be.leads.value, null); assert.equal(be.qualified.conv, null);

@@ -28,7 +28,7 @@ for (const key of ["won", "deal", "revenue", "cost", "gp", "rate"]) assert.equal
 for (const key of ["cpl", "cpl_all", "cplq"]) { assert.equal(k[key].state, "na", key); assert.equal(k[key].value, null); } // Phase 2: ไม่มี Lead → N/A (ไม่ใช่ 0)
 assert.ok(k.leads.value === null && k.qualified.value === null); ok('ไม่มีข้อมูล → "รอข้อมูล" (value=null ไม่ใช่ 0) ทุกตัว; CPL ที่ไม่มี Lead → N/A · ไม่มีการ์ด Won/Deal/Revenue/Cost/Gross Profit/Lead-to-Sale แล้ว');
 assert.equal(d.charts.spendByChannel!.length, 2); assert.equal(d.charts.daily!.length, 30); assert.equal(d.charts.monthly![0].month, "2026-09");
-assert.equal(d.charts.leadsByChannel, null); assert.equal(d.charts.pipeline, null); assert.equal(d.charts.lineGrowth, null); ok("กราฟ: มีเฉพาะที่ข้อมูลรองรับ (spend, รายเดือน, รายวัน 30 วัน) ที่เหลือเป็น null");
+assert.equal(d.charts.leadsByChannel, null); assert.equal(d.charts.pipelineBuy, null); assert.equal(d.charts.pipelineSell, null); assert.equal(d.charts.lineGrowth, null); ok("กราฟ: มีเฉพาะที่ข้อมูลรองรับ (spend, รายเดือน, รายวัน 30 วัน) ที่เหลือเป็น null");
 assert.equal(d.unknownAreaRows, 127); assert.equal(d.warnings.length, 0); ok("Area Unknown 127 แถว (103+24), ไม่มีคำเตือนช่วงทับซ้อน");
 assert.equal(computeDashboard({ ...base, excludedPages: [] }, {}, "admin").groups[1].items[0].value, 55); ok("ล้างค่าตัดเพจ → นับ 55 โพสต์");
 

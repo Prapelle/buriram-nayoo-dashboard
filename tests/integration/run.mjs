@@ -151,7 +151,7 @@ try {
   const toCall = r.json.rows.find((x) => x.source_channel === "Google Ads");
   r = await call("/api/leads", { as: SALES, method: "POST", body: { ...toCall, call_status: "รอเข้าชม", updated_at_seen: toCall.updated_at } }); assert.equal(r.status, 200, r.text);
   r = await call("/?from=2026-09-01&to=2026-09-30", { as: MKT });
-  assert.ok(/Qualified Leads<\/div>[\s\S]{0,120}>1</.test(r.html), "Qualified Leads = 1"); assert.ok(r.html.includes("Qualified Leads แยกตามช่องทาง")); assert.ok(!r.html.includes("Lead Qualification"));
+  assert.ok(/Qualified Leads \(รวม\)<\/div>[\s\S]{0,120}>1</.test(r.html), "Qualified Leads = 1"); assert.ok(r.html.includes("Qualified Leads แยกตามช่องทาง")); assert.ok(!r.html.includes("Lead Qualification"));
   for (const gone of ["Won Deals", "Deal Value", "Company Revenue", "Direct Cost", "Gross Profit", "Lead-to-Sale"]) assert.ok(!r.html.includes(gone), gone);
   ok("Overview", "Qualified Leads = 1 (Call Status รอเข้าชม) + กราฟแยกช่องทาง · ไม่มีการ์ด Won/Deal/Revenue/Cost/Gross Profit/Lead-to-Sale");
   ok("Leads", "รายการ Lead 4 ราย · รายชื่อ Staff สำหรับเลือก");
@@ -173,7 +173,7 @@ try {
   assert.ok(/Website Users<\/div>[\s\S]{0,160}>1,500</.test(r.html), "users"); assert.ok(/Website Page Views<\/div>[\s\S]{0,160}>3,000</.test(r.html), "pv"); assert.ok(r.html.includes("1 นาที 0 วินาที"), "duration 60s"); assert.ok(/Search Clicks<\/div>[\s\S]{0,160}>332</.test(r.html), "clicks");
   r = await call("/api/export/website_analytics", { as: MKT }); assert.equal(r.status, 200); assert.ok(r.text.includes("ga4") && r.text.includes("manual"));
   ok("Website", "นำเข้าผ่าน API: พรีวิว → บันทึก · ไฟล์ซ้ำ 409 · ยอดรวมไม่ตรงรายหน้า 422 · กรอก Users 1,500 → หน้า Performance แสดง Users 1,500 / Page Views 3,000 / Duration 1 นาที (90,000 ÷ 1,500) / Search Clicks 332 · Export ได้ · Sales เข้าไม่ได้");
-  r = await call("/performance?from=2026-09-01&to=2026-09-30", { as: MKT }); assert.ok(/Website Users[\s\S]{0,200}รอข้อมูล/.test(r.html));
+  r = await call("/performance?from=2026-09-01&to=2026-09-30", { as: MKT }); assert.ok(/รอข้อมูล[\s\S]{0,60}รายการ:[\s\S]{0,600}Website Users/.test(r.html));
   ok("Website", "ช่วง ก.ย. ไม่มีรายงานเว็บไซต์ → Website Users/Page Views แสดง รอข้อมูล ไม่ใช่ 0");
 
   console.log("7) Marketing Performance + 8) YoY");

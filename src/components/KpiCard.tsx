@@ -20,9 +20,9 @@ export function KpiCard({ k, importHref }: { k: Kpi; importHref?: string }) {
     }
   }
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
+    <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-3 sm:p-4">
       <div className="text-[13px] text-slate-600">{k.label}</div>
-      {k.state === "value" && <div className="mt-1 text-[28px] font-bold leading-tight tracking-tight tabular-nums">{show(k.fmt, k.value!)}</div>}
+      {k.state === "value" && <div className="mt-1 break-words text-[21px] font-bold leading-tight tracking-tight tabular-nums sm:text-[28px]">{show(k.fmt, k.value!)}</div>}
       {k.state === "pending" && <div className="mt-1 flex items-baseline gap-2"><span className="text-lg font-semibold text-slate-400">รอข้อมูล</span>{importHref && <Link href={importHref} className="text-xs text-slate-600 underline">นำเข้าข้อมูล →</Link>}</div>}
       {k.state === "excluded" && <div className="mt-1 text-sm text-slate-400">ไม่รวมในตัวกรองนี้</div>}
       {k.state === "restricted" && <div className="mt-1 text-sm text-slate-400">ไม่มีสิทธิ์ดูข้อมูลนี้</div>}
@@ -30,7 +30,27 @@ export function KpiCard({ k, importHref }: { k: Kpi; importHref?: string }) {
       {cmp && <div className="mt-1 text-xs tabular-nums">{cmp}</div>}
       {cmp && k.prevIncomplete && <div className="mt-1 inline-block rounded bg-amber-50 px-1.5 py-0.5 text-xs text-amber-800" title={k.prevIncomplete}>{L} ข้อมูลไม่ครบ: {k.prevIncomplete}</div>}
       {k.incomplete && k.state === "value" && <div className="mt-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-900" title={k.incomplete}>ข้อมูลไม่ครบ: {k.incomplete}</div>}
-      {k.note && <div className="mt-1 text-xs text-slate-500">{k.note}</div>}
+      {k.note && <div className="mt-1 text-[11px] text-slate-500 sm:text-xs">{k.note}</div>}
+    </div>
+  );
+}
+
+/**
+ * กลุ่มการ์ด KPI (1/11/2026): มือถือแถวละ 2 การ์ด · การ์ดที่ "รอข้อมูล" รวมเป็นบรรทัดเดียวท้ายกลุ่ม (ไม่ให้หน้ายาวด้วยการ์ดว่าง)
+ * กดที่บรรทัดเพื่อดูว่าแต่ละตัวรอข้อมูลอะไร
+ */
+export function KpiGrid({ items, importHref, cols = "lg:grid-cols-3" }: { items: Kpi[]; importHref?: string; cols?: string }) {
+  const shown = items.filter((k) => k.state !== "pending"), waiting = items.filter((k) => k.state === "pending");
+  return (
+    <div className="space-y-2">
+      {shown.length > 0 && <div className={`grid grid-cols-2 gap-2 sm:gap-3 ${cols}`}>{shown.map((k) => <KpiCard key={k.key} k={k} importHref={importHref} />)}</div>}
+      {waiting.length > 0 && (
+        <details data-waiting className="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-2 text-sm">
+          <summary className="cursor-pointer text-slate-600"><span className="font-medium text-slate-500">รอข้อมูล {waiting.length} รายการ:</span> {waiting.map((k) => k.label).join(" · ")}
+            {importHref && <> · <Link href={importHref} className="whitespace-nowrap text-brand-700 underline">นำเข้าข้อมูล →</Link></>}</summary>
+          <ul className="mt-2 space-y-1 text-xs text-slate-500">{waiting.map((k) => <li key={k.key}><b className="font-medium text-slate-700">{k.label}</b>{k.note ? ` — ${k.note}` : ""}</li>)}</ul>
+        </details>
+      )}
     </div>
   );
 }

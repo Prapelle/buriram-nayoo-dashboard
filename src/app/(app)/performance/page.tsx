@@ -7,7 +7,7 @@ import { auth } from "@/auth";
 import { fetchDashboardData } from "@/lib/dashboard-data";
 import { dmyS } from "@/lib/dashboard";
 import { computePerformance, type Performance } from "@/lib/performance";
-import { KpiCard } from "@/components/KpiCard";
+import { KpiGrid } from "@/components/KpiCard";
 import { LineChart, Pending, dm, my } from "@/components/charts";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +25,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
   if (role !== "admin" && role !== "marketing") redirect("/");
   const sp = await searchParams;
   const rg = await rangeOf(sp);
-  const f = { from: rg.from, to: rg.to, compare: (one(sp.compare) === "yoy" ? "yoy" : one(sp.compare) === "prev" || one(sp.compare) === "1" ? "prev" : undefined) as "yoy" | "prev" | undefined, gran: (one(sp.gran) === "month" ? "month" : "day") as "day" | "month" };
+  const f = { from: rg.from, to: rg.to, compare: (one(sp.compare) === "yoy" ? "yoy" : one(sp.compare) === "prev" || one(sp.compare) === "1" ? "prev" : undefined) as "yoy" | "prev" | undefined, gran: (one(sp.gran) === "month" ? "month" : "day") as "day" | "month" , side: (one(sp.side) === "seller" ? "seller" : "buyer") as "buyer" | "seller" };
 
   let p: Performance;
   try { p = computePerformance(await fetchDashboardData(role), f); }
@@ -46,6 +46,7 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
       </div>
 
       <form method="get" action="/performance" className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm">
+        {f.side === "seller" && <input type="hidden" name="side" value="seller" />}
         <RangeFields from={f.from} to={f.to} className={inp} remembered={rg.remembered} />
         <label><span className="mb-1 block text-xs text-slate-500">กราฟแนวโน้ม</span>
           <select name="gran" defaultValue={f.gran} className={inp}><option value="day">รายวัน</option><option value="month">รายเดือน</option></select></label>
@@ -60,13 +61,13 @@ export default async function PerformancePage({ searchParams }: { searchParams: 
       {p.warnings.map((w, i) => <p key={i} role="alert" className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">⚠ {w}</p>)}
       {!p.range && <p className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-slate-600">ยังไม่มีข้อมูลโฆษณาหรือ Facebook Page — เริ่มจาก <Link href="/import" className="underline">นำเข้า CSV</Link></p>}
 
-      {p.range && p.funnel && p.channels && <FunnelAndChannels p={p} />}
+      {p.range && p.funnel && p.channels && <FunnelAndChannels p={p} side={f.side} sideHref={(s) => { const u = new URLSearchParams(); for (const [k, v] of Object.entries(sp)) if (k !== "side" && typeof v === "string" && v) u.set(k, v); if (s === "seller") u.set("side", "seller"); const q = u.toString(); return "/performance" + (q ? "?" + q : ""); }} />}
 
       {p.groups.map((g) => (
         <div key={g.title}>
           <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-700"><span className={`rounded px-1.5 py-0.5 text-xs ${KIND[g.kind]}`}>{g.kind}</span>{g.title}</h2>
           {g.note && <p className="mb-2 text-xs text-slate-500">{g.note}</p>}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">{g.items.map((k) => <KpiCard key={k.key} k={k} importHref="/import" />)}</div>
+          <KpiGrid items={g.items} importHref="/import" cols="lg:grid-cols-4" />
         </div>
       ))}
 
@@ -113,13 +114,19 @@ function Change({ v, lowerIsBetter = false }: { v: number | null | undefined; lo
   const good = lowerIsBetter ? v < 0 : v > 0;
   return <span className={`text-xs font-medium tabular-nums ${v === 0 ? "text-slate-500" : good ? "text-emerald-700" : "text-red-700"}`}>{v > 0 ? "↑" : v < 0 ? "↓" : "→"} {Math.abs(v).toLocaleString("en-US")}%</span>;
 }
-function FunnelAndChannels({ p }: { p: Performance }) {
+function FunnelAndChannels({ p, side, sideHref }: { p: Performance; side: "buyer" | "seller"; sideHref: (s: "buyer" | "seller") => string }) {
   const paid = p.channels!.filter((c) => c.cpl !== null);
   const best = paid.length > 1 ? paid.reduce((a, b) => (b.cpl! < a.cpl! ? b : a)) : null;
   const thb = (v: number | null) => (v === null ? <span className="text-slate-400">—</span> : `฿${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
   return (
-    <div className="grid gap-4 2xl:grid-cols-5">
-      <div className="2xl:col-span-2"><Card title="Customer Funnel">
+    <div className="space-y-3">
+    <nav aria-label="ฝั่งของ Funnel" className="inline-flex gap-1 rounded-xl bg-slate-200/60 p-1">
+      {([["buyer", "คนต้องการซื้อ"], ["seller", "คนต้องการขาย"]] as ["buyer" | "seller", string][]).map(([k, l]) => (
+        <Link key={k} href={sideHref(k)} prefetch={false} scroll={false} aria-current={side === k ? "page" : undefined}
+          className={`h-9 rounded-lg px-4 text-sm leading-9 ${side === k ? "bg-white font-semibold text-brand-700 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}>{l}</Link>))}
+    </nav>
+    <div className="grid grid-cols-1 gap-4 2xl:grid-cols-5">
+      <div className="min-w-0 2xl:col-span-2"><Card title={`Customer Funnel — ${side === "seller" ? "คนต้องการขาย" : "คนต้องการซื้อ / เช่า / สร้าง"}`}>
         <ol className="space-y-1.5">{p.funnel!.map((s, i) => (
           <li key={s.key} className="grid grid-cols-[minmax(0,30%)_1fr_auto] items-center gap-3" title={s.note}>
             <div className="flex"><div className="h-7 rounded-lg bg-brand-600" style={{ width: `${FUNNEL_W[i]}%`, opacity: FUNNEL_OP[i] }} /></div>
@@ -130,9 +137,9 @@ function FunnelAndChannels({ p }: { p: Performance }) {
           </li>))}</ol>
         <Note className="mt-3" href="/settings/metrics/performance">แต่ละขั้นมาจากคนละแหล่งข้อมูล (Social → GA4 → Leads) จึงไม่ใช่คนกลุ่มเดียวกันที่ติดตามได้ทีละคน · Lead นับตามวันที่รับในช่วงที่เลือก{p.compare ? " · ลูกศร = เทียบ" + (p.compare === "yoy" ? "ปีก่อน" : "ช่วงก่อน") : ""}</Note>
       </Card></div>
-      <div className="2xl:col-span-3"><Card title="ประสิทธิภาพแต่ละช่องทาง (Cost per Lead)">
+      <div className="min-w-0 2xl:col-span-3"><Card title={`ประสิทธิภาพแต่ละช่องทาง (Cost per Lead) — ${side === "seller" ? "คนต้องการขาย" : "คนต้องการซื้อ"}`}>
         <div className="overflow-x-auto"><table className="w-full text-left text-sm">
-          <thead><tr className="whitespace-nowrap border-b text-xs text-slate-500 [&>th]:px-1.5"><th className="py-1 !pl-0">ช่องทาง</th><th className="text-right">ค่าโฆษณา</th><th className="text-right">Leads</th><th className="text-right">฿ / Lead</th><th className="text-right">Qualified</th><th className="text-right">฿ / Qualified</th><th className="text-right">ซื้อสำเร็จ</th>{p.compare && <th className="text-right">แนวโน้ม ฿/Lead</th>}</tr></thead>
+          <thead><tr className="whitespace-nowrap border-b text-xs text-slate-500 [&>th]:px-1.5"><th className="py-1 !pl-0">ช่องทาง</th><th className="text-right">ค่าโฆษณา</th><th className="text-right">Leads</th><th className="text-right">฿ / Lead</th><th className="text-right">Qualified</th><th className="text-right">฿ / Qualified</th><th className="text-right">{side === "seller" ? "ขายแล้ว" : "ซื้อสำเร็จ"}</th>{p.compare && <th className="text-right">แนวโน้ม ฿/Lead</th>}</tr></thead>
           <tbody>{p.channels!.map((c) => (
             <tr key={c.channel} className="whitespace-nowrap border-b border-slate-100 [&>td]:px-1.5">
               <td className="py-1.5 !pl-0"><span className="font-medium">{c.channel}</span> <span className={`rounded px-1 text-[10px] ${KIND[c.kind]}`}>{c.kind}</span>{best === c && <span className="ml-1 rounded bg-emerald-600 px-1 text-[10px] text-white">ถูกที่สุด</span>}{c.incomplete && <span className="ml-1 text-xs text-amber-700" title={c.incomplete}>⚠</span>}</td>
@@ -145,8 +152,9 @@ function FunnelAndChannels({ p }: { p: Performance }) {
               {p.compare && <td className="text-right"><Change v={c.change} lowerIsBetter /></td>}
             </tr>))}</tbody>
         </table></div>
-        <Note className="mt-2" href="/settings/metrics/performance">฿ / Lead = ค่าโฆษณาของแพลตฟอร์ม ÷ Lead ที่ช่องทางตรงกัน (Meta Ads ↔ Lead ช่องทาง Facebook Ads) ในช่วงเดียวกัน · ยิ่งต่ำยิ่งคุ้ม แต่ควรดู ฿ / Qualified และ ซื้อสำเร็จ ประกอบ (ช่องทางที่ Lead ถูกแต่ไม่มีใครซื้อ อาจไม่คุ้มจริง) · ช่องทาง Organic ไม่มีข้อมูลค่าใช้จ่ายในระบบ · ⚠ = รายงานโฆษณาไม่ครอบคลุมช่วงพอดี</Note>
+        <Note className="mt-2" href="/settings/metrics/performance">฿ / Lead = ค่าโฆษณาของแพลตฟอร์ม ÷ Lead ที่ช่องทางตรงกัน (Meta Ads ↔ Lead ช่องทาง Facebook Ads) ในช่วงเดียวกัน · ยิ่งต่ำยิ่งคุ้ม แต่ควรดู ฿ / Qualified และ ซื้อสำเร็จ ประกอบ (ช่องทางที่ Lead ถูกแต่ไม่มีใครซื้อ อาจไม่คุ้มจริง) · ช่องทางที่ไม่ใช่โฆษณา (รวม Unknown) นับเป็น Organic และไม่มีข้อมูลค่าใช้จ่ายในระบบ · ⚠ = รายงานโฆษณาไม่ครอบคลุมช่วงพอดี</Note>
       </Card></div>
+    </div>
     </div>
   );
 }
