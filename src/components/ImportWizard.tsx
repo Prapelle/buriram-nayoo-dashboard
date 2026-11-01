@@ -4,7 +4,7 @@ import { DateInput } from "@/components/DateInput";
 import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
 import { useCallback, useRef, useState } from "react";
 import { SPECS } from "@/lib/import/specs";
-import { readTextFile, toCsv } from "@/lib/csv";
+import { readTextFile, splitCsv, toCsv } from "@/lib/csv";
 import { detectSpec, parseInput } from "@/lib/import/plan";
 import { parseWebsiteFile } from "@/lib/website/parse";
 import { WebsiteManager } from "@/components/WebsiteManager";
@@ -24,6 +24,7 @@ type Plan = {
   previewColumns: string[];
   preview: { n: number; status: string; values: Record<string, string | number> | null }[];
 };
+const SPLIT_BYTES = 4 * 1024 * 1024; // ไฟล์ใหญ่กว่านี้แบ่งส่วนก่อนส่ง (splitCsv)
 type BulkItem = { name: string; status: "wait" | "run" | "ok" | "skip" | "fail"; label?: string; period?: string; counts?: Counts; reason?: string; errors?: Err[] };
 type Batch = { batch_id: string; report_type: string; filename: string; report_start: string; report_end: string; uploaded_by: string; uploaded_at: string; status: string; rows_total: string; rows_inserted: string; rows_updated: string; rows_skipped: string; rows_invalid: string; error_summary: string };
 
@@ -114,10 +115,10 @@ export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" 
       else { setSalesIn({ file: xlsx[0], id: Date.now() }); if (xlsx.length > 1) note.push(`ไฟล์ยอดขายนำเข้าได้ทีละไฟล์ — กำลังตรวจ ${xlsx[0].name} (ที่เหลือเลือกใหม่หลังนำเข้าเสร็จ)`); }
     }
     for (const f of all.filter((x) => /\.csv$/i.test(x.name))) {
-      if (f.size > 20 * 1024 * 1024) { note.push(`${f.name}: ไฟล์ใหญ่เกิน 20 MB`); continue; }
+      if (f.size > 60 * 1024 * 1024) { note.push(`${f.name}: ไฟล์ใหญ่เกิน 60 MB`); continue; }
       const text = await readTextFile(f);
       if (kindOf(f.name, text) === "website") web.push(f);
-      else if (f.size > 10 * 1024 * 1024) note.push(`${f.name}: ไฟล์ใหญ่เกิน 10 MB`);
+      else if (f.size > SPLIT_BYTES) { const parts = splitCsv(f.name, text); mkt.push(...parts); note.push(`${f.name}: ไฟล์ใหญ่ (${(f.size / 1048576).toFixed(1)} MB) — แบ่งเป็น ${parts.length} ส่วนให้อัตโนมัติ (แต่ละส่วนนำเข้าแยกกัน ไม่นับซ้ำ) · กด "นำเข้าทั้งหมด" เพื่อนำเข้าทุกส่วนต่อกัน`); }
       else mkt.push({ name: f.name, text });
     }
     if (web.length) setWebIn({ files: web, id: Date.now() });

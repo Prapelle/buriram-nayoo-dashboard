@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import assert from "node:assert/strict";
 import { buildPlan, detectSpec, parseInput, periodsFromFilename, PlanError, type Existing, type Plan } from "../src/lib/import/plan";
 import { SPEC_BY_ID } from "../src/lib/import/specs";
+import { splitCsv, toCsv as tc, parseCsv as pc } from "../src/lib/csv";
 import { TABS } from "../src/lib/schema";
 
 const DIR = process.env.FIXTURE_DIR ?? "tests/fixtures";
@@ -111,5 +112,22 @@ console.log("ช่วงวันที่จากชื่อไฟล์ / �
   assert.equal(detectSpec(t.headers).spec?.id, "gads_campaigns"); assert.deepEqual(periodsFromFilename(t.preamble!), { start: "2026-09-01", end: "2026-09-30" });
   assert.equal(t.records.length, parseInput(raw).records.length);
   ok("ไฟล์ที่มีบรรทัดหัวรายงานก่อนตาราง → ข้ามหัวเรื่อง ตรวจประเภทได้ จำนวนแถวเท่าเดิม และอ่านช่วงวันที่จากหัวรายงาน");
+}
+console.log("ไฟล์ Facebook Page ใหญ่ (1/11/2026)");
+{
+  const head = ["Post ID", "Page ID", "Page name", "Title", "Description", "Publish time", "Permalink", "Post type", "Date", "Reactions, Comments and Shares", "Reactions", "Comments", "Shares"];
+  const long = "ข้อความโพสต์ยาว ".repeat(150);
+  const body = Array.from({ length: 400 }, (_, i) => [`p${i % 40}`, "1", "เพจ", "หัวเรื่อง " + i, long + "\n\"บรรทัดใหม่\", มีจุลภาค", "09/01/2026 10:00", "https://fb.com/x", "Photo", `09/${String(1 + (i % 28)).padStart(2, "0")}/2026`, "3", "2", "1", "0"]);
+  const text = tc([head, ...body]);
+  const parts = splitCsv("Sep-01-2026_Sep-30-2026_1.csv", text, 400_000);
+  assert.ok(parts.length > 1); assert.ok(parts.every((p) => pc(p.text.replace(/^\uFEFF/, ""))[0].join() === head.join()));
+  assert.equal(parts.reduce((a, p) => a + pc(p.text.replace(/^\uFEFF/, "")).length - 1, 0), 400); // แถวครบ ไม่หาย ไม่ซ้ำ (ข้อความหลายบรรทัด / มีจุลภาค ไม่แตก)
+  assert.deepEqual(splitCsv("a.csv", text, 400_000).map((p) => p.text), parts.map((p) => p.text)); // แบ่งแบบเดิมทุกครั้ง → กันไฟล์ซ้ำได้
+  assert.equal(splitCsv("s.csv", "sep=,\n" + text, 400_000).length, 1);
+  const t = parseInput(parts[0].text); const sp = detectSpec(t.headers).spec!; assert.equal(sp.id, "fb_page");
+  const pl = buildPlan({ spec: sp, table: t, ctx: { filename: parts[0].name, area: "unknown", snapshotDate: "2026-10-01" }, existing: new Map(), areaMap: emptyMap });
+  const rec = pl.planned.find((x) => x.rec)!.rec!;
+  assert.ok(String(rec.description).length <= 501 && !String(rec.raw_json).includes("ข้อความโพสต์ยาว") && String(rec.title).startsWith("หัวเรื่อง"));
+  ok(`ไฟล์ใหญ่แบ่งเป็น ${parts.length} ส่วน (หัวตารางทุกส่วน · แถวครบ 400 · ข้อความหลายบรรทัดไม่แตก · แบ่งเหมือนเดิมทุกครั้ง · ไฟล์ sep= ไม่แบ่ง) · Facebook Page: raw_json ไม่เก็บ Title/Description ซ้ำ · Description ตัดที่ 500 ตัวอักษร`);
 }
 console.log(`\nผ่านทั้งหมด ${pass} รายการ`);

@@ -16,6 +16,10 @@ export type Spec = {
   comparison?: boolean;
   /** field ที่ประกอบเป็น business key (ร่วมกับ source/ช่วงเวลา) */
   keyFields: string[];
+  /** คอลัมน์ต้นฉบับที่ไม่ต้องเก็บซ้ำใน raw_json (มีช่องของตัวเองแล้ว และยาว) */
+  rawSkip?: string[];
+  /** ตัดค่าที่ยาวเกินในช่องที่ระบุ (ตัวอักษร) — ลดขนาดแท็บที่ไฟล์ส่งออกซ้ำข้อความเดิมทุกวัน */
+  maxLen?: Record<string, number>;
   /** ซ้ำกันในไฟล์ได้ (ใช้ลำดับที่ปรากฏแยกแยะ) แทนการตีเป็นข้อผิดพลาด */
   ambiguousDuplicates?: boolean;
   /** ใช้ map Area จาก AREA_MAPPINGS */
@@ -42,7 +46,8 @@ export const SPECS: Spec[] = [
     id: "fb_page", source: "facebook_page", label: "Facebook Page — สถิติโพสต์ (รายวัน / Lifetime)", tab: "FB_PAGE_POSTS",
     // ไม่บังคับ Views/Reach เพราะไฟล์รายวันของ Facebook ไม่มีคอลัมน์เหล่านี้
     signature: ["post id", "page id", "publish time", "permalink", "post type", "date"],
-    period: "snapshot", keyFields: ["page_id", "post_id", "metric_date"], noArea: true, metricDate: { labelKey: "metric_period_label" },
+    period: "snapshot", rawSkip: ["Title", "Description"], maxLen: { description: 500 }, // ไฟล์รายวันซ้ำข้อความโพสต์ทุกแถว (1/11/2026)
+    keyFields: ["page_id", "post_id", "metric_date"], noArea: true, metricDate: { labelKey: "metric_period_label" },
     previewKeys: ["page_name", "metric_date", "metric_scope", "publish_time", "reactions", "comments", "shares", "seconds_viewed"],
     fields: [
       f("Post ID", "post_id", "text", true), f("Page ID", "page_id", "text", true), f("Page name", "page_name", "text"),

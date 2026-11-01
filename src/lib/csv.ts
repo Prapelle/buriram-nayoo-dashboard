@@ -52,3 +52,20 @@ export function decodeText(bytes: Uint8Array): string {
   return new TextDecoder(enc).decode(bytes); // TextDecoder ตัด BOM ออกให้
 }
 export async function readTextFile(f: Blob): Promise<string> { return decodeText(new Uint8Array(await f.arrayBuffer())); }
+
+/**
+ * ไฟล์ CSV ใหญ่ (1/11/2026): แบ่งตามแถวเป็นส่วนละ ~3 MB (หัวตารางซ้ำทุกส่วน) — ส่งทีละส่วนไม่ให้คำขอใหญ่เกินที่ Server รับไหว
+ * · แบ่งแบบเดิมทุกครั้ง (ไฟล์เดิม → ส่วนเดิม) ระบบกันไฟล์ซ้ำจึงยังทำงาน · แถวซ้ำข้ามส่วนกันด้วย row_key เหมือนเดิม
+ * · ไฟล์ที่หัวตารางพิเศษ (sep= / หลายบรรทัด) ไม่แบ่ง
+ */
+export function splitCsv(name: string, text: string, partBytes = 3 * 1024 * 1024): { name: string; text: string }[] {
+  if (/^\uFEFF?sep=/i.test(text)) return [{ name, text }];
+  const rows = parseCsv(text.replace(/^\uFEFF/, ""));
+  if (rows.length < 3 || rows[0].filter((c) => c.trim()).length < 3) return [{ name, text }];
+  const [head, ...body] = rows;
+  const parts = Math.max(1, Math.ceil(new TextEncoder().encode(text).length / partBytes)); const per = Math.ceil(body.length / parts);
+  if (parts === 1) return [{ name, text }];
+  const base = name.replace(/\.csv$/i, "");
+  return Array.from({ length: parts }, (_, i) => body.slice(i * per, (i + 1) * per)).filter((b) => b.length)
+    .map((b, i, all) => ({ name: `${base} (ส่วน ${i + 1} จาก ${all.length}).csv`, text: toCsv([head, ...b]) }));
+}

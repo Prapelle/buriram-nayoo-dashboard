@@ -212,7 +212,8 @@ export function buildPlan(a: { spec: Spec; table: Table; ctx: Ctx; existing: Exi
 
     // raw_json: เก็บทุกคอลัมน์ต้นฉบับ (ตัดค่ายาวเกิน 4,000 ตัวอักษรต่อช่อง ป้องกันเกินขีดจำกัดเซลล์)
     const raw: Record<string, string> = {};
-    table.headers.forEach((h, i) => { const v = r.cells[i] ?? ""; raw[h] = v.length > 4000 ? v.slice(0, 4000) : v; });
+    table.headers.forEach((h, i) => { if (spec.rawSkip?.includes(h)) return; const v = r.cells[i] ?? ""; raw[h] = v.length > 4000 ? v.slice(0, 4000) : v; });
+    for (const [k, max] of Object.entries(spec.maxLen ?? {})) { const v = String(rec[k] ?? ""); if (v.length > max) rec[k] = v.slice(0, max) + "…"; }
     rec.raw_json = JSON.stringify(raw);
     recs.push({ n: r.n, rec, baseKey });
   }

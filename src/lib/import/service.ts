@@ -1,7 +1,7 @@
 import { AREAS } from "../schema";
-import { appendRows, batchUpdateValues, colLetter, firstRowOf, readTabs, toRow } from "../sheets";
+import { appendRows, batchGet, batchUpdateValues, colLetter, firstRowOf, readTabs, toRow } from "../sheets";
 import { isIsoDate } from "./normalize";
-import { buildPlan, detectSpec, parseInput, periodsFromFilename, PlanError, type Ctx, type Existing, type Plan } from "./plan";
+import { buildPlan, compareKeys, detectSpec, parseInput, periodsFromFilename, PlanError, type Ctx, type Existing, type Plan } from "./plan";
 import { SPEC_BY_ID, type Spec } from "./specs";
 import type { Role } from "../roles";
 
@@ -63,7 +63,7 @@ async function prepare(input: ImportInput) {
     if (v && !isIsoDate(v)) throw new HttpError(400, `วันที่ไม่ถูกต้อง (${k})`, "BAD_DATE");
 
   let tabs;
-  try { tabs = await readTabs([spec.tab, "AREA_MAPPINGS", "IMPORT_BATCHES", "APP_CONFIG"]); }
+  try { tabs = { ...(await readTabs(["AREA_MAPPINGS", "IMPORT_BATCHES", "APP_CONFIG"])), [spec.tab]: await readTarget(spec.tab, ["row_key", "record_id", ...compareKeys(spec)]) }; }
   catch { throw new HttpError(409, "อ่านฐานข้อมูลไม่ได้ กรุณาไปที่ ตั้งค่า → เตรียม Google Sheet ก่อน (ต้องกดอีกครั้งหลังอัปเดตระบบ เพื่อเพิ่มแท็บใหม่)", "SHEET_NOT_READY"); }
   const target = tabs[spec.tab];
   if (!target.headers.length) throw new HttpError(409, `แท็บ ${spec.tab} ยังไม่ถูกสร้าง กรุณาไปที่ ตั้งค่า → เตรียม Google Sheet`, "SHEET_NOT_READY");
@@ -174,6 +174,23 @@ export async function runCommit(input: ImportInput, actor: string, role: Role) {
     throw new HttpError(500, `นำเข้าไม่สำเร็จ: ${msg} (ข้อมูลที่เขียนไปแล้วบางส่วนจะไม่ซ้ำเมื่อนำเข้าไฟล์เดิมอีกครั้ง)`, "WRITE_FAILED");
   }
   return { batchId, counts: plan.counts, errors: plan.errors.slice(0, 1000), warnings: plan.warnings };
+}
+
+/**
+ * แท็บปลายทาง: อ่าน header ทั้งหมด แต่อ่านค่าเฉพาะคอลัมน์ที่ใช้กันซ้ำ / เทียบค่า (1/11/2026)
+ * — ไม่อ่าน raw_json / description ทั้งแท็บ (แท็บ Facebook Page ใหญ่หลายสิบ MB ทำให้นำเข้าไฟล์ใหญ่ล้มเหลว)
+ * · คงลำดับแถวไว้ (แถวว่างไม่ถูกตัด) เพื่อให้เลขแถวที่ใช้อัปเดตถูกต้อง
+ */
+async function readTarget(tab: string, need: string[]): Promise<{ headers: string[]; rows: Record<string, string>[] }> {
+  const [hdr] = await batchGet([`'${tab}'!1:1`]);
+  const headers = (hdr?.[0] ?? []).map(String);
+  const cols = [...new Set(need)].filter((h) => headers.includes(h));
+  if (!cols.length) return { headers, rows: [] };
+  const data = await batchGet(cols.map((h) => { const c = colLetter(headers.indexOf(h)); return `'${tab}'!${c}:${c}`; })).then((d) => d.map((col) => col.slice(1))); // ตัดแถว header
+  const n = Math.max(0, ...data.map((d) => d.length));
+  const rows: Record<string, string>[] = [];
+  for (let i = 0; i < n; i++) { const row: Record<string, string> = {}; cols.forEach((h, j) => { row[h] = String(data[j][i]?.[0] ?? ""); }); rows.push(row); }
+  return { headers, rows };
 }
 
 async function readIds(tab: string, colIdx: number, rows: number[]): Promise<Map<number, string>> {
