@@ -24,6 +24,7 @@ type Plan = {
   previewColumns: string[];
   preview: { n: number; status: string; values: Record<string, string | number> | null }[];
 };
+type BulkItem = { name: string; status: "wait" | "run" | "ok" | "skip" | "fail"; label?: string; period?: string; counts?: Counts; reason?: string; errors?: Err[] };
 type Batch = { batch_id: string; report_type: string; filename: string; report_start: string; report_end: string; uploaded_by: string; uploaded_at: string; status: string; rows_total: string; rows_inserted: string; rows_updated: string; rows_skipped: string; rows_invalid: string; error_summary: string };
 
 const AREAS = [["unknown", "ไม่ทราบ (Unknown)"], ["buriram", "บุรีรัมย์"], ["surin", "สุรินทร์"], ["multi_province", "หลายจังหวัด"]];
@@ -42,6 +43,9 @@ function kindOf(name: string, text: string): "marketing" | "website" {
 
 export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" | "sales" }) {
   const [queue, setQueue] = useState<{ name: string; text: string }[]>([]);
+  /** นำเข้าทั้งหมด (1/11/2026): ไล่นำเข้าทุกไฟล์ในคิวต่อกันเอง · ไฟล์ที่ต้องให้คนตัดสินใจ / ซ้ำ / ว่าง → ข้ามและสรุปเหตุผล */
+  const [bulk, setBulk] = useState<{ running: boolean; items: BulkItem[] } | null>(null);
+  const stopBulk = useRef(false);
   const [webIn, setWebIn] = useState<{ files: File[]; id: number } | undefined>();
   const [salesIn, setSalesIn] = useState<{ file: File; id: number } | undefined>();
   const [notices, setNotices] = useState<string[]>([]);
@@ -124,6 +128,40 @@ export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" 
     setFile(next); setSpecId(""); setPlan(null);
     await runPlan(next, {}, true);
   }
+  async function runAll() {
+    const list = [...(file && state !== "done" ? [file] : []), ...queue];
+    if (!list.length) return;
+    stopBulk.current = false; setQueue([]); setFile(null); setPlan(null); setResult(null); setState("idle");
+    const items: BulkItem[] = list.map((f) => ({ name: f.name, status: "wait" }));
+    const show = () => setBulk({ running: true, items: items.map((x) => ({ ...x })) });
+    show();
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    for (let i = 0; i < list.length; i++) {
+      if (stopBulk.current) { for (let k = i; k < items.length; k++) { items[k].status = "skip"; items[k].reason = "หยุดก่อนถึงไฟล์นี้"; } break; }
+      const f = list[i]; items[i].status = "run"; show();
+      for (let attempt = 0; ; attempt++) {
+        let r: Response | null = null; let j: { error?: string; code?: string; counts?: Counts; errors?: Err[]; spec?: { label: string }; period?: { start: string; end: string } } = {};
+        try { r = await fetch("/api/import/commit", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ filename: f.name, text: f.text, area: "unknown" }) }); j = await r.json().catch(() => ({})); }
+        catch { r = null; }
+        const busy = !r || r.status === 429 || r.status >= 500 && /429|quota|rate|50[0-4]|fetch failed|timeout/i.test(j.error ?? "50x");
+        if (busy && attempt < 4) { items[i].reason = `Google ไม่ว่าง รอแล้วลองใหม่ (${attempt + 1}/4)`; show(); await sleep(20_000 * (attempt + 1)); continue; }
+        if (r?.ok) { Object.assign(items[i], { status: "ok", label: j.spec?.label, period: j.period ? `${dmy(j.period.start)}–${dmy(j.period.end)}` : "", counts: j.counts, errors: j.errors, reason: undefined }); }
+        else {
+          const why: Record<string, string> = { DUPLICATE_FILE: "เคยนำเข้าแล้ว", PERIOD_REQUIRED: "ไม่มีช่วงวันที่ในชื่อไฟล์ — นำเข้าทีละไฟล์แล้วเลือกช่วงเอง", UNKNOWN_TYPE: "ไม่รู้จักประเภทไฟล์ / ไฟล์ไม่มีข้อมูล", NOTHING_TO_IMPORT: "ไม่มีแถวที่ถูกต้อง", EMPTY_FILE: "ไฟล์ว่าง" };
+          const skip = j.code && why[j.code];
+          Object.assign(items[i], { status: skip ? "skip" : "fail", reason: skip ? (j.code === "UNKNOWN_TYPE" && /ไม่แน่ชัด/.test(j.error ?? "") ? j.error : why[j.code!]) : (j.error ?? `HTTP ${r?.status ?? "เชื่อมต่อไม่ได้"}`) });
+        }
+        break;
+      }
+      show();
+    }
+    setBulk({ running: false, items: items.map((x) => ({ ...x })) });
+    if (histOpen) loadHistory();
+  }
+  function bulkCsv(items: BulkItem[]) {
+    const csv = toCsv([["ไฟล์", "ผล", "ประเภท", "ช่วงรายงาน", "เพิ่ม", "อัปเดต", "ข้าม", "ไม่ถูกต้อง", "เหตุผล"], ...items.map((x) => [x.name, { ok: "นำเข้าแล้ว", skip: "ข้าม", fail: "ผิดพลาด", wait: "ยังไม่ทำ", run: "กำลังทำ" }[x.status], x.label ?? "", x.period ?? "", x.counts?.insert ?? "", x.counts?.update ?? "", x.counts?.skip ?? "", x.counts?.invalid ?? "", x.reason ?? ""])]);
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" })); a.download = "import_all_summary.csv"; a.click(); URL.revokeObjectURL(a.href);
+  }
   function nextInQueue() { const [n, ...rest] = queue; if (!n) return; setQueue(rest); setResult(null); setOverride(false); if (input.current) input.current.value = ""; pickOne(n); }
 
   async function commit() {
@@ -172,7 +210,14 @@ export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" 
         </div>
 
         {notices.map((n, i) => <p key={i} role="alert" className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">{n}</p>)}
-        {queue.length > 0 && <p className="text-sm text-slate-600">ไฟล์ที่รอนำเข้าต่อ ({queue.length}): {queue.map((q) => q.name).join(", ")} — นำเข้าไฟล์นี้หรือกดยกเลิก แล้วกด <b>ไฟล์ถัดไป</b></p>}
+        {queue.length > 0 && !bulk?.running && (
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-brand-200 bg-brand-50 p-3 text-sm">
+            <p className="min-w-0 flex-1 text-slate-700">ไฟล์ที่รอนำเข้าต่อ ({queue.length}): {queue.slice(0, 5).map((q) => q.name).join(", ")}{queue.length > 5 ? ` และอีก ${queue.length - 5} ไฟล์` : ""} — นำเข้าทีละไฟล์ (กด <b>ไฟล์ถัดไป</b>) หรือ</p>
+            <button type="button" onClick={runAll} disabled={committing} className="rounded-lg bg-brand-600 px-4 py-2 font-medium text-white hover:bg-brand-700 disabled:opacity-40">นำเข้าทั้งหมด ({queue.length + (file && state !== "done" ? 1 : 0)} ไฟล์)</button>
+            <p className="basis-full text-xs text-slate-500">ระบบไล่นำเข้าเองทีละไฟล์ · ไฟล์ที่เคยนำเข้าแล้ว / ไม่มีช่วงวันที่ / ไม่รู้จักประเภท จะถูกข้ามพร้อมเหตุผล (ไม่นำเข้าซ้ำ) · จบแล้วแสดงสรุปทุกไฟล์</p>
+          </div>
+        )}
+        {bulk && <BulkSummary bulk={bulk} onStop={() => { stopBulk.current = true; }} onClose={() => setBulk(null)} onCsv={() => bulkCsv(bulk.items)} />}
         {state === "loading" && <p role="status" className="text-sm text-slate-600">กำลังตรวจไฟล์...</p>}
         {state === "error" && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
@@ -325,6 +370,40 @@ export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" 
         )}
         </div>
       </details>
+    </div>
+  );
+}
+
+function BulkSummary({ bulk, onStop, onClose, onCsv }: { bulk: { running: boolean; items: BulkItem[] }; onStop: () => void; onClose: () => void; onCsv: () => void }) {
+  const it = bulk.items, done = it.filter((x) => x.status !== "wait" && x.status !== "run").length;
+  const n = (s: BulkItem["status"]) => it.filter((x) => x.status === s).length;
+  const sum = (k: keyof Counts) => it.reduce((a, x) => a + (x.counts?.[k] ?? 0), 0);
+  const cur = it.find((x) => x.status === "run");
+  const B: Record<BulkItem["status"], [string, string]> = { ok: ["นำเข้าแล้ว", "bg-green-100 text-green-800"], skip: ["ข้าม", "bg-slate-100 text-slate-700"], fail: ["ผิดพลาด", "bg-red-100 text-red-800"], wait: ["รอ", "bg-white text-slate-400"], run: ["กำลังทำ", "bg-brand-100 text-brand-800"] };
+  const order = [...it].sort((a, b) => ["fail", "skip", "run", "ok", "wait"].indexOf(a.status) - ["fail", "skip", "run", "ok", "wait"].indexOf(b.status));
+  return (
+    <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-5" role="status">
+      <div className="flex flex-wrap items-center gap-3">
+        <h3 className="font-semibold">{bulk.running ? `กำลังนำเข้าทั้งหมด ${done}/${it.length}` : `นำเข้าทั้งหมดเสร็จแล้ว (${it.length} ไฟล์)`}</h3>
+        {bulk.running ? <button type="button" onClick={onStop} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">หยุดหลังไฟล์นี้</button>
+          : <><button type="button" onClick={onCsv} className="text-sm underline">ดาวน์โหลดสรุป (CSV)</button><button type="button" onClick={onClose} className="text-sm underline">ปิด</button></>}
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-brand-600 transition-all" style={{ width: `${Math.round((done / Math.max(1, it.length)) * 100)}%` }} /></div>
+      {cur && <p className="text-sm text-slate-600">กำลังทำ: {cur.name}{cur.reason ? ` · ${cur.reason}` : ""}</p>}
+      <p className="text-sm">นำเข้าแล้ว <b>{n("ok")}</b> ไฟล์ (เพิ่ม {sum("insert").toLocaleString("en-US")} · อัปเดต {sum("update").toLocaleString("en-US")} · ข้ามแถวซ้ำ {sum("skip").toLocaleString("en-US")} · ไม่ถูกต้อง {sum("invalid").toLocaleString("en-US")}) · ข้าม <b>{n("skip")}</b> ไฟล์ · ผิดพลาด <b className={n("fail") ? "text-red-700" : ""}>{n("fail")}</b> ไฟล์</p>
+      <div className="max-h-96 overflow-auto rounded-lg border border-slate-200">
+        <table className="w-full text-left text-sm" data-nosort>
+          <thead className="sticky top-0 bg-slate-50 text-xs text-slate-500"><tr><th className="p-2">ไฟล์</th><th>ผล</th><th>ประเภท / ช่วง</th><th className="text-right">เพิ่ม/อัปเดต/ข้าม/ไม่ถูกต้อง</th><th className="pl-3">เหตุผล</th></tr></thead>
+          <tbody>{order.map((x, i) => (
+            <tr key={x.name + i} className="border-t border-slate-100 align-top">
+              <td className="max-w-64 truncate p-2" title={x.name}>{x.name}</td>
+              <td><span className={`rounded px-1.5 py-0.5 text-xs ${B[x.status][1]}`}>{B[x.status][0]}</span></td>
+              <td className="text-xs text-slate-600">{x.label}{x.period ? <> · {x.period}</> : ""}</td>
+              <td className="whitespace-nowrap text-right tabular-nums">{x.counts ? `${x.counts.insert}/${x.counts.update}/${x.counts.skip}/${x.counts.invalid}` : ""}</td>
+              <td className="pl-3 text-xs text-slate-600">{x.reason}</td>
+            </tr>))}</tbody>
+        </table>
+      </div>
     </div>
   );
 }
