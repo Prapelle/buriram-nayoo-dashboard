@@ -24,7 +24,7 @@ type Plan = {
   previewColumns: string[];
   preview: { n: number; status: string; values: Record<string, string | number> | null }[];
 };
-const SPLIT_BYTES = 4 * 1024 * 1024; // ไฟล์ใหญ่กว่านี้แบ่งส่วนก่อนส่ง (splitCsv)
+const SPLIT_BYTES = 1.5 * 1024 * 1024; // ไฟล์ใหญ่กว่านี้แบ่งส่วนก่อนส่ง (splitCsv)
 type BulkItem = { name: string; status: "wait" | "run" | "ok" | "skip" | "fail"; label?: string; period?: string; counts?: Counts; reason?: string; errors?: Err[] };
 type Batch = { batch_id: string; report_type: string; filename: string; report_start: string; report_end: string; uploaded_by: string; uploaded_at: string; status: string; rows_total: string; rows_inserted: string; rows_updated: string; rows_skipped: string; rows_invalid: string; error_summary: string };
 

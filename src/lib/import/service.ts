@@ -63,7 +63,15 @@ async function prepare(input: ImportInput) {
     if (v && !isIsoDate(v)) throw new HttpError(400, `วันที่ไม่ถูกต้อง (${k})`, "BAD_DATE");
 
   let tabs;
-  try { tabs = { ...(await readTabs(["AREA_MAPPINGS", "IMPORT_BATCHES", "APP_CONFIG"])), [spec.tab]: await readTarget(spec.tab, ["row_key", "record_id", ...compareKeys(spec)]) }; }
+  try {
+    // อ่านเฉพาะคอลัมน์ที่ใช้ (ลดงานของ Server ต่อคำขอ — แท็บปลายทางและประวัติการนำเข้าโตขึ้นเรื่อย ๆ)
+    const [small, target, batches] = await Promise.all([
+      readTabs(["AREA_MAPPINGS", "APP_CONFIG"]),
+      readTarget(spec.tab, ["row_key", "record_id", ...compareKeys(spec)]),
+      readTarget("IMPORT_BATCHES", ["batch_id", "status", "file_sha256", "source", "report_type", "report_start", "report_end", "uploaded_at", "uploaded_by"]),
+    ]);
+    tabs = { ...small, IMPORT_BATCHES: batches, [spec.tab]: target };
+  }
   catch { throw new HttpError(409, "อ่านฐานข้อมูลไม่ได้ กรุณาไปที่ ตั้งค่า → เตรียม Google Sheet ก่อน (ต้องกดอีกครั้งหลังอัปเดตระบบ เพื่อเพิ่มแท็บใหม่)", "SHEET_NOT_READY"); }
   const target = tabs[spec.tab];
   if (!target.headers.length) throw new HttpError(409, `แท็บ ${spec.tab} ยังไม่ถูกสร้าง กรุณาไปที่ ตั้งค่า → เตรียม Google Sheet`, "SHEET_NOT_READY");
