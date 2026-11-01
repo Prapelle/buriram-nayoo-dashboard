@@ -130,4 +130,18 @@ console.log("ไฟล์ Facebook Page ใหญ่ (1/11/2026)");
   assert.ok(String(rec.description).length <= 501 && !String(rec.raw_json).includes("ข้อความโพสต์ยาว") && String(rec.title).startsWith("หัวเรื่อง"));
   ok(`ไฟล์ใหญ่แบ่งเป็น ${parts.length} ส่วน (หัวตารางทุกส่วน · แถวครบ 400 · ข้อความหลายบรรทัดไม่แตก · แบ่งเหมือนเดิมทุกครั้ง · ไฟล์ sep= ไม่แบ่ง) · Facebook Page: raw_json ไม่เก็บ Title/Description ซ้ำ · Description ตัดที่ 500 ตัวอักษร`);
 }
+console.log("Facebook Ads รายงานกำหนดเอง (1/11/2026)");
+{
+  const csv = `"Campaign name","Ad set name","Account name","Ad name","Ad delivery",Reach,Impressions,"Clicks (all)",Currency,"CPC (all)","Amount spent (THB)",Starts,Ends,"Reporting starts","Reporting ends"
+,,,,,300,900,30,THB,1,150.5,,,2026-10-01,2026-10-31
+Link,Buriram,"บัญชี",HXP-1,inactive,100,400,10,THB,1.2,100.25,2026-06-15,Ongoing,2026-10-01,2026-10-31
+"Like page",Baan,"บัญชี",001,active,200,500,20,THB,0.5,50.25,2026-05-11,Ongoing,2026-10-01,2026-10-31
+`;
+  const t = parseInput(csv); const d = detectSpec(t.headers); assert.equal(d.spec?.id, "fb_ads");
+  const pl = buildPlan({ spec: d.spec!, table: t, ctx: { filename: "Untitled-report-Oct-1-2026-to-Oct-31-2026.csv", area: "unknown" }, existing: new Map(), areaMap: emptyMap });
+  assert.deepEqual([pl.counts.total, pl.counts.insert, pl.counts.invalid], [2, 2, 0]);
+  assert.equal(pl.planned.reduce((a, x) => a + Number(x.rec?.amount_spent_thb ?? 0), 0), 150.5);
+  const r = pl.planned[0].rec!; assert.equal(r.campaign_name, "Link"); assert.equal(r.clicks_all, 10); assert.ok(pl.warnings.some((w) => w.includes("แถวสรุปยอดรวม")));
+  ok("Facebook Ads รายงานกำหนดเอง (ไม่มี Result indicator) ตรวจเป็น Facebook Ads ได้ · แถวสรุปยอดรวม (ชื่อว่าง) ข้าม — ยอดใช้จ่าย 150.50 ไม่ซ้ำ · เก็บ Campaign / Clicks (all) เพิ่ม");
+}
 console.log(`\nผ่านทั้งหมด ${pass} รายการ`);

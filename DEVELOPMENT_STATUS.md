@@ -1335,3 +1335,10 @@ Users 17,443 · Page Views 42,450 · PV/User 2.43 · Duration 1 นาที 0 �
   - ตอนนำเข้าอ่านแค่คอลัมน์ row_key ของแท็บปลายทาง แล้วอ่านค่าเฉพาะแถวที่ตรงกันมาเทียบ (`readRowsAt` รวมแถวติดกันเป็นช่วง) — ไม่อ่านค่าทุกคอลัมน์ทั้งแท็บอีก
   - Sheet จำลองในเทสต์รองรับการอ่านช่วงสี่เหลี่ยม (A5:F9) เหมือน API จริง
   - ทดสอบไฟล์จริง 12.6 MB ผ่านเบราว์เซอร์ (Sheet จำลอง): 43 ส่วน 2,168 แถว · รอบสองข้ามทั้งหมด แถวไม่เพิ่ม
+
+## 50) Facebook Ads รายงานกำหนดเอง (1/11/2026)
+- ไฟล์ "Untitled report" จาก Ads Manager ไม่มีคอลัมน์ Result indicator → เดิมขึ้น "ไม่รู้จักประเภทไฟล์" · signature ของ fb_ads เหลือคอลัมน์หลัก (Reporting starts/ends, Ad name, Ad set name, Amount spent (THB))
+- แถวสรุปยอดรวม (Ad name + Ad set name ว่าง) ข้ามพร้อมคำเตือน — กันยอดใช้จ่ายซ้ำ (spec `summaryRowWhenBlank`)
+- META_ADS เพิ่มคอลัมน์ต่อท้าย: campaign_name, account_name, clicks_all, cpc_all, starts (**ต้องกด เตรียม Google Sheet**; ถ้ายังไม่กด ค่าเหล่านี้อยู่ใน raw_json)
+- ไฟล์จริง ต.ค. 69: 40 โฆษณา · ยอดใช้จ่าย 4,616.94 ตรงกับแถวรวมของไฟล์
+- **Passed:** 491/491

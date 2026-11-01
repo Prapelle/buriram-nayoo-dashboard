@@ -165,8 +165,12 @@ export function buildPlan(a: { spec: Spec; table: Table; ctx: Ctx; existing: Exi
   const planned: Planned[] = [];
   const recs: { n: number; rec: Rec; baseKey: string }[] = [];
   let prePublishZero = 0;
+  let summaryRows = 0;
+  const blankIdx = (spec.summaryRowWhenBlank ?? []).map((k) => idx.get(norm(spec.fields.find((x) => x.key === k)?.src ?? ""))).filter((i): i is number => i !== undefined);
 
   for (const r of table.records) {
+    // แถวสรุปยอดรวมของรายงาน (ชื่อทุกช่องว่าง แต่มีตัวเลขรวม) — ไม่นำเข้า ไม่งั้นยอดซ้ำ
+    if (blankIdx.length && blankIdx.every((i) => !(r.cells[i] ?? "").trim()) && r.cells.some((c) => c.trim())) { summaryRows++; continue; }
     const before = errors.length;
     if (r.cells.length > table.headers.length && r.cells.slice(table.headers.length).some((c) => c.trim() !== "")) {
       errors.push({ row: r.n, column: "(ทั้งแถว)", raw: "", code: "COLUMN_COUNT", message: `จำนวนคอลัมน์เกิน header (${r.cells.length} > ${table.headers.length}) ไฟล์อาจมี comma ที่ไม่อยู่ในเครื่องหมายคำพูด` });
@@ -228,7 +232,8 @@ export function buildPlan(a: { spec: Spec; table: Table; ctx: Ctx; existing: Exi
     warnings.push(`พบชื่อโฆษณาซ้ำในชุดโฆษณาเดียวกัน ${ambiguousGroups} กลุ่ม (ไม่มี Ad ID) ระบบแยกแยะด้วยลำดับในไฟล์ หากส่งออกใหม่แล้วลำดับเปลี่ยน แถวกลุ่มนี้อาจถูกจับคู่สลับกัน`);
 
   const cmpKeys = compareKeys(spec);
-  const counts = { total: table.records.length, insert: 0, update: 0, skip: prePublishZero, invalid: planned.filter((x) => x.status === "invalid").length };
+  if (summaryRows) warnings.push(`ข้าม ${summaryRows} แถวสรุปยอดรวมของรายงาน (ไม่มีชื่อโฆษณา) — ไม่นำเข้าเพื่อไม่ให้ยอดซ้ำ`);
+  const counts = { total: table.records.length - summaryRows, insert: 0, update: 0, skip: prePublishZero, invalid: planned.filter((x) => x.status === "invalid").length };
   for (const { n, rec, baseKey } of recs) {
     const occ = (seen.get(baseKey) ?? 0) + 1;
     seen.set(baseKey, occ);

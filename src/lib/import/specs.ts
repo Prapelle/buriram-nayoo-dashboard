@@ -20,6 +20,8 @@ export type Spec = {
   rawSkip?: string[];
   /** ตัดค่าที่ยาวเกินในช่องที่ระบุ (ตัวอักษร) — ลดขนาดแท็บที่ไฟล์ส่งออกซ้ำข้อความเดิมทุกวัน */
   maxLen?: Record<string, number>;
+  /** แถวที่ช่องเหล่านี้ว่างทั้งหมด = แถวสรุปยอดรวมของรายงาน → ข้าม */
+  summaryRowWhenBlank?: string[];
   /** ซ้ำกันในไฟล์ได้ (ใช้ลำดับที่ปรากฏแยกแยะ) แทนการตีเป็นข้อผิดพลาด */
   ambiguousDuplicates?: boolean;
   /** ใช้ map Area จาก AREA_MAPPINGS */
@@ -68,8 +70,9 @@ export const SPECS: Spec[] = [
   },
   {
     id: "fb_ads", source: "facebook_ads", label: "Facebook Ads (Meta)", tab: "META_ADS",
-    signature: ["reporting starts", "reporting ends", "ad name", "amount spent (thb)", "result indicator", "ad set name"],
-    period: "file", keyFields: ["ad_set_name", "ad_name"], ambiguousDuplicates: true,
+    // รายงานกำหนดเอง (Ads Manager → Export) อาจไม่มี Result indicator / Results — ใช้คอลัมน์หลักที่ต้องมีเสมอ (1/11/2026)
+    signature: ["reporting starts", "reporting ends", "ad name", "amount spent (thb)", "ad set name"],
+    period: "file", keyFields: ["ad_set_name", "ad_name"], ambiguousDuplicates: true, summaryRowWhenBlank: ["ad_name", "ad_set_name"],
     areaMap: { platform: "meta_ads", key: "ad_set_name" },
     previewKeys: ["ad_set_name", "ad_name", "ad_delivery", "results", "result_indicator", "amount_spent_thb"],
     fields: [
@@ -86,6 +89,8 @@ export const SPECS: Spec[] = [
       f("Conversion rate ranking", "conversion_rate_ranking", "text"),
       f("Ad set name", "ad_set_name", "text", true),
       f("Results (initial)", "results_initial", "num"), f("Results (initial) indicator", "results_initial_indicator", "text"),
+      f("Campaign name", "campaign_name", "text"), f("Account name", "account_name", "text"),
+      f("Clicks (all)", "clicks_all", "int"), f("CPC (all)", "cpc_all", "numLoose"), f("Starts", "starts", "text"),
     ],
   },
   {
