@@ -532,6 +532,28 @@ console.log("15a2) ช่องทางใหม่ + ค่าเดิม (31
   const { deleteLead: del } = await import("../src/lib/leads-service"); await del(kept.lead_id, kept.updated_at, "admin@example.com");
   ok("ชื่อช่องทางเก่า (Facebook Organic / TikTok/YouTube) เลือกไม่ได้ · Facebook Message / Comment / TikTok / YouTube ใช้ได้ · Lead ที่มีชื่อเก่าใน Sheet แสดงเป็น Unknown (ไม่แก้ Sheet จนกว่าจะบันทึก)");
 }
+console.log("15a3) ใช้พร้อมกันหลายคน (1/11/2026)");
+{
+  // สร้าง Lead พร้อมกัน 3 คน → รหัสไม่ซ้ำ
+  const made = await Promise.all([1, 2, 3].map((k) => saveLead({ ...base, customer_name: `พร้อมกัน ${k}`, phone: `08700000${k}${k}`, need: "ซื้อ" }, `u${k}@x.com`)));
+  const lt = tabs.get("LEADS")!; const LH = lt.rows[0];
+  const codes = made.map((m) => lt.rows.find((x) => x[LH.indexOf("lead_id")] === m.lead.lead_id)![LH.indexOf("lead_code")]);
+  assert.equal(new Set(codes).size, 3, codes.join()); assert.deepEqual(made.map((m) => m.lead.lead_code).sort(), [...codes].sort());
+  // แถวเลื่อน (มีคนลบแถวด้านบน) → ยืนยันแถวก่อนเขียน ไม่เขียนทับแถวอื่น
+  const { guardRow } = await import("../src/lib/row-guard");
+  const target = made[2].lead; const ri = lt.rows.findIndex((x) => x[LH.indexOf("lead_id")] === target.lead_id) + 1;
+  assert.deepEqual(await guardRow("LEADS", LH as string[], "lead_id", target.lead_id, ri - 1, target.updated_at), { row: ri }); // ระบุแถวผิด → หาแถวจริงเจอ
+  assert.deepEqual(await guardRow("LEADS", LH as string[], "lead_id", target.lead_id, ri, "เวลาเก่า"), { error: "stale" });
+  assert.deepEqual(await guardRow("LEADS", LH as string[], "lead_id", "ไม่มีรายการนี้", ri, target.updated_at), { error: "gone" });
+  const { changeLeadStatus: cls, deleteLead: dl } = await import("../src/lib/leads-service");
+  const a = made[0].lead, b = made[1].lead;
+  await dl(a.lead_id, a.updated_at, "admin@example.com"); // ลบแถวด้านบน
+  const moved = await cls(b.lead_id, "call_status", "ติดต่อได้แล้ว", b.updated_at, "s@x.com"); assert.equal(moved.changed, true);
+  const br = lt.rows.find((x) => x[LH.indexOf("lead_id")] === b.lead_id)!; assert.equal(br[LH.indexOf("call_status")], "ติดต่อได้แล้ว");
+  await assert.rejects(cls(b.lead_id, "call_status", "รอเข้าชม", b.updated_at, "x@x.com"), (e: unknown) => e instanceof LeadError && e.code === "STALE"); // คนที่สองใช้ข้อมูลเก่า
+  for (const m of [b, target]) { const cur = (await listLeads()).rows.find((r) => r.lead_id === m.lead_id)!; await dl(m.lead_id, cur.updated_at, "admin@example.com"); }
+  ok(`สร้าง Lead พร้อมกัน 3 คน → รหัสไม่ซ้ำ (${codes.join(", ")}) · แถวเลื่อนหลังมีคนลบ → เขียนถูกแถว · ใช้ข้อมูลเก่า → แจ้งให้โหลดใหม่ (ไม่เขียนทับ)`);
+}
 console.log("15b2) หน้า Leads: ช่อง Line (30/10/2026)");
 {
   // Sheet ที่ยังไม่ได้กด เตรียม Google Sheet (ไม่มีคอลัมน์ line_id): บันทึก Lead ปกติได้ · กรอก Line → แจ้งให้เตรียม Sheet (ไม่ทิ้งค่า)

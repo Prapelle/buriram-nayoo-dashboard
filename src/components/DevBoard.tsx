@@ -1,4 +1,5 @@
 "use client";
+import { useAutoRefresh } from "@/lib/use-auto-refresh";
 import { Skeleton } from "@/components/Skeleton";
 import { Notice } from "@/components/Toast";
 import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
@@ -26,11 +27,12 @@ export function DevBoard({ kind = "developer" }: { kind?: DevKind }) {
   const [q, setQ] = useState(""); const [staffF, setStaffF] = useState(""); const [tierF, setTierF] = useState("");
   const [busy, setBusy] = useState<Set<string>>(new Set()); const [dragId, setDragId] = useState(""); const [over, setOver] = useState("");
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     try { const r = await fetch(`/api/developers?kind=${kind}`); const j = await r.json(); if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`); setAll(j.devs); setProducts(j.products); setStaff(j.staff); setToday(j.today); setState("ok"); }
-    catch (e) { setMsg({ type: "error", text: e instanceof Error ? e.message : "โหลดข้อมูลไม่ได้" }); setState("error"); }
+    catch (e) { if (silent) return; setMsg({ type: "error", text: e instanceof Error ? e.message : "โหลดข้อมูลไม่ได้" }); setState("error"); }
   }, [kind]);
   useEffect(() => { load(); }, [load]);
+  useAutoRefresh(() => load(true), busy.size > 0 || !!dragId);
 
   const activeOf = useMemo(() => { const m = new Map<string, DevProduct[]>(); for (const p of products) if (productState(p, today) !== "expired") { if (!m.has(p.developer_id)) m.set(p.developer_id, []); m.get(p.developer_id)!.push(p); } return m; }, [products, today]);
   const locked = (d: Dev) => AUTO_STATUS.includes(d.status) || (activeOf.get(d.developer_id) ?? []).some((p) => productState(p, today) === "active");
@@ -53,7 +55,7 @@ export function DevBoard({ kind = "developer" }: { kind?: DevKind }) {
       const name = d.company_name || d.project_main;
       setMsg(to === "ปิดการขาย" ? { type: "ok", text: `${name}: ปิดการขายแล้ว (นับเป็น Win) — เพิ่ม Product และวันหมดอายุได้เมื่อพร้อม การ์ดจะย้ายไป กำลังใช้ Product เองเมื่อถึงวันเริ่ม`, link: `${page}?view=${id}` }
         : { type: "ok", text: `${name}: ${d.status || DEV_DEFAULT} → ${to}${to === "เข้าพบแล้ว" ? ` (${method}) · ติดต่อล่าสุด = วันนี้` : ""}` });
-    } catch (e) { setAll((rs) => rs.map((x) => (x.developer_id === id ? d : x))); setMsg({ type: "error", text: e instanceof Error ? e.message : "เกิดข้อผิดพลาด" }); load(); }
+    } catch (e) { setAll((rs) => rs.map((x) => (x.developer_id === id ? d : x))); void load(true); /* ข้อมูลล่าสุด (มีคนแก้ก่อน) */ setMsg({ type: "error", text: e instanceof Error ? e.message : "เกิดข้อผิดพลาด" }); load(); }
     finally { setBusy((b) => { const n = new Set(b); n.delete(id); return n; }); }
   }
 

@@ -1,4 +1,5 @@
 "use client";
+import { useAutoRefresh } from "@/lib/use-auto-refresh";
 import { useIsMobile } from "@/lib/use-mobile";
 import { Skeleton } from "@/components/Skeleton";
 import { Notice } from "@/components/Toast";
@@ -53,14 +54,15 @@ export function LeadsManager() {
   const [sortBy, setSortBy] = useState<{ key: SortKey; dir: "asc" | "desc" } | null>(null);
   const [autoFollow, setAutoFollow] = useState(""); // วันติดตามที่ระบบเสนอให้ (แสดงคำอธิบาย)
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     try {
       const r = await fetch("/api/leads"); const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
       setData({ state: "ok", rows: j.rows, staff: j.staff ?? [], areas: j.areas ?? [] });
-    } catch (e) { setData({ state: "error", rows: [], staff: [], areas: [], error: e instanceof Error ? e.message : "error" }); }
+    } catch (e) { if (silent) return; setData({ state: "error", rows: [], staff: [], areas: [], error: e instanceof Error ? e.message : "error" }); }
   }, []);
   useEffect(() => { load(); }, [load]);
+  useAutoRefresh(() => load(true));
 
   // รายการติดตาม (เลยกำหนด / วันนี้ / ค้างนาน) · เปิดจากการ์ดหน้า ภาพรวม ด้วย ?follow=...
   const [follow, setFollow] = useState<"" | "overdue" | "today" | "stale">("");

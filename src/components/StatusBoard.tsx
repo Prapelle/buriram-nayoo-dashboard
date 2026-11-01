@@ -1,4 +1,5 @@
 "use client";
+import { useAutoRefresh } from "@/lib/use-auto-refresh";
 import { Skeleton } from "@/components/Skeleton";
 import { Notice } from "@/components/Toast";
 import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
@@ -54,14 +55,15 @@ export function StatusBoard({ kind }: { kind: "seller" | "buyer" }) {
   const [dragId, setDragId] = useState("");
   const [over, setOver] = useState("");
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     try {
       const r = await fetch("/api/leads"); const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
       setAll(j.rows as Lead[]); setStaff(j.staff ?? []); setState("ok");
-    } catch (e) { setMsg({ type: "error", text: e instanceof Error ? e.message : "โหลดข้อมูลไม่ได้" }); setState("error"); }
+    } catch (e) { if (silent) return; setMsg({ type: "error", text: e instanceof Error ? e.message : "โหลดข้อมูลไม่ได้" }); setState("error"); }
   }, []);
   useEffect(() => { load(); }, [load]);
+  useAutoRefresh(() => load(true), busy.size > 0 || !!dragId); // เห็นการ์ดที่คนอื่นย้าย โดยไม่ต้องรีเฟรช
 
   const rows = useMemo(() => all.filter((x) => (cfg.needs as readonly string[]).includes(x.need)), [all, cfg.needs]);
   const noNeed = useMemo(() => all.filter((x) => !x.need).length, [all]);

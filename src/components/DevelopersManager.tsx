@@ -1,4 +1,5 @@
 "use client";
+import { useAutoRefresh } from "@/lib/use-auto-refresh";
 import { useIsMobile } from "@/lib/use-mobile";
 import { Skeleton } from "@/components/Skeleton";
 import { Notice } from "@/components/Toast";
@@ -51,11 +52,12 @@ export function DevelopersManager({ kind = "developer" }: { kind?: DevKind }) {
   const [month, setMonth] = useState("");
   const [imp, setImp] = useState<{ name: string; grid: string[][]; plan?: { counts: Record<string, number>; results: { n: number; status: string; name: string; errors?: Record<string, string>; matches?: string[] }[]; committed: boolean } } | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (silent = false) => {
     try { const r = await fetch(`/api/developers?kind=${kind}`); const j = await r.json(); if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`); setData(j); setErr(""); setMonth((m) => m || j.today.slice(0, 7)); }
-    catch (e) { setErr(e instanceof Error ? e.message : "โหลดข้อมูลไม่ได้"); }
+    catch (e) { if (!silent) setErr(e instanceof Error ? e.message : "โหลดข้อมูลไม่ได้"); }
   }, [kind]);
   useEffect(() => { load(); }, [load]);
+  useAutoRefresh(() => load(true), busy);
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search); const v = sp.get("follow");
     if (v === "overdue" || v === "today" || v === "stale") setFollow(v);

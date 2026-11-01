@@ -141,6 +141,19 @@ try {
   lr = await tab("LEADS"); assert.equal(get("B2", "call_status"), "กู้ไม่ผ่าน"); assert.equal(get("B2", "lost_reason"), "รายได้ไม่ผ่านเกณฑ์");
   assert.equal(await page.getByRole("heading", { name: "คนต้องการซื้อ", level: 1 }).count(), 1);
   ok("คนต้องการซื้อ (กู้ไม่ผ่าน ต้องกรอกสาเหตุ: ยกเลิกแล้วการ์ดไม่ย้าย · กรอกแล้วบันทึกลงช่องสาเหตุ) · Call Status ชื่อเดิม (ยังไม่ได้โทร / เข้าชมโครงการแล้ว) อยู่คอลัมน์ใหม่ถูกต้อง · ลากไป ติดต่อได้แล้ว (contactable TRUE) · เมนูเปลี่ยนเป็น จอง · ไม่แสดง Lead ขาย");
+  { // ใช้พร้อมกันหลายคน (1/11/2026): อีกคนเปิดบอร์ดเดียวกันอยู่ → เห็นการ์ดที่ย้ายเองภายใน 1 นาที (ไม่ต้องรีเฟรช) · ใช้ข้อมูลเก่า → แจ้งและโหลดใหม่
+    const other = await open("admin@example.com"); const p2 = other.page;
+    await p2.clock.install(); await p2.goto(BASE + "/buyer-leads"); await col(p2, "ติดต่อได้แล้ว").getByText("ผู้ซื้อ ก").waitFor();
+    await page.getByLabel("เปลี่ยน Call Status ผู้ซื้อ ก").selectOption("รอเข้าชม"); await page.getByText("ผู้ซื้อ ก: ติดต่อได้แล้ว → รอเข้าชม").waitFor();
+    assert.ok(await col(p2, "ติดต่อได้แล้ว").getByText("ผู้ซื้อ ก").isVisible()); // ยังเป็นข้อมูลเก่า
+    await p2.clock.fastForward(61_000); await col(p2, "รอเข้าชม").getByText("ผู้ซื้อ ก").waitFor();
+    await page.getByLabel("เปลี่ยน Call Status ผู้ซื้อ ก").selectOption("เข้าชมแล้ว"); await page.getByText("ผู้ซื้อ ก: รอเข้าชม → เข้าชมแล้ว").waitFor();
+    await p2.getByLabel("เปลี่ยน Call Status ผู้ซื้อ ก").selectOption("จอง"); // p2 ยังเห็น รอเข้าชม (เก่า)
+    await p2.getByText(/ถูกแก้ไขโดยผู้อื่นไปแล้ว/).waitFor(); await col(p2, "เข้าชมแล้ว").getByText("ผู้ซื้อ ก").waitFor(); // แจ้ง + โหลดข้อมูลล่าสุด
+    lr = await tab("LEADS"); assert.equal(get("B1", "call_status"), "เข้าชมแล้ว"); // ไม่ถูกเขียนทับ
+    await p2.context().close();
+    ok("2 คนเปิดบอร์ดเดียวกัน: อีกคนเห็นการ์ดย้ายเองภายใน 1 นาที · ย้ายการ์ดจากข้อมูลเก่า → แจ้ง 'ถูกแก้ไขโดยผู้อื่น' และโหลดข้อมูลล่าสุด ไม่เขียนทับ");
+  }
   assert.deepEqual(errors, []);
 
   // ---- หน้า Leads: ตัดช่อง บริษัท/อีเมล/หมวดบริการ/บริการที่สนใจ/UTM · เพิ่ม Line ----

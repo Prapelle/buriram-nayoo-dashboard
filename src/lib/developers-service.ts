@@ -10,6 +10,7 @@ import {
   PRODUCT_COLUMNS, productDrivenStatus, productState, todayBkk, validateDev, validateProduct, type Dev, type DevDup, type DevProduct,
 } from "./developers";
 import { appendRows, batchUpdateValues, colLetter, deleteRow, listTabs, readTabs, toRow } from "./sheets";
+import { dedupeCode, guardRow } from "./row-guard";
 
 export class DevError extends Error {
   constructor(public status: number, message: string, public code: string, public extra: { fields?: Record<string, string>; matches?: DevDup[] } = {}) { super(message); }
@@ -36,6 +37,13 @@ export const productTypesOf = (config: Record<string, string>[]) => {
   const v = config.find((r) => r.config_key === CONFIG_KEY)?.config_value;
   return v ? v.split("|").map((x) => x.trim()).filter(Boolean) : DEFAULT_PRODUCTS;
 };
+/** ยืนยันแถวก่อนเขียน/ลบ (ใช้พร้อมกันหลายคน): แถวเลื่อน → ใช้แถวใหม่ · ถูกลบ → 404 · มีคนแก้ก่อน → 409 */
+async function safeRow(tab: string, headers: string[], idCol: string, id: string, row: number, updatedAt?: string) {
+  const g = await guardRow(tab, headers, idCol, id, row, updatedAt);
+  if ("row" in g) return g.row;
+  if (g.error === "gone") throw new DevError(404, "ไม่พบรายการนี้แล้ว (อาจถูกผู้อื่นลบไป) กรุณาโหลดใหม่", "NOT_FOUND");
+  throw new DevError(409, "รายการนี้ถูกแก้ไขโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่", "STALE");
+}
 const rowRange = (tab: string, headers: string[], row: number) => `'${tab}'!A${row}:${colLetter(headers.length - 1)}${row}`;
 
 async function writeLogs(t: Record<string, Tab>, logs: Record<string, string>[]) {
@@ -54,8 +62,10 @@ async function sync(t: Record<string, Tab>, onlyId?: string) {
   const updates: { range: string; values: (string | number)[][] }[] = [];
   for (const [id, to] of final) {
     const i = t.DEVELOPERS.rows.findIndex((r) => r.developer_id === id); if (i < 0) continue;
-    const r = t.DEVELOPERS.rows[i]; r.status = to; r.status_changed_at = now;
-    updates.push({ range: rowRange("DEVELOPERS", t.DEVELOPERS.headers, i + 2), values: [toRow(t.DEVELOPERS.headers, r)] });
+    const r = t.DEVELOPERS.rows[i];
+    const g = await guardRow("DEVELOPERS", t.DEVELOPERS.headers, "developer_id", id, i + 2, r.updated_at); if (!("row" in g)) { final.delete(id); continue; } // มีคนแก้/ลบพอดี → รอบหน้าค่อยเปลี่ยน
+    r.status = to; r.status_changed_at = now;
+    updates.push({ range: rowRange("DEVELOPERS", t.DEVELOPERS.headers, g.row), values: [toRow(t.DEVELOPERS.headers, r)] });
   }
   await batchUpdateValues(updates);
   const staffOf = new Map(t.DEVELOPERS.rows.map((r) => [r.developer_id, r.staff ?? ""]));
@@ -150,6 +160,7 @@ export async function saveDeveloper(input: Record<string, unknown>, actor: strin
     if (v.rec.last_contacted_at && rec.status === "เข้าพบแล้ว") rec.last_contacted_at = v.rec.last_contacted_at;
     if (met) touchContact(rec, rec.last_contacted_at || todayBkk(), v.rec.last_contact_method);
     await appendRows("DEVELOPERS", [toRow(t.DEVELOPERS.headers, rec)]);
+    rec.dev_code = await dedupeCode("DEVELOPERS", t.DEVELOPERS.headers, "dev_code", "developer_id", rec.developer_id, rec.dev_code, (codes) => nextDevCode(codes, kind));
     if (rec.status !== DEV_DEFAULT) await writeLogs(t, [manualLog(rec, "", rec.status, actor, now)]);
     if (met) await writeContact(t, rec, v.rec.last_contact_method, rec.last_contacted_at, "status", "", actor, now);
     await writeAudit(actor, "developer_create", "developer", rec.developer_id, `${rec.dev_code} ${rec.company_name || rec.project_main}`);
@@ -158,6 +169,7 @@ export async function saveDeveloper(input: Record<string, unknown>, actor: strin
   const rec: Dev = { ...prev, ...Object.fromEntries(DEV_EDITABLE.map((k) => [k, v.rec[k]])), updated_by: actor, updated_at: now };
   if (statusChanged) { applyStatus(rec, v.rec.status, now); if (v.rec.last_contacted_at !== prev.last_contacted_at && v.rec.last_contacted_at) rec.last_contacted_at = v.rec.last_contacted_at; }
   if (met) touchContact(rec, rec.last_contacted_at || todayBkk(), v.rec.last_contact_method);
+  rowNo = await safeRow("DEVELOPERS", t.DEVELOPERS.headers, "developer_id", prev.developer_id, rowNo, prev.updated_at);
   await batchUpdateValues([{ range: rowRange("DEVELOPERS", t.DEVELOPERS.headers, rowNo), values: [toRow(t.DEVELOPERS.headers, rec)] }]);
   if (statusChanged) await writeLogs(t, [manualLog(rec, prev.status, rec.status, actor, now)]);
   if (met) await writeContact(t, rec, v.rec.last_contact_method, rec.last_contacted_at, "status", "", actor, now);
@@ -181,7 +193,7 @@ export async function changeDevStatus(id: string, to: string, updatedAtSeen: str
   const rec: Dev = { ...prev, updated_by: actor, updated_at: now };
   applyStatus(rec, to, now);
   if (to === "เข้าพบแล้ว") rec.last_contact_method = String(method);
-  await batchUpdateValues([{ range: rowRange("DEVELOPERS", t.DEVELOPERS.headers, i + 2), values: [toRow(t.DEVELOPERS.headers, rec)] }]);
+  await batchUpdateValues([{ range: rowRange("DEVELOPERS", t.DEVELOPERS.headers, await safeRow("DEVELOPERS", t.DEVELOPERS.headers, "developer_id", id, i + 2, prev.updated_at)), values: [toRow(t.DEVELOPERS.headers, rec)] }]);
   await writeLogs(t, [manualLog(rec, prev.status || DEV_DEFAULT, to, actor, now)]);
   if (to === "เข้าพบแล้ว") await writeContact(t, rec, String(method), rec.last_contacted_at, "status", "", actor, now);
   await writeAudit(actor, "developer_status", "developer", id, `${rec.dev_code}: ${prev.status || DEV_DEFAULT} → ${to}`);
@@ -201,7 +213,7 @@ export async function recordContact(id: string, method: string, date: string, no
   const now = new Date().toISOString();
   const rec: Dev = { ...prev, updated_by: actor, updated_at: now };
   if (!prev.last_contacted_at || d >= prev.last_contacted_at) touchContact(rec, d, method);
-  await batchUpdateValues([{ range: rowRange("DEVELOPERS", t.DEVELOPERS.headers, i + 2), values: [toRow(t.DEVELOPERS.headers, rec)] }]);
+  await batchUpdateValues([{ range: rowRange("DEVELOPERS", t.DEVELOPERS.headers, await safeRow("DEVELOPERS", t.DEVELOPERS.headers, "developer_id", id, i + 2, prev.updated_at)), values: [toRow(t.DEVELOPERS.headers, rec)] }]);
   await writeContact(t, rec, method, d, "manual", String(note ?? "").trim(), actor, now);
   await writeAudit(actor, "developer_contact", "developer", id, `${rec.dev_code}: ติดต่อ (${method}) ${d}`);
   return { dev: rec };
@@ -217,8 +229,9 @@ export async function deleteDeveloper(id: string, updatedAtSeen: string, actor: 
   const sid = (n: string) => meta.find((m) => m.title === n)!.sheetId;
   // ลบ Product ของรายการนี้ก่อน (จากแถวล่างขึ้นบน เลขแถวจะไม่เลื่อน) · ประวัติ Status เก็บไว้สำหรับรายงาน
   const prodRows = t.DEVELOPER_PRODUCTS.rows.map((r, k) => (r.developer_id === id ? k + 2 : 0)).filter(Boolean).sort((a, b) => b - a);
-  for (const r of prodRows) await deleteRow(sid("DEVELOPER_PRODUCTS"), r);
-  await deleteRow(sid("DEVELOPERS"), i + 2);
+  const devRow = await safeRow("DEVELOPERS", t.DEVELOPERS.headers, "developer_id", id, i + 2, prev.updated_at ?? "");
+  for (const r of prodRows) { const pid = t.DEVELOPER_PRODUCTS.rows[r - 2].product_id; const g = await guardRow("DEVELOPER_PRODUCTS", t.DEVELOPER_PRODUCTS.headers, "product_id", pid, r); if ("row" in g) await deleteRow(sid("DEVELOPER_PRODUCTS"), g.row); }
+  await deleteRow(sid("DEVELOPERS"), devRow);
   await writeAudit(actor, "developer_delete", "developer", id, `ลบ ${prev.dev_code} ${prev.company_name || prev.project_main} (+ Product ${prodRows.length} รายการ)`);
   return { deleted: true, dev_code: prev.dev_code };
 }
@@ -239,7 +252,7 @@ export async function saveProduct(input: Record<string, unknown>, actor: string)
     const prev = t.DEVELOPER_PRODUCTS.rows[i];
     if (String(input.updated_at_seen ?? "") !== (prev.updated_at ?? "")) throw new DevError(409, "Product นี้ถูกแก้ไขไปแล้ว กรุณาโหลดใหม่", "STALE");
     rec = { ...pickProd(prev), ...v.rec, updated_by: actor, updated_at: now };
-    await batchUpdateValues([{ range: rowRange("DEVELOPER_PRODUCTS", t.DEVELOPER_PRODUCTS.headers, i + 2), values: [toRow(t.DEVELOPER_PRODUCTS.headers, rec)] }]);
+    await batchUpdateValues([{ range: rowRange("DEVELOPER_PRODUCTS", t.DEVELOPER_PRODUCTS.headers, await safeRow("DEVELOPER_PRODUCTS", t.DEVELOPER_PRODUCTS.headers, "product_id", pid, i + 2, prev.updated_at ?? "")), values: [toRow(t.DEVELOPER_PRODUCTS.headers, rec)] }]);
     t.DEVELOPER_PRODUCTS.rows[i] = rec;
   } else {
     rec = { ...v.rec, product_id: crypto.randomUUID(), developer_id: devId, created_by: actor, created_at: now, updated_by: actor, updated_at: now };
@@ -258,7 +271,7 @@ export async function deleteProduct(productId: string, actor: string) {
   if (i < 0) throw new DevError(404, "ไม่พบ Product นี้", "NOT_FOUND");
   const p = t.DEVELOPER_PRODUCTS.rows[i];
   const sid = (await listTabs()).find((m) => m.title === "DEVELOPER_PRODUCTS")!.sheetId;
-  await deleteRow(sid, i + 2);
+  await deleteRow(sid, await safeRow("DEVELOPER_PRODUCTS", t.DEVELOPER_PRODUCTS.headers, "product_id", productId, i + 2));
   t.DEVELOPER_PRODUCTS.rows.splice(i, 1);
   await sync(t, p.developer_id);
   await writeAudit(actor, "developer_product_delete", "developer", p.developer_id, `ลบ ${p.product} ${p.start_date}–${p.end_date}`);

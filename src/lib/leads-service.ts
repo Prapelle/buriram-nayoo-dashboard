@@ -1,4 +1,5 @@
 import { canonChannel } from "./dashboard";
+import { dedupeCode, guardRow } from "./row-guard";
 import { writeAudit } from "./audit";
 import { CALL_DEFAULT, CALL_STATUS, normCall, SELL_DEFAULT, SELL_STATUS } from "./lead-options";
 import { areaLabel, AREA_SUGGEST, contactableFor, findDuplicates, LEAD_COLUMNS, leadStatusOf, nextLeadCode, normalizeEmail, normalizeLine, normalizePhone, pipelineOf, resolveNeedStatus, stampStatus, statusFieldOf, todayBkk, validateLead, type DupMatch, type Lead } from "./leads";
@@ -78,10 +79,12 @@ export async function saveLead(input: Record<string, unknown>, actor: string) {
       created_by: actor, created_at: now, updated_by: actor, updated_at: now,
     };
     await appendRows("LEADS", [toRow(tab.headers, rec)]);
+    rec.lead_code = await dedupeCode("LEADS", tab.headers, "lead_code", "lead_id", rec.lead_id, rec.lead_code, (codes) => nextLeadCode(codes, Number(today.slice(0, 4)), Number(t.APP_CONFIG.rows.find((r) => r.config_key === `lead_code_floor_${today.slice(0, 4)}`)?.config_value) || 0));
     await writeAudit(actor, "lead_create", "lead", rec.lead_id, `สร้าง ${rec.lead_code} (${rec.source_channel}, ${rec.need}${leadStatusOf(rec) ? ` / ${leadStatusOf(rec)}` : ""})`);
     return { created: true, lead: rec };
   }
   const rec: Lead = { ...v.rec, ...stamps, lead_id: prev.lead_id, lead_code: prev.lead_code, created_by: prev.created_by, created_at: prev.created_at, updated_by: actor, updated_at: now };
+  rowNo = await safeRow(tab.headers, prev.lead_id, rowNo, prev.updated_at);
   await batchUpdateValues([{ range: `'LEADS'!A${rowNo}:${colLetter(tab.headers.length - 1)}${rowNo}`, values: [toRow(tab.headers, rec)] }]);
   const ps = leadStatusOf(prev), cs = leadStatusOf(rec);
   const parts = [prev.need !== rec.need ? `Need ${prev.need || "(ว่าง)"} → ${rec.need}` : "", ps !== cs ? `สถานะ ${ps || "(ว่าง)"} → ${cs || "(ว่าง)"}` : "",
@@ -115,9 +118,17 @@ export async function deleteLead(leadId: string, updatedAtSeen: string, actor: s
   }
   const tab = (await listTabs()).find((x) => x.title === "LEADS");
   if (!tab) throw new LeadError(409, "ไม่พบแท็บ LEADS", "SHEET_NOT_READY");
-  await deleteRow(tab.sheetId, i + 2);
+  await deleteRow(tab.sheetId, await safeRow(t.LEADS.headers, leadId, i + 2, row.updated_at));
   await writeAudit(actor, "lead_delete", "lead", leadId, `ลบ ${row.lead_code} (${row.source_channel}, ${row.status})`);
   return { deleted: true, lead_code: row.lead_code };
+}
+
+/** ยืนยันแถวก่อนเขียน/ลบ (ใช้พร้อมกันหลายคน): แถวเลื่อน → ใช้แถวใหม่ · ถูกลบ → 404 · มีคนแก้ก่อน → 409 */
+async function safeRow(headers: string[], id: string, row: number, updatedAt: string) {
+  const g = await guardRow("LEADS", headers, "lead_id", id, row, updatedAt);
+  if ("row" in g) return g.row;
+  if (g.error === "gone") throw new LeadError(404, "ไม่พบ Lead นี้แล้ว (อาจถูกผู้อื่นลบไป) กรุณาโหลดใหม่", "NOT_FOUND");
+  throw new LeadError(409, "Lead นี้ถูกแก้ไขโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่ก่อนแก้ไข", "STALE");
 }
 
 export type StatusField = "sell_status" | "call_status";
@@ -150,7 +161,8 @@ export async function changeLeadStatus(leadId: string, field: StatusField, value
   if (field === "call_status") rec.contactable = contactableFor(value, prev.contactable);
   rec.status = pipelineOf(rec);
   Object.assign(rec, stampStatus(prev, rec, todayBkk()), { updated_by: actor, updated_at: new Date().toISOString() });
-  await batchUpdateValues([{ range: `'LEADS'!A${rowNo}:${colLetter(tab.headers.length - 1)}${rowNo}`, values: [toRow(tab.headers, rec)] }]);
+  const at = await safeRow(tab.headers, leadId, rowNo, prev.updated_at);
+  await batchUpdateValues([{ range: `'LEADS'!A${at}:${colLetter(tab.headers.length - 1)}${at}`, values: [toRow(tab.headers, rec)] }]);
   if (field === "sell_status") await writeAudit(actor, "lead_status_change", "lead", rec.lead_id, `${rec.lead_code}: สถานะ ${before} → ${value}`);
   else await writeAudit(actor, "lead_update", "lead", rec.lead_id, `${rec.lead_code}: Call ${before} → ${value}`);
   return { changed: true, lead: rec };
