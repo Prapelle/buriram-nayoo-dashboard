@@ -42,13 +42,36 @@ export function detectSpec(headers: string[]): { spec?: Spec; ambiguous: Spec[] 
   return top.length === 1 ? { spec: top[0], ambiguous: [] } : { ambiguous: top };
 }
 
-/** ช่วงวันที่จากชื่อไฟล์ Google Ads เช่น Campaigns_2026_09_01-2026_09_30_.csv (เป็นข้อเสนอแนะ ผู้ใช้ต้องยืนยัน) */
+const EN_MON = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+const TH_MON = [["ม.ค", "มกรา"], ["ก.พ", "กุมภา"], ["มี.ค", "มีนา"], ["เม.ย", "เมษา"], ["พ.ค", "พฤษภา"], ["มิ.ย", "มิถุนา"], ["ก.ค", "กรกฎา"], ["ส.ค", "สิงหา"], ["ก.ย", "กันยา"], ["ต.ค", "ตุลา"], ["พ.ย", "พฤศจิกา"], ["ธ.ค", "ธันวา"]];
+function ymd(y: number, m: number, d: number): string | null {
+  if (y > 2400) y -= 543; // ปี พ.ศ.
+  if (y < 2000 || y > 2100 || m < 1 || m > 12 || d < 1 || d > 31) return null;
+  const t = new Date(Date.UTC(y, m - 1, d));
+  return t.getUTCMonth() === m - 1 ? t.toISOString().slice(0, 10) : null;
+}
+const monIdx = (w: string) => { const x = w.toLowerCase(); const e = EN_MON.findIndex((m) => x.startsWith(m)); if (e >= 0) return e + 1; const t = TH_MON.findIndex(([a, b]) => w.startsWith(a) || w.startsWith(b)); return t >= 0 ? t + 1 : 0; };
+
+/** วันที่ทั้งหมดในข้อความ ตามลำดับที่พบ (รองรับ 2026_09_01 · 2026-09-01 · 2026.09.01 · 20260901 · Sep-01-2026 · Sep 1, 2026 · 1 Sep 2026 · 1 ต.ค. 2569) */
+export function datesIn(text: string): string[] {
+  const found: { at: number; d: string }[] = [];
+  const add = (at: number, d: string | null) => { if (d && !found.some((f) => Math.abs(f.at - at) < 3)) found.push({ at, d }); };
+  const pats: [RegExp, (m: RegExpMatchArray) => string | null][] = [
+    [/(?<!\d)(\d{4})[_.\-/](\d{1,2})[_.\-/](\d{1,2})(?!\d)/g, (m) => ymd(+m[1], +m[2], +m[3])],
+    [/(?<!\d)((?:20|25)\d{2})(\d{2})(\d{2})(?!\d)/g, (m) => ymd(+m[1], +m[2], +m[3])],
+    [/(?<![a-z])([a-z]{3,9})[\s_\-.]*(\d{1,2})(?:st|nd|rd|th)?[\s_\-.,]+(\d{4})(?!\d)/gi, (m) => (monIdx(m[1]) ? ymd(+m[3], monIdx(m[1]), +m[2]) : null)],
+    [/(?<!\d)(\d{1,2})[\s_\-.]*([a-z]{3,9}|[\u0E00-\u0E7F.]{3,12})[\s_\-.,]*(\d{4})(?!\d)/gi, (m) => (monIdx(m[2]) ? ymd(+m[3], monIdx(m[2]), +m[1]) : null)],
+  ];
+  for (const [re, f] of pats) for (const m of text.matchAll(re)) add(m.index ?? 0, f(m));
+  return found.sort((a, b) => a.at - b.at).map((f) => f.d);
+}
+
+/** ช่วงวันที่จากชื่อไฟล์ (เป็นข้อเสนอแนะ ผู้ใช้ต้องยืนยัน): วันที่คู่แรก = ช่วงรายงาน · คู่ที่สอง = ช่วงเปรียบเทียบ · ไม่ครบคู่ = ไม่เดา */
 export function periodsFromFilename(name: string): { start?: string; end?: string; cmpStart?: string; cmpEnd?: string } {
-  const re = /(\d{4})_(\d{2})_(\d{2})-(\d{4})_(\d{2})_(\d{2})/g;
-  const found = [...name.matchAll(re)].map((m) => ({ s: `${m[1]}-${m[2]}-${m[3]}`, e: `${m[4]}-${m[5]}-${m[6]}` }));
+  const d = datesIn(name.replace(/\.[a-z0-9]+$/i, ""));
   const out: ReturnType<typeof periodsFromFilename> = {};
-  if (found[0]) { out.start = found[0].s; out.end = found[0].e; }
-  if (found[1]) { out.cmpStart = found[1].s; out.cmpEnd = found[1].e; }
+  if (d.length >= 2 && d[0] <= d[1]) { out.start = d[0]; out.end = d[1]; }
+  if (d.length >= 4 && d[2] <= d[3]) { out.cmpStart = d[2]; out.cmpEnd = d[3]; }
   return out;
 }
 
@@ -69,9 +92,25 @@ export function compareKeys(spec: Spec): string[] {
   return k;
 }
 
-export function parseInput(text: string): Table {
-  try { return metaInsightsLayout(parseTable(text.replace(/^\uFEFF?sep=.\r?\n/i, ""))); }
+export function parseInput(text: string): Table & { preamble?: string } {
+  try { return reportTitleLayout(metaInsightsLayout(parseTable(text.replace(/^\uFEFF?sep=.\r?\n/i, "")))); }
   catch (e) { if (e instanceof CsvError) throw new PlanError(e.code, e.message); throw e; }
+}
+
+/**
+ * รายงานที่มีบรรทัดหัวเรื่องก่อนตาราง (เช่น Google Ads "Campaign report" แล้วตามด้วย "October 1, 2026 - October 31, 2026")
+ * → ข้ามบรรทัดหัวเรื่อง (สูงสุด 4 บรรทัด) ใช้แถวแรกที่มีหลายคอลัมน์เป็น header และเก็บข้อความหัวเรื่องไว้หาช่วงวันที่
+ */
+function reportTitleLayout(t: Table): Table & { preamble?: string } {
+  if (t.headers.filter((h) => h !== "").length > 1) return t;
+  // header = แถวแรกที่กว้างเท่าแถวที่กว้างที่สุดในช่วงต้นไฟล์ (บรรทัดวันที่ เช่น Sep 1, 2026 - Sep 30, 2026 ที่ไม่มีเครื่องหมายคำพูดอาจแตกเป็นหลายช่อง แต่แคบกว่าตาราง)
+  const width = (cells: string[]) => cells.filter((c) => c.trim() !== "").length;
+  const head = t.records.slice(0, 8).map((r) => width(r.cells)); const max = Math.max(0, ...head);
+  const k = max >= 3 ? head.findIndex((w) => w === max) : -1;
+  if (k > 4) return t;
+  if (k < 0) return t;
+  const pre = [t.headers.join(" "), ...t.records.slice(0, k).map((r) => r.cells.join(" "))].join(" ").trim();
+  return { headers: t.records[k].cells.map((c) => c.trim()), records: t.records.slice(k + 1), preamble: pre };
 }
 
 /**

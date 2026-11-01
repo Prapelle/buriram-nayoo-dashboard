@@ -55,6 +55,21 @@ try {
   await page.getByText("นำเข้าสำเร็จ — เพิ่ม 30 · อัปเดต 0 · ข้าม 0 · ไม่ถูกต้อง 0").waitFor();
   assert.ok(await rows("GOOGLE_ADS_CAMPAIGNS") > 0); assert.equal(await rows("FB_PAGE_INSIGHTS"), 30);
   ok(`Google Ads Campaign (${await rows("GOOGLE_ADS_CAMPAIGNS")} แถว) แล้วกด ไฟล์ถัดไป → Viewers 30 วัน`);
+  { // ชื่อไฟล์ไม่มีวันที่ (1/11/2026): ใช้ช่วงเดียวกับไฟล์ Google Ads ก่อนหน้า · ปุ่ม "เดือนก่อน" เติมช่วงให้
+    const fs = await import("node:fs"); const buf = fs.readFileSync(`${FX}/Devices_2026_09_01-2026_09_30_.csv`);
+    await page.locator('input[type="file"]').first().setInputFiles({ name: "Device report.csv", mimeType: "text/csv", buffer: buf });
+    await page.getByText("ชื่อไฟล์ไม่มีวันที่ — ใช้ช่วงเดียวกับไฟล์ก่อนหน้าให้แล้ว", { exact: false }).waitFor();
+    const dates = page.locator('input[type="date"]');
+    await page.waitForFunction(() => document.querySelectorAll('input[type="date"]')[0]?.value === "2026-09-01");
+    assert.equal(await dates.nth(0).inputValue(), "2026-09-01"); assert.equal(await dates.nth(1).inputValue(), "2026-09-30");
+    await page.getByRole("button", { name: "เดือนก่อน", exact: true }).click();
+    const t = new Date(Date.now() + 7 * 3600_000), pm = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth() - 1, 1)).toISOString().slice(0, 10), pe = new Date(Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), 0)).toISOString().slice(0, 10);
+    await page.waitForFunction(([a]) => document.querySelectorAll('input[type="date"]')[0]?.value === a, [pm]);
+    assert.equal(await dates.nth(1).inputValue(), pe);
+    await page.getByRole("button", { name: /^ยืนยันนำเข้า \(\+/ }).waitFor();
+    await page.getByRole("button", { name: "ยกเลิก", exact: true }).first().click();
+    ok("ไฟล์ Google Ads ที่ชื่อไม่มีวันที่ → เติมช่วงเดียวกับไฟล์ก่อนหน้า (1–30 ก.ย.) พร้อมข้อความให้ตรวจ · ปุ่ม เดือนก่อน เติมช่วงเดือนก่อนให้ (ยังไม่นำเข้าจนกดยืนยัน)");
+  }
   const web = page.locator("section", { has: page.getByRole("heading", { name: "ไฟล์เว็บไซต์ (GA4 / Search Console)" }) }).last();
   await web.getByRole("button", { name: "ตรวจสอบก่อนนำเข้า" }).click();
   await web.getByRole("button", { name: "ยืนยันนำเข้า", exact: true }).click();

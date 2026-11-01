@@ -50,7 +50,9 @@ async function prepare(input: ImportInput) {
     spec = d.spec;
   }
 
-  const fromName = periodsFromFilename(input.filename);
+  // ช่วงวันที่: จากชื่อไฟล์ก่อน · ไม่มี → จากบรรทัดหัวเรื่องในไฟล์ (เช่น "October 1, 2026 - October 31, 2026")
+  let fromName = periodsFromFilename(input.filename);
+  if (!fromName.start && table.preamble) fromName = periodsFromFilename(table.preamble);
   const ctx: Ctx = {
     filename: input.filename.slice(0, 200), area,
     reportStart: input.reportStart ?? fromName.start, reportEnd: input.reportEnd ?? fromName.end,

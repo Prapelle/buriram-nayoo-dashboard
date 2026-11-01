@@ -94,4 +94,22 @@ const upd = (() => { const a = run("Campaigns_2026_09_01-2026_09_30_.csv"); cons
 assert.equal(upd.update, 1); assert.equal(upd.skip, 23); ok("ค่าเปลี่ยน → update 1 แถว ที่เหลือ skip (ไม่เพิ่มซ้ำ)");
 const mapped = buildPlan({ spec: SPEC_BY_ID.gads_campaigns, table: parseInput(readFileSync(`${DIR}/Campaigns_2026_09_01-2026_09_30_.csv`, "utf8")), ctx: { filename: "c", area: "unknown", reportStart: "2026-09-01", reportEnd: "2026-09-30" }, existing: new Map(), areaMap: new Map([["google_ads|มือสอง-ซื้อ/เช่า-คอนโด-คำกว้าง", "buriram"]]) });
 assert.equal(mapped.planned.find((x) => x.rec!.campaign_name === "มือสอง-ซื้อ/เช่า-คอนโด-คำกว้าง")!.rec!.area, "buriram"); ok("AREA_MAPPINGS ที่ยืนยันแล้วถูกใช้ แถวอื่นเป็น unknown");
+console.log("ช่วงวันที่จากชื่อไฟล์ / หัวรายงาน (1/11/2026)");
+{
+  const P = (n: string) => periodsFromFilename(n);
+  assert.deepEqual(P("Campaigns_2026_09_01-2026_09_30_ (1).csv"), { start: "2026-09-01", end: "2026-09-30" });
+  assert.deepEqual(P("Campaigns(2026-10-01 - 2026-10-31).csv"), { start: "2026-10-01", end: "2026-10-31" });
+  assert.deepEqual(P("Campaign report 20261001-20261031.csv"), { start: "2026-10-01", end: "2026-10-31" });
+  assert.deepEqual(P("Campaigns_Oct 1, 2026 - Oct 31, 2026.csv"), { start: "2026-10-01", end: "2026-10-31" });
+  assert.deepEqual(P("แคมเปญ_1 ต.ค. 2569 - 31 ต.ค. 2569.csv"), { start: "2026-10-01", end: "2026-10-31" });
+  assert.deepEqual(P("Campaigns_2569_10_01-2569_10_31_.csv"), { start: "2026-10-01", end: "2026-10-31" });
+  assert.deepEqual(P("Biggest_changes_2026_09_01-2026_09_30_compared_to_2026_08_02-2026_08_31_.csv"), { start: "2026-09-01", end: "2026-09-30", cmpStart: "2026-08-02", cmpEnd: "2026-08-31" });
+  assert.deepEqual(P("Campaign report.csv"), {}); assert.deepEqual(P("Campaigns_2026_02_30-2026_03_31.csv").start, undefined);
+  ok("ชื่อไฟล์หลายรูปแบบ (_ - . ติดกัน ชื่อเดือนอังกฤษ/ไทย ปี พ.ศ. ไฟล์ซ้ำ (1)) → ช่วงวันที่ถูก · วันที่ไม่มีจริง (30 ก.พ.) ไม่นับ · ไม่มีวันที่ → ว่าง");
+  const raw = readFileSync(`${DIR}/Campaigns_2026_09_01-2026_09_30_.csv`, "utf8");
+  const t = parseInput("Campaign report\nSeptember 1, 2026 - September 30, 2026\n" + raw.replace(/^\uFEFF/, ""));
+  assert.equal(detectSpec(t.headers).spec?.id, "gads_campaigns"); assert.deepEqual(periodsFromFilename(t.preamble!), { start: "2026-09-01", end: "2026-09-30" });
+  assert.equal(t.records.length, parseInput(raw).records.length);
+  ok("ไฟล์ที่มีบรรทัดหัวรายงานก่อนตาราง → ข้ามหัวเรื่อง ตรวจประเภทได้ จำนวนแถวเท่าเดิม และอ่านช่วงวันที่จากหัวรายงาน");
+}
 console.log(`\nผ่านทั้งหมด ${pass} รายการ`);

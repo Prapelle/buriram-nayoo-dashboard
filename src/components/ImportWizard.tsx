@@ -57,6 +57,9 @@ export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" 
   const [history, setHistory] = useState<{ state: "loading" | "ok" | "error"; rows: Batch[]; error?: string }>({ state: "loading", rows: [] });
   const [drag, setDrag] = useState(false);
   const input = useRef<HTMLInputElement>(null);
+  /** ช่วงวันที่ล่าสุดที่ใช้ในรอบนี้ — ไฟล์ Google Ads ถัดไปที่ชื่อไฟล์ไม่มีวันที่ จะเติมช่วงนี้ให้ (ผู้ใช้ตรวจ/แก้ได้) */
+  const lastPeriod = useRef<{ reportStart: string; reportEnd: string } | null>(null);
+  const [carried, setCarried] = useState(false);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -88,6 +91,9 @@ export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" 
       setPlan(p);
       if (first || over.specId !== undefined) setSpecId(p.spec.id);
       setPeriod({ reportStart: p.ctx.reportStart ?? "", reportEnd: p.ctx.reportEnd ?? "", comparisonStart: p.ctx.comparisonStart ?? "", comparisonEnd: p.ctx.comparisonEnd ?? "", snapshotDate: p.ctx.snapshotDate ?? "" });
+      if (first) setCarried(false);
+      if (first && p.spec.period === "user" && !p.ctx.reportStart && lastPeriod.current) { setCarried(true); return runPlan(f, { ...lastPeriod.current, comparisonStart: p.ctx.comparisonStart ?? "", comparisonEnd: p.ctx.comparisonEnd ?? "", snapshotDate: "", specId: p.spec.id }); }
+      if (p.spec.period === "user" && p.ctx.reportStart && p.ctx.reportEnd) lastPeriod.current = { reportStart: p.ctx.reportStart, reportEnd: p.ctx.reportEnd };
       setState("ready");
     } catch (e) { setPlan(null); setError(e instanceof Error ? e.message : "เกิดข้อผิดพลาด"); setState("error"); }
   }
@@ -136,6 +142,14 @@ export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" 
 
   function reset() { setFile(null); setPlan(null); setSpecId(""); setState("idle"); setError(""); setResult(null); setOverride(false); if (input.current) input.current.value = ""; }
 
+  // ปุ่มเลือกช่วงเร็ว: เดือนก่อน / เดือนนี้ (ถึงเมื่อวาน) ตามเวลาไทย
+  const quick = (() => {
+    const t = new Date(Date.now() + 7 * 3600_000); const y = t.getUTCFullYear(), m = t.getUTCMonth();
+    const iso = (d: Date) => d.toISOString().slice(0, 10);
+    const yday = iso(new Date(Date.UTC(y, m, t.getUTCDate() - 1)));
+    const cur: [string, string, string][] = t.getUTCDate() > 1 ? [["เดือนนี้", iso(new Date(Date.UTC(y, m, 1))), yday]] : [];
+    return [["เดือนก่อน", iso(new Date(Date.UTC(y, m - 1, 1))), iso(new Date(Date.UTC(y, m, 0)))] as [string, string, string], ...cur];
+  })();
   const committing = state === "committing";
   const locked = state === "committing" || state === "done";
   const setP = (k: keyof typeof period, v: string) => { setPeriod({ ...period, [k]: v }); runPlan(file, { [k]: v } as Partial<typeof period>); };
@@ -186,7 +200,13 @@ export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" 
                   <label><span className="mb-1 block font-medium">เปรียบเทียบกับ เริ่ม</span><DateInput className={dateInput} value={period.comparisonStart} disabled={locked} onChange={(e) => setP("comparisonStart", e.target.value)} /></label>
                   <label><span className="mb-1 block font-medium">สิ้นสุด</span><DateInput className={dateInput} value={period.comparisonEnd} disabled={locked} onChange={(e) => setP("comparisonEnd", e.target.value)} /></label>
                 </>}
-                <p className="basis-full text-xs text-slate-500">ไฟล์ Google Ads ไม่มีวันที่ในเนื้อไฟล์ ระบบเดาจากชื่อไฟล์ — โปรดตรวจให้ถูกต้องก่อนยืนยัน ({dmy(period.reportStart)} – {dmy(period.reportEnd)})</p>
+                {!locked && <div className="flex gap-1.5">{quick.map(([l, a, b]) => (
+                  <button key={l} type="button" onClick={() => { setPeriod({ ...period, reportStart: a, reportEnd: b }); runPlan(file, { reportStart: a, reportEnd: b }); }}
+                    className={`h-9 rounded-lg border px-3 text-xs ${period.reportStart === a && period.reportEnd === b ? "border-brand-600 bg-brand-50 font-semibold text-brand-700" : "border-slate-300 bg-white hover:bg-slate-50"}`}>{l}</button>))}</div>}
+                <p className="basis-full text-xs text-slate-500">{carried
+                  ? <>ชื่อไฟล์ไม่มีวันที่ — ใช้ช่วงเดียวกับไฟล์ก่อนหน้าให้แล้ว โปรดตรวจให้ถูกต้องก่อนยืนยัน</>
+                  : period.reportStart ? <>ระบบอ่านช่วงวันที่จากชื่อไฟล์ / หัวรายงาน — โปรดตรวจให้ถูกต้องก่อนยืนยัน ({dmy(period.reportStart)} – {dmy(period.reportEnd)})</>
+                  : <>ไฟล์นี้ไม่มีวันที่ในชื่อไฟล์หรือในไฟล์ — เลือกช่วงรายงานเอง หรือกดปุ่มเดือนด้านข้าง (แนะนำ: ตอนดาวน์โหลดจาก Google Ads อย่าเปลี่ยนชื่อไฟล์ ระบบจะอ่านวันที่ให้เอง)</>}</p>
               </div>
             )}
             {plan.spec.period === "file" && <p className="text-sm text-slate-600">ช่วงรายงานจากไฟล์: <b>{dmy(plan.period.start)} – {dmy(plan.period.end)}</b></p>}
