@@ -144,13 +144,15 @@ export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" 
         let r: Response | null = null; let j: { error?: string; code?: string; counts?: Counts; errors?: Err[]; spec?: { label: string }; period?: { start: string; end: string } } = {};
         try { r = await fetch("/api/import/commit", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ filename: f.name, text: f.text, area: "unknown" }) }); j = await r.json().catch(() => ({})); }
         catch { r = null; }
-        const busy = !r || r.status === 429 || r.status >= 500 && /429|quota|rate|50[0-4]|fetch failed|timeout/i.test(j.error ?? "50x");
-        if (busy && attempt < 4) { items[i].reason = `Google ไม่ว่าง รอแล้วลองใหม่ (${attempt + 1}/4)`; show(); await sleep(20_000 * (attempt + 1)); continue; }
+        // เซิร์ฟเวอร์ / Google ไม่ว่างชั่วคราว (429 · 5xx · เชื่อมต่อไม่ได้) → รอแล้วลองใหม่ · ไฟล์ที่ล้มเหลวกลางทางนำเข้าซ้ำได้ ไม่นับซ้ำ (row_key)
+        const busy = !r || r.status === 429 || r.status >= 500;
+        if (busy && attempt < 5) { items[i].reason = `ระบบ / Google ไม่ว่าง รอแล้วลองใหม่ (${attempt + 1}/5)`; show(); await sleep(15_000 * (attempt + 1)); continue; }
         if (r?.ok) { Object.assign(items[i], { status: "ok", label: j.spec?.label, period: j.period ? `${dmy(j.period.start)}–${dmy(j.period.end)}` : "", counts: j.counts, errors: j.errors, reason: undefined }); }
         else {
           const why: Record<string, string> = { DUPLICATE_FILE: "เคยนำเข้าแล้ว", PERIOD_REQUIRED: "ไม่มีช่วงวันที่ในชื่อไฟล์ — นำเข้าทีละไฟล์แล้วเลือกช่วงเอง", UNKNOWN_TYPE: "ไม่รู้จักประเภทไฟล์ / ไฟล์ไม่มีข้อมูล", NOTHING_TO_IMPORT: "ไม่มีแถวที่ถูกต้อง", EMPTY_FILE: "ไฟล์ว่าง" };
           const skip = j.code && why[j.code];
-          Object.assign(items[i], { status: skip ? "skip" : "fail", reason: skip ? (j.code === "UNKNOWN_TYPE" && /ไม่แน่ชัด/.test(j.error ?? "") ? j.error : why[j.code!]) : (j.error ?? `HTTP ${r?.status ?? "เชื่อมต่อไม่ได้"}`) });
+          Object.assign(items[i], { status: skip ? "skip" : "fail", reason: skip ? (j.code === "UNKNOWN_TYPE" && /ไม่แน่ชัด/.test(j.error ?? "") ? j.error : why[j.code!])
+            : `${(j.error ?? `HTTP ${r?.status ?? "เชื่อมต่อไม่ได้"}`).slice(0, 200)} — ลองนำเข้าไฟล์นี้อีกครั้ง (ไม่นับซ้ำ)` });
         }
         break;
       }
