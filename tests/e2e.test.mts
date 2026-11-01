@@ -18,7 +18,7 @@ function parseRange(r: string) {
   const a = m[2]; if (!a) return { tab: m[1] };
   let mm = /^(\d+):(\d+)$/.exec(a); if (mm) return { tab: m[1], r1: +mm[1], r2: +mm[2] };
   mm = /^([A-Z]+):([A-Z]+)$/.exec(a); if (mm) return { tab: m[1], c1: colNum(mm[1]) - 1, c2: colNum(mm[2]) - 1 };
-  mm = /^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/.exec(a)!; return { tab: m[1], c1: colNum(mm[1]) - 1, r1: +mm[2] };
+  mm = /^([A-Z]+)(\d+)(?::([A-Z]+)(\d+))?$/.exec(a)!; return mm[3] ? { tab: m[1], c1: colNum(mm[1]) - 1, r1: +mm[2], c2: colNum(mm[3]) - 1, r2: +mm[4] } : { tab: m[1], c1: colNum(mm[1]) - 1, r1: +mm[2] }; // สี่เหลี่ยม A5:F9 อ่านได้ (เหมือน API จริง)
 }
 function write(tabName: string, r1: number, c1: number, values: Cell[][]) {
   const t = tabs.get(tabName); if (!t) throw new Error(`no tab ${tabName}`);

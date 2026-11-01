@@ -67,7 +67,7 @@ async function prepare(input: ImportInput) {
     // อ่านเฉพาะคอลัมน์ที่ใช้ (ลดงานของ Server ต่อคำขอ — แท็บปลายทางและประวัติการนำเข้าโตขึ้นเรื่อย ๆ)
     const [small, target, batches] = await Promise.all([
       readTabs(["AREA_MAPPINGS", "APP_CONFIG"]),
-      readTarget(spec.tab, ["row_key", "record_id", ...compareKeys(spec)]),
+      readTarget(spec.tab, ["row_key"]), // อ่านแค่คีย์ก่อน — ค่าของแถวที่ตรงกันอ่านเฉพาะแถวนั้นภายหลัง
       readTarget("IMPORT_BATCHES", ["batch_id", "status", "file_sha256", "source", "report_type", "report_start", "report_end", "uploaded_at", "uploaded_by"]),
     ]);
     tabs = { ...small, IMPORT_BATCHES: batches, [spec.tab]: target };
@@ -90,7 +90,16 @@ async function prepare(input: ImportInput) {
 
   let plan: Plan;
   let periodError: string | undefined;
-  try { plan = buildPlan({ spec, table, ctx, existing, areaMap }); }
+  try {
+    plan = buildPlan({ spec, table, ctx, existing, areaMap });
+    // แถวที่มีอยู่แล้ว: อ่านค่าเฉพาะแถวเหล่านั้นมาเทียบ (ไม่อ่านทั้งแท็บ — ลดงานต่อคำขอของ Server · Error 1102)
+    const hit = [...new Set(plan.planned.map((x) => x.existingRow).filter((n): n is number => !!n))];
+    if (hit.length) {
+      const vals = await readRowsAt(spec.tab, target.headers, hit, compareKeys(spec));
+      for (const [k, v] of existing) { const r = vals.get(v.rowNumber); if (r) existing.set(k, { rowNumber: v.rowNumber, row: { ...r, row_key: k } }); }
+      plan = buildPlan({ spec, table, ctx, existing, areaMap });
+    }
+  }
   catch (e) {
     if (e instanceof PlanError && (e.code === "PERIOD_REQUIRED" || e.code === "PERIOD_INVALID")) {
       // ยังไม่มีช่วงวันที่ที่ถูกต้อง: ไม่ถือเป็น error ให้ผู้ใช้กรอกต่อในหน้าจอได้
@@ -199,6 +208,22 @@ async function readTarget(tab: string, need: string[]): Promise<{ headers: strin
   const rows: Record<string, string>[] = [];
   for (let i = 0; i < n; i++) { const row: Record<string, string> = {}; cols.forEach((h, j) => { row[h] = String(data[j][i]?.[0] ?? ""); }); rows.push(row); }
   return { headers, rows };
+}
+
+/** อ่านค่าเฉพาะแถวที่ระบุ (รวมแถวติดกันเป็นช่วงเดียว) คืน Map เลขแถว → ค่า */
+async function readRowsAt(tab: string, headers: string[], rowNos: number[], keys: string[]): Promise<Map<number, Record<string, string>>> {
+  const sorted = [...rowNos].sort((a, b) => a - b); const runs: [number, number][] = [];
+  for (const n of sorted) { const l = runs[runs.length - 1]; if (l && n <= l[1] + 3) l[1] = n; else runs.push([n, n]); }
+  const want = keys.filter((k) => headers.includes(k)); const lo = Math.min(...want.map((k) => headers.indexOf(k))), hi = Math.max(...want.map((k) => headers.indexOf(k)));
+  const out = new Map<number, Record<string, string>>();
+  for (let i = 0; i < runs.length; i += 40) {
+    const part = runs.slice(i, i + 40);
+    const data = await batchGet(part.map(([a, b]) => `'${tab}'!${colLetter(lo)}${a}:${colLetter(hi)}${b}`));
+    part.forEach(([a], j) => (data[j] ?? []).forEach((row, k) => {
+      const o: Record<string, string> = {}; want.forEach((h) => { o[h] = String(row[headers.indexOf(h) - lo] ?? ""); }); out.set(a + k, o);
+    }));
+  }
+  return out;
 }
 
 async function readIds(tab: string, colIdx: number, rows: number[]): Promise<Map<number, string>> {

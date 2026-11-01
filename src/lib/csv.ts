@@ -54,11 +54,11 @@ export function decodeText(bytes: Uint8Array): string {
 export async function readTextFile(f: Blob): Promise<string> { return decodeText(new Uint8Array(await f.arrayBuffer())); }
 
 /**
- * ไฟล์ CSV ใหญ่ (1/11/2026): แบ่งตามแถวเป็นส่วนละ ~1 MB (ลดงานต่อคำขอของ Server · เดิม 3 MB บางส่วนล้มเหลว 500/503) (หัวตารางซ้ำทุกส่วน) — ส่งทีละส่วนไม่ให้คำขอใหญ่เกินที่ Server รับไหว
+ * ไฟล์ CSV ใหญ่ (1/11/2026): แบ่งตามแถวเป็นส่วนละ ~300 KB (งานต่อคำขอต้องเบา — Cloudflare Workers แผนฟรีจำกัด CPU ต่อคำขอ · Error 1102) (หัวตารางซ้ำทุกส่วน) — ส่งทีละส่วนไม่ให้คำขอใหญ่เกินที่ Server รับไหว
  * · แบ่งแบบเดิมทุกครั้ง (ไฟล์เดิม → ส่วนเดิม) ระบบกันไฟล์ซ้ำจึงยังทำงาน · แถวซ้ำข้ามส่วนกันด้วย row_key เหมือนเดิม
  * · ไฟล์ที่หัวตารางพิเศษ (sep= / หลายบรรทัด) ไม่แบ่ง
  */
-export function splitCsv(name: string, text: string, partBytes = 1024 * 1024): { name: string; text: string }[] {
+export function splitCsv(name: string, text: string, partBytes = 300 * 1024): { name: string; text: string }[] {
   if (/^\uFEFF?sep=/i.test(text)) return [{ name, text }];
   const rows = parseCsv(text.replace(/^\uFEFF/, ""));
   if (rows.length < 3 || rows[0].filter((c) => c.trim()).length < 3) return [{ name, text }];
