@@ -92,7 +92,7 @@ try {
   // Facebook ระดับเพจ: ไฟล์จริงจาก Meta Business Suite (UTF-16) ผ่านหน้า นำเข้า CSV
   const FB = `${process.env.FIXTURE_DIR ?? "tests/fixtures"}/fbpage/`;
   for (const [f, label] of [["Viewers.csv", "Facebook Page — Viewers รายวัน (ระดับเพจ)"], ["Link_clicks.csv", "Facebook Page — Link clicks รายวัน (ระดับเพจ)"]]) {
-    await page.goto(BASE + "/import"); await page.getByRole("cell", { name: "ga4_pages.csv" }).waitFor(); // ประวัติโหลดแล้ว = หน้าพร้อมรับไฟล์
+    await page.goto(BASE + "/import"); await page.getByText("ประวัติการนำเข้า", { exact: true }).click(); await page.getByRole("cell", { name: "ga4_pages.csv" }).waitFor(); // ประวัติโหลดแล้ว = หน้าพร้อมรับไฟล์
     await page.locator('input[type="file"]').first().setInputFiles(FB + f);
     await page.getByText(/ช่วงรายงานจากไฟล์: 1 ก.ย. 69\s*–\s*30 ก.ย. 69/).waitFor();
     assert.equal(await page.locator("select").first().evaluate((el) => el.options[el.selectedIndex].text), label);

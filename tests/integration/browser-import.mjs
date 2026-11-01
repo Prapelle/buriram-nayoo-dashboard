@@ -36,7 +36,13 @@ try {
   browser = await chromium.launch();
   const open = async (email) => { const ctx = await browser.newContext({ locale: "th-TH" }); await ctx.route(/fonts\.(googleapis|gstatic)\.com/, (r) => r.fulfill({ status: 200, contentType: "text/css", body: "" })); /* ฟอนต์จาก Google: ในเครื่องทดสอบไม่มีอินเทอร์เน็ต */ await ctx.addCookies([{ name: "authjs.session-token", value: await cookie(email), domain: "127.0.0.1", path: "/", httpOnly: true, sameSite: "Lax" }]); const page = await ctx.newPage(); const errors = []; page.on("pageerror", (e) => { if (/Minified React error #418/.test(String(e))) { console.log("    (เตือน) hydration ไม่ตรง → React วาดใหม่ฝั่งเบราว์เซอร์ @", page.url()); return; } errors.push(`${e} @ ${page.url()}`); }); /* #418: เกิดได้เมื่อเทสต์เปลี่ยนหน้าระหว่างหน้าเดิมยังโหลดไม่เสร็จ (พบใน commit ก่อนหน้าด้วย) — ไม่นับเป็นความผิดพลาด แต่พิมพ์เตือนไว้ */ return { page, errors }; };
   const { page, errors } = await open("admin@example.com");
-  await page.goto(BASE + "/import"); await page.getByText("ยังไม่มีประวัติการนำเข้า").waitFor();
+  { // ประวัติการนำเข้า: ไม่โหลดจนกว่าจะกดเปิด (1/11/2026)
+    let histCalls = 0; const onReq = (r) => { if (r.url().includes("/api/import/history")) histCalls++; }; page.on("request", onReq);
+    await page.goto(BASE + "/import", { waitUntil: "networkidle" }); assert.equal(histCalls, 0); assert.equal(await page.getByText("ยังไม่มีประวัติการนำเข้า").count(), 0);
+    await page.getByText("ประวัติการนำเข้า", { exact: true }).click(); await page.getByText("ยังไม่มีประวัติการนำเข้า").waitFor(); assert.equal(histCalls, 1);
+    page.off("request", onReq);
+    ok("ประวัติการนำเข้า: เปิดหน้าแล้วยังไม่โหลด · กดแล้วจึงโหลดและแสดง");
+  }
   const junk = "/tmp/import-note.txt"; (await import("node:fs")).writeFileSync(junk, "hello");
   const picked = [`${FX}/Campaigns_2026_09_01-2026_09_30_.csv`, `${FX}/fbpage/Viewers.csv`, `${FX}/website/gsc_Chart.csv`, `${FX}/website/gsc_Filters.csv`, `${FX}/synthetic_SalesReport.xlsx`, junk];
   await page.locator('input[type="file"]').first().setInputFiles(picked);
@@ -319,7 +325,7 @@ try {
   for (const pth of ["/buyer-leads", "/seller-leads"]) { await m.page.goto(BASE + pth); await m.page.waitForURL(BASE + "/"); } // Marketing ไม่มีสิทธิ์ข้อมูลลูกค้า → กลับหน้าแรก
   const pr = await fetch(BASE + "/api/leads", { method: "PATCH", headers: { cookie: `authjs.session-token=${await cookie("marketing@example.com")}`, "sec-fetch-site": "same-origin", "content-type": "application/json" }, body: JSON.stringify({ lead_id: "B1", field: "call_status", value: "จอง" }) });
   assert.equal(pr.status, 403);
-  await m.page.goto(BASE + "/import"); await m.page.getByRole("cell", { name: "Campaigns_2026_09_01-2026_09_30_.csv" }).waitFor();
+  await m.page.goto(BASE + "/import"); await m.page.getByText("ประวัติการนำเข้า", { exact: true }).click(); await m.page.getByRole("cell", { name: "Campaigns_2026_09_01-2026_09_30_.csv" }).waitFor();
   await m.page.locator('input[type="file"]').first().setInputFiles([`${FX}/synthetic_SalesReport.xlsx`, `${FX}/website/gsc_Devices.csv`, `${FX}/Devices_2026_09_01-2026_09_30_.csv`]);
   await m.page.getByText(/ไฟล์รายงานยอดขาย \(\.xlsx\) นำเข้าได้เฉพาะ Admin หรือ Sales/).waitFor();
   await m.page.getByRole("heading", { name: "ไฟล์เว็บไซต์ (GA4 / Search Console)" }).waitFor();

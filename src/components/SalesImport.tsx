@@ -32,15 +32,16 @@ export function SalesImport({ incoming, embedded = false }: { incoming?: { file:
   const [state, setState] = useState<"idle" | "reading" | "loading" | "ready" | "committing" | "done" | "error">("idle");
   const [error, setError] = useState("");
   const [result, setResult] = useState<{ counts: Plan["counts"]; errors: Err[] } | null>(null);
-  const [hist, setHist] = useState<{ state: "loading" | "ok" | "error"; rows: Batch[]; error?: string }>({ state: "loading", rows: [] });
+  const [hist, setHist] = useState<{ state: "idle" | "loading" | "ok" | "error"; rows: Batch[]; error?: string }>({ state: "idle", rows: [] });
+  const [histOpen, setHistOpen] = useState(false); // ประวัติโหลดเมื่อกดเปิดเท่านั้น (1/11/2026)
   const [drag, setDrag] = useState(false);
   const input = useRef<HTMLInputElement>(null);
 
   const loadHist = useCallback(async () => {
+    setHist((h) => (h.state === "ok" ? h : { state: "loading", rows: [] }));
     try { const r = await fetch("/api/sales/history"); const j = await r.json(); if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`); setHist({ state: "ok", rows: j.batches }); }
     catch (e) { setHist({ state: "error", rows: [], error: e instanceof Error ? e.message : "error" }); }
   }, []);
-  useEffect(() => { loadHist(); }, [loadHist]);
 
   async function call(path: string, body: object) {
     const r = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -72,7 +73,7 @@ export function SalesImport({ incoming, embedded = false }: { incoming?: { file:
 
   async function commit() {
     setState("committing"); setError("");
-    try { const r = await call("/api/sales/commit", { ...body(), confirmUpdate }); setResult(r); setState("done"); loadHist(); }
+    try { const r = await call("/api/sales/commit", { ...body(), confirmUpdate }); setResult(r); setState("done"); if (histOpen) loadHist(); }
     catch (e) { setError(e instanceof Error ? e.message : "เกิดข้อผิดพลาด"); setState("error"); }
   }
   function downloadErrors(errors: Err[]) {
@@ -167,8 +168,11 @@ export function SalesImport({ incoming, embedded = false }: { incoming?: { file:
         )}
       </section>
 
-      {!embedded && <section>
-        <h2 className="mb-2 text-lg font-semibold">ประวัติการนำเข้า</h2>
+      {!embedded && <details className="group" onToggle={(e) => { const o = e.currentTarget.open; setHistOpen(o); if (o) loadHist(); }}>
+        <summary className="flex cursor-pointer list-none items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 [&::-webkit-details-marker]:hidden">
+          <span className="text-lg font-semibold">ประวัติการนำเข้า</span><span className="text-xs text-slate-500">30 รายการล่าสุด · กดเพื่อแสดง</span>
+          <span aria-hidden="true" className="ml-auto text-slate-400 transition-transform group-open:rotate-180">▾</span></summary>
+        <div className="mt-2">
         {hist.state === "loading" && <Skeleton kind={"rows"} />}
         {hist.state === "error" && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">โหลดประวัติไม่ได้: {hist.error}</p>}
         {hist.state === "ok" && hist.rows.length === 0 && <p className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">ยังไม่มีประวัติการนำเข้า</p>}
@@ -179,7 +183,8 @@ export function SalesImport({ incoming, embedded = false }: { incoming?: { file:
               <td><span className={`rounded px-1.5 py-0.5 text-xs ${b.status === "success" ? "bg-green-100 text-green-800" : b.status === "failed" ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-800"}`}>{b.status}</span></td>
               <td className="whitespace-nowrap">{b.rows_inserted}/{b.rows_updated}/{b.rows_skipped}/{b.rows_invalid}</td><td className="text-right tabular-nums">{b.total_net_imported ? Number(b.total_net_imported).toLocaleString("en-US") : ""}</td><td className="max-w-40 truncate pl-3">{b.imported_by}</td></tr>))}</tbody></table></div>
         )}
-      </section>}
+        </div>
+      </details>}
     </div>
   );
 }

@@ -2,7 +2,7 @@
 import { Skeleton } from "@/components/Skeleton";
 import { DateInput } from "@/components/DateInput";
 import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { SPECS } from "@/lib/import/specs";
 import { readTextFile, toCsv } from "@/lib/csv";
 import { detectSpec, parseInput } from "@/lib/import/plan";
@@ -54,7 +54,8 @@ export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" 
   const [error, setError] = useState("");
   const [result, setResult] = useState<{ counts: Counts; errors: Err[] } | null>(null);
   const [override, setOverride] = useState(false);
-  const [history, setHistory] = useState<{ state: "loading" | "ok" | "error"; rows: Batch[]; error?: string }>({ state: "loading", rows: [] });
+  const [history, setHistory] = useState<{ state: "idle" | "loading" | "ok" | "error"; rows: Batch[]; error?: string }>({ state: "idle", rows: [] });
+  const [histOpen, setHistOpen] = useState(false); // ประวัติโหลดเมื่อกดเปิดเท่านั้น (1/11/2026)
   const [drag, setDrag] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   /** ช่วงวันที่ล่าสุดที่ใช้ในรอบนี้ — ไฟล์ Google Ads ถัดไปที่ชื่อไฟล์ไม่มีวันที่ จะเติมช่วงนี้ให้ (ผู้ใช้ตรวจ/แก้ได้) */
@@ -62,13 +63,13 @@ export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" 
   const [carried, setCarried] = useState(false);
 
   const loadHistory = useCallback(async () => {
+    setHistory((h) => (h.state === "ok" ? h : { state: "loading", rows: [] }));
     try {
       const r = await fetch("/api/import/history"); const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
       setHistory({ state: "ok", rows: j.batches });
     } catch (e) { setHistory({ state: "error", rows: [], error: e instanceof Error ? e.message : "error" }); }
   }, []);
-  useEffect(() => { loadHistory(); }, [loadHistory]);
 
   async function call(path: string, body: object) {
     const r = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
@@ -129,7 +130,7 @@ export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" 
     setState("committing"); setError("");
     try {
       const r = await call("/api/import/commit", { ...payload(), overrideDuplicate: override });
-      setResult(r); setState("done"); loadHistory();
+      setResult(r); setState("done"); if (histOpen) loadHistory();
     } catch (e) { setError(e instanceof Error ? e.message : "เกิดข้อผิดพลาด"); setState("error"); }
   }
 
@@ -299,8 +300,11 @@ export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" 
         </section>
       )}
 
-      <section>
-        <h2 className="mb-2 text-lg font-semibold">ประวัติการนำเข้า</h2>
+      <details className="group" onToggle={(e) => { const o = e.currentTarget.open; setHistOpen(o); if (o) loadHistory(); }}>
+        <summary className="flex cursor-pointer list-none items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 [&::-webkit-details-marker]:hidden">
+          <span className="text-lg font-semibold">ประวัติการนำเข้า</span><span className="text-xs text-slate-500">30 รายการล่าสุด · กดเพื่อแสดง</span>
+          <span aria-hidden="true" className="ml-auto text-slate-400 transition-transform group-open:rotate-180">▾</span></summary>
+        <div className="mt-2">
         {role === "admin" && <p className="mb-2 text-xs text-slate-500">ประวัติการนำเข้ายอดขาย (FlowAccount) ดูที่หน้า <a href="/sales" className="underline">Sales</a></p>}
         {history.state === "loading" && <Skeleton kind={"rows"} />}
         {history.state === "error" && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">โหลดประวัติไม่ได้: {history.error}</p>}
@@ -319,7 +323,8 @@ export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" 
             </table>
           </div>
         )}
-      </section>
+        </div>
+      </details>
     </div>
   );
 }
