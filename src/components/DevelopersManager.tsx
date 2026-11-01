@@ -10,7 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { parseCsv, readTextFile, toCsv } from "@/lib/csv";
 import { readXlsx } from "@/lib/xlsx";
 import {
-  AUTO_STATUS, CANT_CLOSE_MIN, cantCloseProjects, categoryOf, CONTACT_METHODS, DEV_DEFAULT, DEV_EDITABLE, DEV_STATUS, devFollowUps, DEV_STALE_DAYS, EXPIRING_DAYS, expiringProducts, LABEL, monthlyReport, NEXT_CONTACT_DAYS, PRODUCT_CATEGORIES, productState, TIERS,
+  AUTO_STATUS, KIND_LABEL, type DevKind, CANT_CLOSE_MIN, cantCloseProjects, categoryOf, CONTACT_METHODS, DEV_DEFAULT, DEV_EDITABLE, DEV_STATUS, devFollowUps, DEV_STALE_DAYS, EXPIRING_DAYS, expiringProducts, LABEL, monthlyReport, NEXT_CONTACT_DAYS, PRODUCT_CATEGORIES, productState, TIERS,
   type Dev, type DevProduct,
 } from "@/lib/developers";
 
@@ -28,7 +28,10 @@ const emptyProd = (): DevProduct => ({ category: "Product", product: "", start_d
 const TEMPLATE = [["ชื่อบริษัท", "โครงการหลัก", "โครงการรอง 1", "โครงการรอง 2", "ชื่อผู้ติดต่อ", "เบอร์", "Line", "Tier", "Nayoo URL", "Staff", "Status", "ติดต่อล่าสุด", "ติดต่อครั้งถัดไป", "Remark", "Note"],
   ["บริษัท ตัวอย่าง จำกัด", "หมู่บ้านตัวอย่าง", "", "", "คุณสมชาย", "0812345678", "@example", "A", "https://...", "พี่เอ", "เข้าร่วมแล้ว", "2026-10-01", "2026-11-05", "", ""]];
 
-export function DevelopersManager() {
+/** หน้า Developer และ Home Builder ใช้ร่วมกัน (1/11/2026) · Home Builder ไม่มีช่องโครงการ */
+export function DevelopersManager({ kind = "developer" }: { kind?: DevKind }) {
+  const L = KIND_LABEL[kind], hb = kind === "home_builder";
+  const template = hb ? TEMPLATE.map((r) => r.filter((_, i) => i < 1 || i > 3)) : TEMPLATE;
   const [data, setData] = useState<Data | null>(null);
   const mobile = useIsMobile();
   const [err, setErr] = useState("");
@@ -49,9 +52,9 @@ export function DevelopersManager() {
   const [imp, setImp] = useState<{ name: string; grid: string[][]; plan?: { counts: Record<string, number>; results: { n: number; status: string; name: string; errors?: Record<string, string>; matches?: string[] }[]; committed: boolean } } | null>(null);
 
   const load = useCallback(async () => {
-    try { const r = await fetch("/api/developers"); const j = await r.json(); if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`); setData(j); setErr(""); setMonth((m) => m || j.today.slice(0, 7)); }
+    try { const r = await fetch(`/api/developers?kind=${kind}`); const j = await r.json(); if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`); setData(j); setErr(""); setMonth((m) => m || j.today.slice(0, 7)); }
     catch (e) { setErr(e instanceof Error ? e.message : "โหลดข้อมูลไม่ได้"); }
-  }, []);
+  }, [kind]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search); const v = sp.get("follow");
@@ -60,7 +63,7 @@ export function DevelopersManager() {
   }, []);
 
   async function call(method: string, body: object) {
-    const r = await fetch("/api/developers", { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const r = await fetch("/api/developers", { method, headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, kind }) });
     const j = await r.json(); if (!r.ok) throw Object.assign(new Error(j.error ?? "เกิดข้อผิดพลาด"), { j }); return j;
   }
 
@@ -135,7 +138,7 @@ export function DevelopersManager() {
     try { const j = await call("POST", { action: "import_commit", grid: imp.grid }); setImp({ ...imp, plan: j }); setMsg({ type: "ok", text: `นำเข้า ${j.counts.insert} รายการแล้ว` }); await load(); }
     catch (e) { setMsg({ type: "error", text: e instanceof Error ? e.message : "นำเข้าไม่สำเร็จ" }); } finally { setBusy(false); }
   }
-  const downloadTemplate = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + toCsv(TEMPLATE)], { type: "text/csv;charset=utf-8" })); a.download = "developer_template.csv"; a.click(); URL.revokeObjectURL(a.href); };
+  const downloadTemplate = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + toCsv(template)], { type: "text/csv;charset=utf-8" })); a.download = hb ? "home_builder_template.csv" : "developer_template.csv"; a.click(); URL.revokeObjectURL(a.href); };
 
   if (err) return <p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">{err}</p>;
   if (!data) return <Skeleton kind={"rows"} />;
@@ -165,9 +168,9 @@ export function DevelopersManager() {
 
       {form && (
         <section className="space-y-4 rounded-lg border border-slate-300 bg-white p-5">
-          <div className="flex items-center justify-between"><h2 className="font-semibold">{editing ? `แก้ไข ${editing.dev_code}` : "เพิ่ม Developer ใหม่"}</h2><button onClick={() => { setForm(null); setEditing(null); }} className="text-sm underline">ปิด</button></div>
+          <div className="flex items-center justify-between"><h2 className="font-semibold">{editing ? `แก้ไข ${editing.dev_code}` : `เพิ่ม ${L} ใหม่`}</h2><button onClick={() => { setForm(null); setEditing(null); }} className="text-sm underline">ปิด</button></div>
           <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
-            {fld("company_name")}{fld("project_main")}{fld("project_sub1")}{fld("project_sub2")}
+            {fld("company_name")}{!hb && <>{fld("project_main")}{fld("project_sub1")}{fld("project_sub2")}</>}
             {fld("contact_name")}{fld("phone", LABEL.phone, { type: "tel" })}{fld("line_id")}{sel("tier", "Tier", TIERS)}
             {fld("nayoo_url", LABEL.nayoo_url, { type: "url" })}{fld("staff", "Staff", { list: "dev-staff" })}
             <datalist id="dev-staff">{data.staff.map((s) => <option key={s} value={s} />)}</datalist>
@@ -177,7 +180,7 @@ export function DevelopersManager() {
             {sel("last_contact_method", form.status === "เข้าพบแล้ว" && (!editing || editing.status !== "เข้าพบแล้ว") ? "สถานะการเข้าพบ *" : "สถานะการเข้าพบ", CONTACT_METHODS)}
           </div>
           <div className="grid gap-3 md:grid-cols-2">{fld("remark", "Remark", { area: true })}{fld("notes", "Note (บันทึกภายใน)", { area: true })}</div>
-          <p className="text-xs text-slate-500">กรอกชื่อบริษัทหรือโครงการหลักอย่างน้อย 1 ช่อง · เปลี่ยน Status เป็น เข้าพบแล้ว → เลือกสถานะการเข้าพบ (โทร / Line / เจอหน้า) และติดต่อล่าสุด = วันนี้ · ไม่ใส่ติดต่อครั้งถัดไป = ติดต่อล่าสุด + {NEXT_CONTACT_DAYS} วัน · Product ที่ใช้อยู่ เพิ่มได้หลังบันทึก (กด ดู)</p>
+          <p className="text-xs text-slate-500">{hb ? "กรอกชื่อบริษัท" : "กรอกชื่อบริษัทหรือโครงการหลักอย่างน้อย 1 ช่อง"} · เปลี่ยน Status เป็น เข้าพบแล้ว → เลือกสถานะการเข้าพบ (โทร / Line / เจอหน้า) และติดต่อล่าสุด = วันนี้ · ไม่ใส่ติดต่อครั้งถัดไป = ติดต่อล่าสุด + {NEXT_CONTACT_DAYS} วัน · Product ที่ใช้อยู่ เพิ่มได้หลังบันทึก (กด ดู)</p>
           {dups && (
             <div role="alert" className="space-y-2 rounded-md bg-amber-50 p-3 text-sm text-amber-900">
               <p>พบรายการที่อาจซ้ำ:</p><ul className="list-disc pl-5">{dups.map((d) => <li key={d.dev_code}>{d.dev_code} · {d.company_name || d.project_main} · ซ้ำที่ {d.matched.map((m) => MATCH_TH[m]).join(", ")}</li>)}</ul>
@@ -247,15 +250,15 @@ export function DevelopersManager() {
         {follow && <button onClick={() => setFollow("")} className="text-xs underline">แสดงทั้งหมด</button>}
       </nav>
       <div className="flex flex-wrap items-end gap-3">
-        <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">ค้นหา</span><input value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} placeholder="บริษัท / โครงการ / ผู้ติดต่อ / เบอร์ / Line" className="w-64 h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm" /></label>
+        <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">ค้นหา</span><input value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} placeholder={hb ? "บริษัท / ผู้ติดต่อ / เบอร์ / Line" : "บริษัท / โครงการ / ผู้ติดต่อ / เบอร์ / Line"} className="w-64 h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm" /></label>
         {fsel("status", "Status", DEV_STATUS)}{fsel("tier", "Tier", TIERS)}{fsel("staff", "Staff", data.staff)}{fsel("product", "Product ที่ใช้อยู่", data.productTypes)}
         {Object.values(f).some(Boolean) && <button onClick={() => setF({ q: "", status: "", tier: "", staff: "", product: "" })} className="py-1.5 text-sm underline">ล้าง</button>}
-        <button onClick={() => openForm(null)} className="ml-auto rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">+ เพิ่ม Developer</button>
+        <button onClick={() => openForm(null)} className="ml-auto rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">+ เพิ่ม {L}</button>
       </div>
 
-      {data.devs.length === 0 ? <p className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">ยังไม่มี Developer — กด &quot;+ เพิ่ม Developer&quot; หรือนำเข้ารายชื่อจากไฟล์ด้านล่าง</p> : (
+      {data.devs.length === 0 ? <p className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">ยังไม่มี {L} — กด &quot;+ เพิ่ม {L}&quot; หรือนำเข้ารายชื่อจากไฟล์ด้านล่าง</p> : (
         <>
-        {mobile && <ul className="space-y-2" aria-label="รายการ Developer">{rows.map((d) => {
+        {mobile && <ul className="space-y-2" aria-label={`รายการ ${L}`}>{rows.map((d) => {
           const act = activeOf(d); const over = d.next_follow_up_at && d.next_follow_up_at < data.today;
           return (
             <li key={d.developer_id} className="rounded-xl border border-slate-200 bg-white p-3 text-sm">
@@ -273,7 +276,7 @@ export function DevelopersManager() {
         })}</ul>}
         {!mobile && <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
           <table className="w-full min-w-[960px] text-left text-sm">
-            <thead><tr className="border-b bg-slate-50 text-xs text-slate-500"><th className="p-2">รหัส</th><th>บริษัท / โครงการหลัก</th><th>ผู้ติดต่อ</th><th>เบอร์ / Line</th><th>Tier</th><th>Status</th><th>Product ที่ใช้อยู่</th><th>Staff</th><th>ติดต่อครั้งถัดไป</th><th /></tr></thead>
+            <thead><tr className="border-b bg-slate-50 text-xs text-slate-500"><th className="p-2">รหัส</th><th>{hb ? "บริษัท" : "บริษัท / โครงการหลัก"}</th><th>ผู้ติดต่อ</th><th>เบอร์ / Line</th><th>Tier</th><th>Status</th><th>Product ที่ใช้อยู่</th><th>Staff</th><th>ติดต่อครั้งถัดไป</th><th /></tr></thead>
             <tbody>{rows.map((d) => {
               const act = activeOf(d); const over = d.next_follow_up_at && d.next_follow_up_at < data.today;
               return (
@@ -315,7 +318,7 @@ export function DevelopersManager() {
       </section>
 
       <section aria-labelledby="cant-close" className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
-        <h2 id="cant-close" className="font-semibold">โครงการที่ปิดไม่ได้ <span className="font-normal text-slate-600">— เข้าพบแล้วแต่ยังไม่ปิดการขาย ครบ {CANT_CLOSE_MIN} เดือนขึ้นไป</span></h2>
+        <h2 id="cant-close" className="font-semibold">{hb ? "รายที่ปิดไม่ได้" : "โครงการที่ปิดไม่ได้"} <span className="font-normal text-slate-600">— เข้าพบแล้วแต่ยังไม่ปิดการขาย ครบ {CANT_CLOSE_MIN} เดือนขึ้นไป</span></h2>
         {cantClose.length === 0 ? <p className="text-sm text-slate-600">ยังไม่มี</p> : (
           <ul className="space-y-1 text-sm">{cantClose.map((x) => (
             <li key={x.dev.developer_id} className="flex flex-wrap items-center gap-x-3">
@@ -328,10 +331,10 @@ export function DevelopersManager() {
       </section>
 
       <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
-        <h2 className="font-semibold">นำเข้ารายชื่อ Developer จากไฟล์</h2>
-        <p className="text-sm text-slate-600">ไฟล์ .csv หรือ .xlsx ที่แถวแรกเป็นหัวคอลัมน์ตามฟอร์ม (ชื่อบริษัท, โครงการหลัก, ชื่อผู้ติดต่อ, เบอร์, Line, Tier, Staff, Status ...) · รายการที่ซ้ำกับที่มีอยู่จะถูกข้าม · ระบบยังไม่เขียนข้อมูลจนกว่าจะกดยืนยัน</p>
+        <h2 className="font-semibold">นำเข้ารายชื่อ {L} จากไฟล์</h2>
+        <p className="text-sm text-slate-600">ไฟล์ .csv หรือ .xlsx ที่แถวแรกเป็นหัวคอลัมน์ตามฟอร์ม (ชื่อบริษัท, {hb ? "" : "โครงการหลัก, "}ชื่อผู้ติดต่อ, เบอร์, Line, Tier, Staff, Status ...) · รายการที่ซ้ำกับที่มีอยู่จะถูกข้าม · ระบบยังไม่เขียนข้อมูลจนกว่าจะกดยืนยัน</p>
         <div className="flex flex-wrap items-center gap-3 text-sm">
-          <label className="cursor-pointer rounded-lg bg-brand-600 px-4 py-1.5 font-medium text-white hover:bg-brand-700">เลือกไฟล์<input type="file" accept=".csv,text/csv,.xlsx" aria-label="ไฟล์รายชื่อ Developer" className="hidden" onChange={(e) => { pickImport(e.target.files?.[0]); e.target.value = ""; }} /></label>
+          <label className="cursor-pointer rounded-lg bg-brand-600 px-4 py-1.5 font-medium text-white hover:bg-brand-700">เลือกไฟล์<input type="file" accept=".csv,text/csv,.xlsx" aria-label={`ไฟล์รายชื่อ ${L}`} className="hidden" onChange={(e) => { pickImport(e.target.files?.[0]); e.target.value = ""; }} /></label>
           <button onClick={downloadTemplate} className="underline">ดาวน์โหลดไฟล์ตัวอย่าง</button>
         </div>
         {imp?.plan && (

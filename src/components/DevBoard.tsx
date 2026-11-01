@@ -6,7 +6,7 @@ import Link from "next/link";
 import { BoardScroller, BoardTabs } from "@/components/Board";
 import { useAsk } from "@/components/AskDialog";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AUTO_STATUS, CONTACT_METHODS, DEV_DEFAULT, DEV_STATUS, productState, TIERS, type Dev, type DevProduct } from "@/lib/developers";
+import { AUTO_STATUS, KIND_LABEL, type DevKind, CONTACT_METHODS, DEV_DEFAULT, DEV_STATUS, productState, TIERS, type Dev, type DevProduct } from "@/lib/developers";
 
 /** บอร์ด Sale developer: คอลัมน์ตาม Status ของ Developer · กำลังใช้ Product / ใกล้หมดสัญญา ระบบตั้งเองจาก Product */
 const HEAD: Record<string, string> = {
@@ -16,7 +16,8 @@ const HEAD: Record<string, string> = {
 const HINT: Record<string, string> = { มีแผนเข้าพบ: "สิ้นเดือนกลับไป เข้าร่วมแล้ว (นับเป็นไม่ให้เข้าพบ)", เข้าพบแล้ว: "สิ้นเดือนกลับไป เข้าร่วมแล้ว", "กำลังใช้ Product": "ระบบย้ายให้ตามวัน Product", ใกล้หมดสัญญา: "เหลือ ≤ 30 วันก่อนหมดอายุ" };
 const dmy = (s?: string) => (s && /^\d{4}-\d{2}-\d{2}/.test(s) ? thDate(s) : "");
 
-export function DevBoard() {
+export function DevBoard({ kind = "developer" }: { kind?: DevKind }) {
+  const L = KIND_LABEL[kind], page = kind === "home_builder" ? "/home-builders" : "/developers";
   const [all, setAll] = useState<Dev[]>([]); const [products, setProducts] = useState<DevProduct[]>([]); const [staff, setStaff] = useState<string[]>([]); const [today, setToday] = useState("");
   const [state, setState] = useState<"loading" | "ok" | "error">("loading");
   const [tab, setTab] = useState(""); // มือถือ: คอลัมน์ที่แสดง
@@ -26,9 +27,9 @@ export function DevBoard() {
   const [busy, setBusy] = useState<Set<string>>(new Set()); const [dragId, setDragId] = useState(""); const [over, setOver] = useState("");
 
   const load = useCallback(async () => {
-    try { const r = await fetch("/api/developers"); const j = await r.json(); if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`); setAll(j.devs); setProducts(j.products); setStaff(j.staff); setToday(j.today); setState("ok"); }
+    try { const r = await fetch(`/api/developers?kind=${kind}`); const j = await r.json(); if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`); setAll(j.devs); setProducts(j.products); setStaff(j.staff); setToday(j.today); setState("ok"); }
     catch (e) { setMsg({ type: "error", text: e instanceof Error ? e.message : "โหลดข้อมูลไม่ได้" }); setState("error"); }
-  }, []);
+  }, [kind]);
   useEffect(() => { load(); }, [load]);
 
   const activeOf = useMemo(() => { const m = new Map<string, DevProduct[]>(); for (const p of products) if (productState(p, today) !== "expired") { if (!m.has(p.developer_id)) m.set(p.developer_id, []); m.get(p.developer_id)!.push(p); } return m; }, [products, today]);
@@ -50,7 +51,7 @@ export function DevBoard() {
       const j = await r.json(); if (!r.ok) throw new Error(j.error ?? "เปลี่ยนสถานะไม่สำเร็จ");
       setAll((rs) => rs.map((x) => (x.developer_id === id ? j.dev : x)));
       const name = d.company_name || d.project_main;
-      setMsg(to === "ปิดการขาย" ? { type: "ok", text: `${name}: ปิดการขายแล้ว (นับเป็น Win) — เพิ่ม Product และวันหมดอายุได้เมื่อพร้อม การ์ดจะย้ายไป กำลังใช้ Product เองเมื่อถึงวันเริ่ม`, link: `/developers?view=${id}` }
+      setMsg(to === "ปิดการขาย" ? { type: "ok", text: `${name}: ปิดการขายแล้ว (นับเป็น Win) — เพิ่ม Product และวันหมดอายุได้เมื่อพร้อม การ์ดจะย้ายไป กำลังใช้ Product เองเมื่อถึงวันเริ่ม`, link: `${page}?view=${id}` }
         : { type: "ok", text: `${name}: ${d.status || DEV_DEFAULT} → ${to}${to === "เข้าพบแล้ว" ? ` (${method}) · ติดต่อล่าสุด = วันนี้` : ""}` });
     } catch (e) { setAll((rs) => rs.map((x) => (x.developer_id === id ? d : x))); setMsg({ type: "error", text: e instanceof Error ? e.message : "เกิดข้อผิดพลาด" }); load(); }
     finally { setBusy((b) => { const n = new Set(b); n.delete(id); return n; }); }
@@ -63,10 +64,10 @@ export function DevBoard() {
         <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">ค้นหา</span><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="บริษัท / โครงการ / ผู้ติดต่อ" className="w-56 h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm" /></label>
         <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">Staff</span><select aria-label="กรอง Staff" value={staffF} onChange={(e) => setStaffF(e.target.value)} className="h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm"><option value="">ทั้งหมด</option>{staff.map((s) => <option key={s}>{s}</option>)}</select></label>
         <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">Tier</span><select aria-label="กรอง Tier" value={tierF} onChange={(e) => setTierF(e.target.value)} className="h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm"><option value="">ทั้งหมด</option>{TIERS.map((s) => <option key={s}>{s}</option>)}</select></label>
-        <span className="ml-auto text-xs text-slate-500">{shown.length.toLocaleString("en-US")} รายการ · เพิ่ม/แก้ไขรายละเอียดและ Product ที่หน้า <Link href="/developers" className="underline">Developer</Link></span>
+        <span className="ml-auto text-xs text-slate-500">{shown.length.toLocaleString("en-US")} รายการ · เพิ่ม/แก้ไขรายละเอียดและ Product ที่หน้า <Link href={page} className="underline">{L}</Link></span>
       </div>
       {state === "loading" && <Skeleton kind={"board"} />}
-      {state === "ok" && all.length === 0 && <p className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">ยังไม่มี Developer — เพิ่มได้ที่หน้า Developer</p>}
+      {state === "ok" && all.length === 0 && <p className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">ยังไม่มี {L} — เพิ่มได้ที่หน้า {L}</p>}
       {state === "ok" && all.length > 0 && (
         <>
         <BoardTabs tabs={DEV_STATUS.map((k) => ({ key: k, label: k, count: cols[k].length, cls: HEAD[k] }))} active={tab || DEV_STATUS[0]} onPick={setTab} />

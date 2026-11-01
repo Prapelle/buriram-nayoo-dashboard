@@ -1342,3 +1342,11 @@ Users 17,443 · Page Views 42,450 · PV/User 2.43 · Duration 1 นาที 0 �
 - META_ADS เพิ่มคอลัมน์ต่อท้าย: campaign_name, account_name, clicks_all, cpc_all, starts (**ต้องกด เตรียม Google Sheet**; ถ้ายังไม่กด ค่าเหล่านี้อยู่ใน raw_json)
 - ไฟล์จริง ต.ค. 69: 40 โฆษณา · ยอดใช้จ่าย 4,616.94 ตรงกับแถวรวมของไฟล์
 - **Passed:** 491/491
+
+## 51) เมนู Project + Home Builder (1/11/2026)
+- กลุ่มเมนู "โครงการหมู่บ้าน" → **Project**: Developer · Sale developer · **Home Builder** · **Sale home builder** · Revenue
+- Home Builder ใช้ระบบเดียวกับ Developer (ฟอร์ม · Product · Status อัตโนมัติ · ติดตาม · รายงานรายเดือน · นำเข้าไฟล์ · บอร์ด) — เก็บในแท็บ DEVELOPERS เดียวกัน แยกด้วยคอลัมน์ใหม่ `kind` (ว่าง = Developer, `home_builder`) · Product / ประวัติ Status / การติดต่อ ผูกด้วย developer_id จึงแยกตามกันเอง
+- Home Builder: ไม่มีช่อง โครงการหลัก / โครงการรอง 1 / โครงการรอง 2 (ฟอร์ม · ไฟล์ตัวอย่าง · ค้นหา) · ต้องกรอกชื่อบริษัท · รหัส HB-0001 (Developer ยังเป็น DV-)
+- ตรวจซ้ำ (ชื่อ / เบอร์ / Line) เทียบเฉพาะประเภทเดียวกัน · API `/api/developers?kind=home_builder` (POST ส่ง kind) · แก้รายการต่างประเภทไม่ได้ (404)
+- **ต้องกด เตรียม Google Sheet** (เพิ่มคอลัมน์ kind ต่อท้าย DEVELOPERS) — ก่อนกด บันทึก Home Builder จะถูกปฏิเสธพร้อมบอกให้กด (กันข้อมูลไปปนกับ Developer)
+- **Passed:** 493/493

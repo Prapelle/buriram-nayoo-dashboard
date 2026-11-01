@@ -1,6 +1,7 @@
 import { logError } from "@/lib/log";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/guard";
+import { parseKind } from "@/lib/developers";
 import { addProductType, changeDevStatus, recordContact, deleteDeveloper, deleteProduct, DevError, importDevelopers, listDevelopers, saveDeveloper, saveProduct } from "@/lib/developers-service";
 
 export const dynamic = "force-dynamic";
@@ -11,10 +12,10 @@ function fail(e: unknown) {
 }
 
 // Developer (มีเบอร์/Line ผู้ติดต่อ) — เฉพาะ Admin และ Sales
-export async function GET() {
+export async function GET(req: Request) {
   const g = await requireRole(["admin", "sales"]);
   if (!g.ok) return g.res;
-  try { return NextResponse.json(await listDevelopers()); } catch (e) { return fail(e); }
+  try { return NextResponse.json(await listDevelopers(parseKind(new URL(req.url).searchParams.get("kind")))); } catch (e) { return fail(e); }
 }
 
 /** action: save (ค่าเริ่มต้น) · product · product_type · contact (บันทึกการติดต่อ) · import_plan · import_commit */
@@ -27,9 +28,9 @@ export async function POST(req: Request) {
       case "product": return NextResponse.json(await saveProduct(b, g.email));
       case "contact": return NextResponse.json(await recordContact(String(b.developer_id ?? ""), String(b.method ?? ""), String(b.contacted_at ?? ""), String(b.note ?? ""), String(b.updated_at_seen ?? ""), g.email));
       case "product_type": return NextResponse.json(await addProductType(String(b.name ?? ""), g.email));
-      case "import_plan": return NextResponse.json(await importDevelopers(b.grid, false, g.email));
-      case "import_commit": return NextResponse.json(await importDevelopers(b.grid, true, g.email));
-      default: return NextResponse.json(await saveDeveloper(b, g.email));
+      case "import_plan": return NextResponse.json(await importDevelopers(b.grid, false, g.email, parseKind(b.kind)));
+      case "import_commit": return NextResponse.json(await importDevelopers(b.grid, true, g.email, parseKind(b.kind)));
+      default: return NextResponse.json(await saveDeveloper(b, g.email, parseKind(b.kind)));
     }
   } catch (e) { return fail(e); }
 }

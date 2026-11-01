@@ -6,7 +6,7 @@
  */
 import { writeAudit } from "./audit";
 import {
-  addDays, AUTO_STATUS, autoChanges, CONTACT_COLUMNS, CONTACT_METHODS, NEXT_CONTACT_DAYS, DEFAULT_PRODUCTS, DEV_COLUMNS, DEV_DEFAULT, DEV_EDITABLE, DEV_STATUS, findDevDuplicates, IMPORT_HEADERS, LOG_COLUMNS, nextDevCode, normLine, normName, normPhone,
+  addDays, AUTO_STATUS, KIND_LABEL, kindOf, type DevKind, autoChanges, CONTACT_COLUMNS, CONTACT_METHODS, NEXT_CONTACT_DAYS, DEFAULT_PRODUCTS, DEV_COLUMNS, DEV_DEFAULT, DEV_EDITABLE, DEV_STATUS, findDevDuplicates, IMPORT_HEADERS, LOG_COLUMNS, nextDevCode, normLine, normName, normPhone,
   PRODUCT_COLUMNS, productDrivenStatus, productState, todayBkk, validateDev, validateProduct, type Dev, type DevDup, type DevProduct,
 } from "./developers";
 import { appendRows, batchUpdateValues, colLetter, deleteRow, listTabs, readTabs, toRow } from "./sheets";
@@ -66,15 +66,21 @@ async function sync(t: Record<string, Tab>, onlyId?: string) {
   return final.size;
 }
 
-export async function listDevelopers() {
+/** Home Builder ต้องมีคอลัมน์ kind (เตรียม Google Sheet) — ไม่งั้นบันทึกแล้วจะกลายเป็น Developer */
+function kindReady(t: Record<string, Tab>, kind: DevKind) {
+  if (kind === "home_builder" && !t.DEVELOPERS.headers.includes("kind"))
+    throw new DevError(409, "ยังไม่ได้เพิ่มคอลัมน์สำหรับ Home Builder — ให้ Admin กด ตั้งค่า → เตรียม Google Sheet ก่อน", "SHEET_NOT_READY");
+}
+
+export async function listDevelopers(kind: DevKind = "developer") {
   const t = await load();
   await sync(t);
-  const devs = t.DEVELOPERS.rows.filter((r) => r.developer_id).map(pickDev).sort((a, b) => (a.company_name || a.project_main).localeCompare(b.company_name || b.project_main, "th"));
+  const devs = t.DEVELOPERS.rows.filter((r) => r.developer_id && kindOf(r) === kind).map(pickDev).sort((a, b) => (a.company_name || a.project_main).localeCompare(b.company_name || b.project_main, "th"));
   const ids = new Set(devs.map((d) => d.developer_id));
   const products = t.DEVELOPER_PRODUCTS.rows.filter((r) => r.product_id && ids.has(r.developer_id)).map(pickProd);
-  const logs = t.DEVELOPER_STATUS_LOG.rows.filter((r) => r.log_id).map((r) => Object.fromEntries(LOG_COLUMNS.map((c) => [c, r[c] ?? ""])));
+  const logs = t.DEVELOPER_STATUS_LOG.rows.filter((r) => r.log_id && ids.has(r.developer_id)).map((r) => Object.fromEntries(LOG_COLUMNS.map((c) => [c, r[c] ?? ""])));
   const staff = [...new Set(devs.map((d) => d.staff.trim()).filter(Boolean))].sort();
-  const contacts = t[CONTACTS].rows.filter((r) => r.contact_id).map((r) => Object.fromEntries(CONTACT_COLUMNS.map((c) => [c, r[c] ?? ""])));
+  const contacts = t[CONTACTS].rows.filter((r) => r.contact_id && ids.has(r.developer_id)).map((r) => Object.fromEntries(CONTACT_COLUMNS.map((c) => [c, r[c] ?? ""])));
   return { devs, products, logs, contacts, staff, productTypes: productTypesOf(t.APP_CONFIG.rows), today: todayBkk() };
 }
 
@@ -109,11 +115,13 @@ function checkManualStatus(to: string, products: DevProduct[], developerId: stri
     throw new DevError(409, "โครงการนี้มี Product ที่ใช้อยู่ — Status เปลี่ยนเองตามวันหมดอายุของ Product", "HAS_ACTIVE_PRODUCT");
 }
 
-export async function saveDeveloper(input: Record<string, unknown>, actor: string) {
-  const v = validateDev(input);
+export async function saveDeveloper(input: Record<string, unknown>, actor: string, kind: DevKind = "developer") {
+  const v = validateDev(input, kind);
   if (!v.ok) throw new DevError(422, "ข้อมูลไม่ถูกต้อง กรุณาตรวจช่องที่ระบุ", "VALIDATION", { fields: v.errors });
   const t = await load();
+  kindReady(t, kind);
   const rows = t.DEVELOPERS.rows;
+  const sameKind = (r: Record<string, string>) => kindOf(r) === kind;
   const id = String(input.developer_id ?? "");
   const now = new Date().toISOString();
   let prev: Dev | undefined, rowNo = 0;
@@ -121,11 +129,12 @@ export async function saveDeveloper(input: Record<string, unknown>, actor: strin
     const i = rows.findIndex((r) => r.developer_id === id);
     if (i < 0) throw new DevError(404, "ไม่พบรายการนี้ (อาจถูกลบออกจาก Sheet)", "NOT_FOUND");
     prev = pickDev(rows[i]); rowNo = i + 2;
+    if (kindOf(prev) !== kind) throw new DevError(404, `ไม่พบรายการนี้ใน ${KIND_LABEL[kind]}`, "NOT_FOUND");
     if (String(input.updated_at_seen ?? "") !== prev.updated_at) throw new DevError(409, "รายการนี้ถูกแก้ไขโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่ก่อนแก้ไข", "STALE");
   }
   const key = (d: Dev) => [normName(d.company_name), normName(d.project_main), normPhone(d.phone), normLine(d.line_id)].join("|");
   if ((!prev || key(prev) !== key(v.rec)) && input.confirmDuplicate !== true) {
-    const m = findDevDuplicates(rows.filter((r) => r.developer_id).map(pickDev), v.rec, id || undefined);
+    const m = findDevDuplicates(rows.filter((r) => r.developer_id && sameKind(r)).map(pickDev), v.rec, id || undefined);
     if (m.length) throw new DevError(409, "พบรายการที่ชื่อบริษัท / โครงการ / เบอร์ / Line ซ้ำ (ระบบไม่รวมข้อมูลให้อัตโนมัติ)", "DUPLICATE_WARNING", { matches: m });
   }
   // สถานะกลุ่มอัตโนมัติที่ฟอร์มส่งกลับมา (อาจเป็นค่าเก่าก่อนระบบเปลี่ยน) ไม่ถือว่าผู้ใช้เปลี่ยน
@@ -135,7 +144,7 @@ export async function saveDeveloper(input: Record<string, unknown>, actor: strin
   const met = v.rec.status === "เข้าพบแล้ว" && (prev ? statusChanged : true);
   if (met) contactReady(t, v.rec.last_contact_method); // ย้ายมา เข้าพบแล้ว ต้องเลือกวิธี (โทร / Line / เจอหน้า)
   if (!prev) {
-    const rec: Dev = { ...Object.fromEntries(DEV_COLUMNS.map((c) => [c, ""])), ...v.rec, developer_id: crypto.randomUUID(), dev_code: nextDevCode(rows.map((r) => r.dev_code)),
+    const rec: Dev = { ...Object.fromEntries(DEV_COLUMNS.map((c) => [c, ""])), ...v.rec, developer_id: crypto.randomUUID(), dev_code: nextDevCode(rows.map((r) => r.dev_code), kind), kind: kind === "home_builder" ? "home_builder" : "",
       created_by: actor, created_at: now, updated_by: actor, updated_at: now };
     applyStatus(rec, rec.status, now);
     if (v.rec.last_contacted_at && rec.status === "เข้าพบแล้ว") rec.last_contacted_at = v.rec.last_contacted_at;
@@ -274,13 +283,15 @@ export async function addProductType(name: string, actor: string) {
 
 /** นำเข้ารายชื่อ Developer จากไฟล์ (หัวคอลัมน์ภาษาไทยตามฟอร์ม) — plan = ตรวจอย่างเดียว · commit = เพิ่มเฉพาะแถวที่ถูกต้องและไม่ซ้ำ */
 export type ImportRowResult = { n: number; status: "insert" | "duplicate" | "invalid"; name: string; errors?: Record<string, string>; matches?: string[] };
-export async function importDevelopers(grid: unknown, commit: boolean, actor: string) {
+export async function importDevelopers(grid: unknown, commit: boolean, actor: string, kind: DevKind = "developer") {
   if (!Array.isArray(grid) || grid.length < 2 || grid.length > 2001) throw new DevError(422, "ไฟล์ต้องมีหัวคอลัมน์และข้อมูล 1–2,000 แถว", "VALIDATION");
   const head = (grid[0] as unknown[]).map((h) => normName(h));
   const map = head.map((h) => IMPORT_HEADERS[h]);
-  if (!map.includes("company_name") && !map.includes("project_main")) throw new DevError(422, "ไม่พบคอลัมน์ ชื่อบริษัท หรือ โครงการหลัก — ใช้ไฟล์ตัวอย่างจากปุ่ม ดาวน์โหลดไฟล์ตัวอย่าง", "MISSING_HEADERS");
+  if (kind === "home_builder" ? !map.includes("company_name") : !map.includes("company_name") && !map.includes("project_main")) throw new DevError(422, "ไม่พบคอลัมน์ ชื่อบริษัท หรือ โครงการหลัก — ใช้ไฟล์ตัวอย่างจากปุ่ม ดาวน์โหลดไฟล์ตัวอย่าง", "MISSING_HEADERS");
   const t = await load();
-  const existing = t.DEVELOPERS.rows.filter((r) => r.developer_id).map(pickDev);
+  kindReady(t, kind);
+  const existing = t.DEVELOPERS.rows.filter((r) => r.developer_id && kindOf(r) === kind).map(pickDev);
+  const allCodes = t.DEVELOPERS.rows.map((r) => r.dev_code);
   const seen: Dev[] = [];
   const results: ImportRowResult[] = []; const toAdd: Dev[] = [];
   (grid as unknown[][]).slice(1).forEach((cells, k) => {
@@ -288,7 +299,7 @@ export async function importDevelopers(grid: unknown, commit: boolean, actor: st
     const input: Record<string, string> = {};
     map.forEach((f, j) => { if (f) input[f] = String(cells[j] ?? "").trim(); });
     if (AUTO_STATUS.includes(input.status ?? "")) input.status = "ปิดการขาย"; // สถานะที่มาจาก Product: เพิ่ม Product ภายหลัง
-    const v = validateDev(input);
+    const v = validateDev(input, kind);
     const name = input.company_name || input.project_main || "";
     if (!v.ok) { results.push({ n: k + 2, status: "invalid", name, errors: v.errors }); return; }
     const m = findDevDuplicates([...existing, ...seen], v.rec);
@@ -299,10 +310,10 @@ export async function importDevelopers(grid: unknown, commit: boolean, actor: st
   const counts = { insert: toAdd.length, duplicate: results.filter((r) => r.status === "duplicate").length, invalid: results.filter((r) => r.status === "invalid").length };
   if (!commit || !toAdd.length) return { counts, results: results.slice(0, 200), committed: false };
   const now = new Date().toISOString();
-  const codes = existing.map((d) => d.dev_code);
+  const codes = [...allCodes];
   const recs = toAdd.map((r) => {
-    const code = nextDevCode(codes); codes.push(code);
-    const rec: Dev = { ...Object.fromEntries(DEV_COLUMNS.map((c) => [c, ""])), ...r, developer_id: crypto.randomUUID(), dev_code: code, status_changed_at: now, won_at: r.status === "ปิดการขาย" ? now.slice(0, 10) : "", created_by: actor, created_at: now, updated_by: actor, updated_at: now };
+    const code = nextDevCode(codes, kind); codes.push(code);
+    const rec: Dev = { ...Object.fromEntries(DEV_COLUMNS.map((c) => [c, ""])), ...r, developer_id: crypto.randomUUID(), dev_code: code, kind: kind === "home_builder" ? "home_builder" : "", status_changed_at: now, won_at: r.status === "ปิดการขาย" ? now.slice(0, 10) : "", created_by: actor, created_at: now, updated_by: actor, updated_at: now };
     return rec;
   });
   for (let i = 0; i < recs.length; i += 500) await appendRows("DEVELOPERS", recs.slice(i, i + 500).map((r) => toRow(t.DEVELOPERS.headers, r)));

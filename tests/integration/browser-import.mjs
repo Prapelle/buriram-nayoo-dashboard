@@ -269,6 +269,23 @@ try {
   const lg = await tab("DEVELOPER_STATUS_LOG"); assert.equal(lg.length - 1, 4); assert.equal(lg.filter((x) => x[lg[0].indexOf("kind")] === "auto_product").length, 1); // ย้ายอัตโนมัติตาม Product 1 + สร้างเป็น เข้าร่วมแล้ว 1 + ย้ายด้วยมือ 2
   if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/sale-developer.png", fullPage: true });
   ok("หน้า Sale developer: 8 คอลัมน์ตามลำดับที่กำหนด · การ์ดที่มี Product อยู่คอลัมน์ กำลังใช้ Product และล็อก · เมนู → มีแผนเข้าพบ · ลาก → เข้าพบแล้ว (ติดต่อล่าสุด = วันนี้) · บันทึกประวัติ");
+  { // Home Builder + Sale home builder (1/11/2026): ระบบเดียวกับ Developer แยกข้อมูลกัน · ไม่มีช่องโครงการ
+    await page.goto(BASE + "/home-builders"); await page.getByRole("button", { name: "+ เพิ่ม Home Builder" }).click();
+    const hform = page.locator("section", { has: page.getByRole("heading", { name: "เพิ่ม Home Builder ใหม่" }) }).last();
+    assert.equal(await hform.getByLabel("โครงการหลัก").count(), 0); assert.equal(await hform.getByLabel("โครงการรอง 1").count(), 0); assert.equal(await hform.getByLabel("โครงการรอง 2").count(), 0);
+    await hform.getByLabel("ชื่อบริษัท").fill("บริษัท รับสร้างบ้าน ก"); await hform.getByLabel("เบอร์").fill("0819998888");
+    await page.getByRole("button", { name: "บันทึก", exact: true }).click(); await page.getByText("สร้าง HB-0001 แล้ว").waitFor();
+    const hb = await tab("DEVELOPERS"); const hr = hb.find((x) => x[hb[0].indexOf("company_name")] === "บริษัท รับสร้างบ้าน ก");
+    assert.equal(hr[hb[0].indexOf("kind")], "home_builder"); assert.equal(hr[hb[0].indexOf("dev_code")], "HB-0001");
+    assert.equal(await page.getByText("บริษัท บ้านดี จำกัด").count(), 0); // Developer ไม่ปนในหน้า Home Builder
+    await page.goto(BASE + "/developers"); await page.getByText("บริษัท บ้านดี จำกัด").first().waitFor(); assert.equal(await page.getByText("บริษัท รับสร้างบ้าน ก").count(), 0);
+    await page.goto(BASE + "/sale-home-builder"); await page.locator('[data-col="ยังไม่เข้าร่วม"]').getByText("บริษัท รับสร้างบ้าน ก").waitFor();
+    assert.equal(await page.getByText("บริษัท สวนสวย").count(), 0);
+    const nav = page.getByRole("navigation", { name: "เมนูหลัก" });
+    assert.ok(await nav.getByText("Project", { exact: true }).count() > 0 || (await nav.innerText()).toUpperCase().includes("PROJECT"));
+    assert.equal((await nav.innerText()).includes("โครงการหมู่บ้าน"), false);
+    ok("Home Builder: ฟอร์มไม่มีช่องโครงการ · รหัส HB-0001 · ข้อมูลแยกจาก Developer ทั้งหน้ารายการและบอร์ด Sale home builder · เมนูกลุ่ม Project");
+  }
   assert.deepEqual(errors, []);
 
   const m = await open("marketing@example.com");
@@ -336,7 +353,7 @@ try {
   assert.equal(await m.page.getByRole("heading", { name: "ติดตามลูกค้า (ฝ่ายขาย)" }).count(), 0); assert.ok(await m.page.getByText("แก้ไขเป้า").isVisible());
   await m.page.goto(BASE + "/lead-report"); await m.page.getByRole("heading", { name: "ผลงานรายพนักงาน" }).waitFor();
   assert.ok(!(await m.page.locator("main").innerText()).includes("ผู้ซื้อ ก")); // ตัวเลขรวมเท่านั้น ไม่มีชื่อลูกค้า
-  for (const pth of ["/developers", "/sale-developer"]) { await m.page.goto(BASE + pth); await m.page.waitForURL(BASE + "/"); }
+  for (const pth of ["/developers", "/sale-developer", "/home-builders", "/sale-home-builder"]) { await m.page.goto(BASE + pth); await m.page.waitForURL(BASE + "/"); }
   for (const pth of ["/buyer-leads", "/seller-leads"]) { await m.page.goto(BASE + pth); await m.page.waitForURL(BASE + "/"); } // Marketing ไม่มีสิทธิ์ข้อมูลลูกค้า → กลับหน้าแรก
   const pr = await fetch(BASE + "/api/leads", { method: "PATCH", headers: { cookie: `authjs.session-token=${await cookie("marketing@example.com")}`, "sec-fetch-site": "same-origin", "content-type": "application/json" }, body: JSON.stringify({ lead_id: "B1", field: "call_status", value: "จอง" }) });
   assert.equal(pr.status, 403);

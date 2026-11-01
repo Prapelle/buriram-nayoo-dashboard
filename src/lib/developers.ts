@@ -19,7 +19,15 @@ export const EXPIRING_DAYS = 30;
 
 export const DEV_COLUMNS = ["developer_id", "dev_code", "company_name", "project_main", "project_sub1", "project_sub2", "contact_name", "phone", "line_id", "tier", "nayoo_url",
   "staff", "status", "status_changed_at", "last_contacted_at", "next_follow_up_at", "won_at", "remark", "notes", "created_by", "created_at", "updated_by", "updated_at",
-  "last_contact_method"]; // ต่อท้าย 31/10/2026: สถานะการเข้าพบล่าสุด (โทร / Line / เจอหน้า)
+  "last_contact_method", // ต่อท้าย 31/10/2026: สถานะการเข้าพบล่าสุด (โทร / Line / เจอหน้า)
+  "kind"]; // ต่อท้าย 1/11/2026: developer (ว่าง = developer) / home_builder
+/** ประเภทลูกค้า (1/11/2026): Developer (โครงการหมู่บ้าน) กับ Home Builder ใช้ระบบเดียวกัน แยกด้วยคอลัมน์ kind · Home Builder ไม่มีช่องโครงการ */
+export type DevKind = "developer" | "home_builder";
+export const DEV_KINDS: DevKind[] = ["developer", "home_builder"];
+export const kindOf = (d: { kind?: string }): DevKind => (d.kind === "home_builder" ? "home_builder" : "developer");
+export const parseKind = (v: unknown): DevKind => (v === "home_builder" ? "home_builder" : "developer");
+export const KIND_LABEL: Record<DevKind, string> = { developer: "Developer", home_builder: "Home Builder" };
+export const PROJECT_FIELDS = ["project_main", "project_sub1", "project_sub2"];
 export const DEV_EDITABLE = ["company_name", "project_main", "project_sub1", "project_sub2", "contact_name", "phone", "line_id", "tier", "nayoo_url", "staff", "status", "last_contacted_at", "next_follow_up_at", "remark", "notes", "last_contact_method"];
 export const PRODUCT_COLUMNS = ["product_id", "developer_id", "product", "start_date", "end_date", "price_thb", "notes", "created_by", "created_at", "updated_by", "updated_at",
   "category"]; // ต่อท้าย 31/10/2026: ประเภท Product / Service / Event
@@ -50,18 +58,20 @@ export const normPhone = (s: unknown) => { const d = String(s ?? "").replace(/\D
 export const normLine = (s: unknown) => String(s ?? "").trim().replace(/^@/, "").replace(/\s+/g, "").toLowerCase();
 export const normName = (s: unknown) => String(s ?? "").trim().replace(/\s+/g, " ").toLowerCase();
 
-export function nextDevCode(codes: string[]): string {
-  const max = codes.reduce((m, c) => { const x = /^DV-(\d+)$/.exec(c); return x ? Math.max(m, Number(x[1])) : m; }, 0);
-  return `DV-${String(max + 1).padStart(4, "0")}`;
+export function nextDevCode(codes: string[], kind: DevKind = "developer"): string {
+  const pre = kind === "home_builder" ? "HB" : "DV"; const re = new RegExp(`^${pre}-(\\d+)$`);
+  const max = codes.reduce((m, c) => { const x = re.exec(c); return x ? Math.max(m, Number(x[1])) : m; }, 0);
+  return `${pre}-${String(max + 1).padStart(4, "0")}`;
 }
 
 /** ตรวจ/ทำความสะอาดข้อมูลจากฟอร์ม (Status กลุ่มอัตโนมัติเลือกเองไม่ได้) */
-export function validateDev(input: Record<string, unknown>): { ok: true; rec: Dev } | { ok: false; errors: Record<string, string> } {
+export function validateDev(input: Record<string, unknown>, kind: DevKind = "developer"): { ok: true; rec: Dev } | { ok: false; errors: Record<string, string> } {
   const errors: Record<string, string> = {};
   const rec: Dev = {};
   for (const k of DEV_EDITABLE) rec[k] = String(input[k] ?? "").trim();
+  if (kind === "home_builder") for (const k of PROJECT_FIELDS) rec[k] = ""; // Home Builder ไม่มีช่องโครงการ
   rec.tier = rec.tier.toUpperCase();
-  if (!rec.company_name && !rec.project_main) errors.company_name = "กรอกชื่อบริษัทหรือชื่อโครงการหลักอย่างน้อย 1 ช่อง";
+  if (kind === "home_builder" ? !rec.company_name : !rec.company_name && !rec.project_main) errors.company_name = kind === "home_builder" ? "กรอกชื่อบริษัท" : "กรอกชื่อบริษัทหรือชื่อโครงการหลักอย่างน้อย 1 ช่อง";
   for (const [k, n] of Object.entries(LIMITS)) if ((rec[k] ?? "").length > n) errors[k] = `${LABEL[k]} ยาวเกิน ${n} ตัวอักษร`;
   if (rec.tier && !TIERS.includes(rec.tier)) errors.tier = "Tier ต้องเป็น A–E";
   if (rec.phone && normPhone(rec.phone).length < 9) errors.phone = "เบอร์โทรไม่ถูกต้อง";

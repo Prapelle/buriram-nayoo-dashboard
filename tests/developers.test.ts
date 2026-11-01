@@ -2,7 +2,7 @@
 // รัน: npx tsx tests/developers.test.ts
 import assert from "node:assert/strict";
 import {
-  autoChanges, cantCloseProjects, devFollowUps, expiringProducts, productSaleMonth, findDevDuplicates, IMPORT_HEADERS, monthlyReport, nextDevCode, productDrivenStatus, productState, validateDev, validateProduct, type Dev, type DevProduct,
+  autoChanges, cantCloseProjects, devFollowUps, expiringProducts, productSaleMonth, findDevDuplicates, IMPORT_HEADERS, kindOf, monthlyReport, nextDevCode, productDrivenStatus, productState, validateDev, validateProduct, type Dev, type DevProduct,
 } from "../src/lib/developers";
 
 let pass = 0; const ok = (m: string) => { pass++; console.log("  ✓", m); };
@@ -116,4 +116,14 @@ ok("หัวคอลัมน์ภาษาไทยตามฟอร์ม 
 assert.deepEqual(devFollowUps([D("a", { next_follow_up_at: "2026-10-01" })], ""), { overdue: [], today: [], stale: [] });
 assert.deepEqual(expiringProducts([P("x", "2026-10-01", "2026-11-01")], [D("x")], "", 60), []);
 ok("ก่อนโหลดข้อมูล (ยังไม่มีวันที่วันนี้) ไม่ทำให้หน้าพัง");
+{ // Home Builder (1/11/2026)
+  const vd = validateDev, nc = nextDevCode, ko = kindOf;
+  const r = vd({ company_name: "รับสร้างบ้าน", project_main: "ไม่ควรเก็บ", project_sub1: "x" }, "home_builder");
+  assert.ok(r.ok && r.rec.project_main === "" && r.rec.project_sub1 === "");
+  const e = vd({ project_main: "มีแต่โครงการ" }, "home_builder"); assert.ok(!e.ok && "company_name" in e.errors);
+  assert.ok(vd({ project_main: "มีแต่โครงการ" }).ok); // Developer ยังกรอกแค่โครงการได้
+  assert.equal(nc(["DV-0009", "HB-0002"], "home_builder"), "HB-0003"); assert.equal(nc(["DV-0009", "HB-0002"]), "DV-0010");
+  assert.equal(ko({ kind: "" }), "developer"); assert.equal(ko({ kind: "home_builder" }), "home_builder");
+  ok("Home Builder: ไม่เก็บช่องโครงการ · ต้องมีชื่อบริษัท · รหัส HB- แยกจาก DV- · แถวเดิม (kind ว่าง) = Developer");
+}
 console.log(`\nผ่านทั้งหมด ${pass} รายการ`);
