@@ -7,7 +7,7 @@ import { BackupGuide } from "@/components/BackupGuide";
 
 export default async function SettingsPage() {
   const s = await auth();
-  if (s?.user?.role !== "admin") redirect("/");
+  if (s?.user?.role !== "admin") redirect("/home");
   return (
     <section className="max-w-3xl space-y-6">
       <h1 className="text-[26px] font-bold tracking-tight">ตั้งค่า</h1>

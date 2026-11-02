@@ -33,7 +33,7 @@ const fmtN = (v: number | null) => (v === null ? "รอข้อมูล" : v.
 
 export default async function FacebookPagePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const role = (await auth())?.user?.role;
-  if (role !== "admin" && role !== "marketing") redirect("/");
+  if (role !== "admin" && role !== "marketing") redirect("/home");
   const sp = await searchParams;
   const view = one(sp.view) === "daily" ? "daily" : one(sp.view) === "page" ? "page" : "posts";
   const rg = await rangeOf(sp); const from = rg.from, to = rg.to;

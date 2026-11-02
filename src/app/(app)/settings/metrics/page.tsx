@@ -7,7 +7,7 @@ import { SECTIONS } from "@/lib/guides/metrics";
 const TOPICS = [{ id: "states", title: "สถานะของตัวเลข", desc: "รอข้อมูล · N/A · ข้อมูลไม่ครบ · Missing Data · % เปรียบเทียบ" }];
 
 export default async function MetricsIndex() {
-  if (!(await auth())?.user?.role) redirect("/");
+  if (!(await auth())?.user?.role) redirect("/home");
   const topics = [...TOPICS, ...SECTIONS.map((s) => ({ id: s.id, title: s.title, desc: `${s.items.length} ตัวเลข · ${s.items.slice(0, 3).map((m) => m.name).join(", ")}${s.items.length > 3 ? " ..." : ""}` }))];
   return (
     <section className="max-w-4xl space-y-5">

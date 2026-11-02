@@ -5,7 +5,7 @@ import { SalesImport } from "@/components/SalesImport";
 
 export default async function SalesImportPage() {
   const role = (await auth())?.user?.role;
-  if (role !== "admin" && role !== "sales") redirect("/");
+  if (role !== "admin" && role !== "sales") redirect("/home");
   return (
     <section className="max-w-6xl space-y-4">
       <div>

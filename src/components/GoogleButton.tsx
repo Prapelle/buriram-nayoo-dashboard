@@ -8,7 +8,7 @@ export function GoogleButton() {
     const form = document.createElement("form");
     form.method = "POST";
     form.action = "/api/auth/signin/google";
-    for (const [name, value] of Object.entries({ csrfToken, callbackUrl: "/" })) {
+    for (const [name, value] of Object.entries({ csrfToken, callbackUrl: "/home" })) {
       const input = document.createElement("input");
       input.type = "hidden";
       input.name = name;

@@ -5,7 +5,7 @@ import { GUIDES } from "@/lib/guides/import-guide";
 
 // สารบัญคู่มือนำเข้าข้อมูล — กดหัวข้อเพื่อเปิดหน้าของแพลตฟอร์มนั้น (ไม่แสดงเนื้อหาทั้งหมดในหน้าเดียว)
 export default async function ImportGuideIndex() {
-  if (!(await auth())?.user?.role) redirect("/");
+  if (!(await auth())?.user?.role) redirect("/home");
   return (
     <section className="max-w-4xl space-y-5">
       <div>

@@ -85,9 +85,12 @@ try {
   assert.equal((await call("/api/export/facebook_ads", { as: MKT })).status, 200);
   ok("Login", "ระงับสมาชิกจากหน้า ตั้งค่า → เข้าไม่ได้ (401 — ในเทสต์ตรวจ Role ทุกคำขอ ใช้งานจริงมีผลภายใน 5 นาที) · เปิดใช้งานใหม่ → กลับมาใช้ได้");
   ok("Login", "Marketing เข้า Leads ไม่ได้ (403) · Sales นำเข้าไม่ได้ (403) · Marketing เตรียม Sheet ไม่ได้ · ผู้ใช้ปิดใช้งาน/ไม่อยู่ในรายชื่อ → 401");
-  r = await call("/leads", { as: MKT }); assert.ok(redirectedTo(r, "/"), `/leads as MKT → ${r.status}`); assert.ok(!r.html.includes("เพิ่ม Lead"));
-  r = await call("/performance", { as: SALES }); assert.ok(redirectedTo(r, "/"), `/performance as SALES → ${r.status}`); assert.ok(!r.html.includes("Google Ads Spend"));
-  for (const p of ["/import", "/settings", "/facebook-ads"]) { r = await call(p, { as: SALES }); assert.ok(redirectedTo(r, "/"), `${p} as SALES → ${r.status}`); }
+  r = await call("/home", { as: ADMIN }); assert.ok(redirectedTo(r, "/leads"), `/home as ADMIN → ${r.status} ${r.location}`);
+  r = await call("/home", { as: SALES }); assert.ok(redirectedTo(r, "/leads")); r = await call("/home", { as: MKT }); assert.ok(redirectedTo(r, "/import"));
+  r = await call("/home"); assert.ok(redirectedTo(r, "/login")); // ยังไม่เข้าสู่ระบบ
+  r = await call("/leads", { as: MKT }); assert.ok(redirectedTo(r, "/home"), `/leads as MKT → ${r.status}`); assert.ok(!r.html.includes("เพิ่ม Lead"));
+  r = await call("/performance", { as: SALES }); assert.ok(redirectedTo(r, "/home"), `/performance as SALES → ${r.status}`); assert.ok(!r.html.includes("Google Ads Spend"));
+  for (const p of ["/import", "/settings", "/facebook-ads"]) { r = await call(p, { as: SALES }); assert.ok(redirectedTo(r, "/home"), `${p} as SALES → ${r.status}`); }
   r = await call("/performance", { as: MKT }); assert.equal(r.status, 200); assert.ok(!r.html.includes('href="/leads"'));
   r = await call("/", { as: SALES }); assert.equal(r.status, 200); assert.ok(!r.html.includes('href="/performance"') && !r.html.includes('href="/import"'));
   ok("Login", "หน้าเว็บตามสิทธิ์: Marketing → /leads ถูกพาออก · Sales → /performance, /import, /settings, /facebook-ads ถูกพาออก (ไม่แสดงเนื้อหา) · เมนูของ Sales ไม่มี Performance/นำเข้า");
@@ -158,7 +161,7 @@ try {
 
   console.log("6) Website Analytics");
   r = await call("/website", { as: MKT }); assert.equal(r.status, 200); assert.ok(r.html.includes("นำเข้าไฟล์ GA4 / Search Console"));
-  r = await call("/website", { as: SALES }); assert.ok(redirectedTo(r, "/")); assert.equal((await call("/api/website", { as: SALES })).status, 403);
+  r = await call("/website", { as: SALES }); assert.ok(redirectedTo(r, "/home")); assert.equal((await call("/api/website", { as: SALES })).status, 403);
   const day = (d, c, i, p) => ({ source: "search_console", property: "Page: +buriram", granularity: "day", report_start: d, report_end: d, search_clicks: c, search_impressions: i, search_ctr_pct: Math.round(c / i * 10000) / 100, search_position: p });
   const chart = { kind: "gsc_chart", filename: "Chart.csv", sha256: "a".repeat(64), period: { start: "2026-10-01", end: "2026-10-02" }, property: "Page: +buriram", summary: [day("2026-10-01", 163, 7379, 6.8), day("2026-10-02", 169, 7529, 6.9)], dims: [] };
   const ga = { kind: "ga4_pages", filename: "pages.csv", sha256: "b".repeat(64), period: { start: "2026-10-01", end: "2026-10-02" }, property: "buriram",

@@ -15,7 +15,7 @@ const TYPES = SPECS.filter((s) => s.source === "google_ads");
 
 export default async function GoogleAdsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const role = (await auth())?.user?.role;
-  if (role !== "admin" && role !== "marketing") redirect("/");
+  if (role !== "admin" && role !== "marketing") redirect("/home");
   const sp = await searchParams;
   const spec = TYPES.find((s) => s.id === one(sp.type)) ?? TYPES[0];
   const q = one(sp.q);

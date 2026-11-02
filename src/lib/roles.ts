@@ -45,3 +45,6 @@ export function navFor(role: Role): NavItem[] {
     return children.length ? [{ ...n, href: children[0].href, children }] : [];
   });
 }
+
+/** หน้าแรกหลังเข้าสู่ระบบ (2/11/2026): Admin / Sales → Leads · Marketing → นำเข้า CSV (หน้าที่โหลดเบา) */
+export const homeFor = (role: string) => (role === "marketing" ? "/import" : "/leads");

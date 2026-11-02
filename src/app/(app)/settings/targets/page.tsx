@@ -4,7 +4,7 @@ import { TargetsManager } from "@/components/TargetsManager";
 
 export default async function TargetsPage() {
   const role = (await auth())?.user?.role;
-  if (role !== "admin" && role !== "marketing") redirect("/");
+  if (role !== "admin" && role !== "marketing") redirect("/home");
   return (
     <section className="max-w-4xl space-y-4">
       <div>

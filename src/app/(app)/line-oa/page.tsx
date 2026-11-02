@@ -4,7 +4,7 @@ import { LineOaManager } from "@/components/LineOaManager";
 
 export default async function LineOaPage() {
   const role = (await auth())?.user?.role;
-  if (role !== "admin" && role !== "marketing") redirect("/");
+  if (role !== "admin" && role !== "marketing") redirect("/home");
   return (
     <section className="max-w-6xl space-y-4">
       <div>

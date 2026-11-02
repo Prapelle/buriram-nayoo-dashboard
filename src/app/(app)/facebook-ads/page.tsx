@@ -19,7 +19,7 @@ const COLS: Col[] = [
 
 export default async function FacebookAdsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const role = (await auth())?.user?.role;
-  if (role !== "admin" && role !== "marketing") redirect("/");
+  if (role !== "admin" && role !== "marketing") redirect("/home");
   const sp = await searchParams;
   const q = one(sp.q), delivery = one(sp.ad_delivery), ind = one(sp.result_indicator), adset = one(sp.ad_set_name);
   const sort = one(sp.sort) || "amount_spent_thb", dir = (one(sp.dir) || "desc") as "asc" | "desc";

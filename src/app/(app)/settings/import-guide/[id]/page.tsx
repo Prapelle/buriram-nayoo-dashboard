@@ -5,7 +5,7 @@ import { GUIDES } from "@/lib/guides/import-guide";
 
 // คู่มือของแพลตฟอร์มเดียว (เปิดจากสารบัญ)
 export default async function ImportGuideTopic({ params }: { params: Promise<{ id: string }> }) {
-  if (!(await auth())?.user?.role) redirect("/");
+  if (!(await auth())?.user?.role) redirect("/home");
   const { id } = await params;
   const i = GUIDES.findIndex((g) => g.id === id);
   if (i < 0) notFound();

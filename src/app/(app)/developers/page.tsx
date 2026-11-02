@@ -4,7 +4,7 @@ import { DevelopersManager } from "@/components/DevelopersManager";
 
 export default async function DevelopersPage() {
   const role = (await auth())?.user?.role;
-  if (role !== "admin" && role !== "sales") redirect("/");
+  if (role !== "admin" && role !== "sales") redirect("/home");
   return (
     <section className="max-w-7xl space-y-4">
       <div>

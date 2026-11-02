@@ -5,7 +5,7 @@ import { StatusBoard } from "@/components/StatusBoard";
 export default async function SellerLeadsPage() {
   const s = await auth();
   const role = s?.user?.role;
-  if (role !== "admin" && role !== "sales") redirect("/");
+  if (role !== "admin" && role !== "sales") redirect("/home");
   return (
     <section className="space-y-4">
       <div>

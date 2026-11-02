@@ -7,7 +7,7 @@ import { SECTIONS, STATES } from "@/lib/guides/metrics";
 const ORDER = [{ id: "states", title: "สถานะของตัวเลข" }, ...SECTIONS.map((s) => ({ id: s.id, title: s.title }))];
 
 export default async function MetricsTopic({ params }: { params: Promise<{ id: string }> }) {
-  if (!(await auth())?.user?.role) redirect("/");
+  if (!(await auth())?.user?.role) redirect("/home");
   const { id } = await params;
   const i = ORDER.findIndex((t) => t.id === id);
   if (i < 0) notFound();

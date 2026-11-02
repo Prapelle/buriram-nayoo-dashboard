@@ -23,7 +23,7 @@ const Card = ({ title, children }: { title: string; children: React.ReactNode })
 
 export default async function PerformancePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const role = (await auth())?.user?.role;
-  if (role !== "admin" && role !== "marketing") redirect("/");
+  if (role !== "admin" && role !== "marketing") redirect("/home");
   const sp = await searchParams;
   const rg = await rangeOf(sp);
   const f = { from: rg.from, to: rg.to, compare: (one(sp.compare) === "yoy" ? "yoy" : one(sp.compare) === "prev" || one(sp.compare) === "1" ? "prev" : undefined) as "yoy" | "prev" | undefined, gran: (one(sp.gran) === "month" ? "month" : "day") as "day" | "month" , side: (one(sp.side) === "seller" ? "seller" : "buyer") as "buyer" | "seller" };

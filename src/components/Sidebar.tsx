@@ -117,7 +117,7 @@ export function AppShell({ items, email, role, signOutAction, children }: {
             <path d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <Link href="/" prefetch={false} className="flex items-center gap-2.5 text-slate-900">
+        <Link href="/home" prefetch={false} className="flex items-center gap-2.5 text-slate-900">
           {/* eslint-disable-next-line @next/next/no-img-element */}<img src="/logo.png" alt="" width={32} height={32} className="h-8 w-8" />
           <span className="text-[17px] font-bold">Buriram NAYOO</span>
         </Link>

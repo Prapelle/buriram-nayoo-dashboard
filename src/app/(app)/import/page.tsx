@@ -5,7 +5,7 @@ import { ImportWizard } from "@/components/ImportWizard";
 
 export default async function ImportPage() {
   const role = (await auth())?.user?.role;
-  if (role !== "admin" && role !== "marketing") redirect("/");
+  if (role !== "admin" && role !== "marketing") redirect("/home");
   return (
     <section className="max-w-6xl space-y-4">
       <h1 className="text-[26px] font-bold tracking-tight">นำเข้า CSV</h1>

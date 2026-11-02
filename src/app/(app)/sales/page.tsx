@@ -20,7 +20,7 @@ const MONEY = new Set(["gross_sales", "discount_amount", "net_value", "vat_amoun
 
 export default async function SalesDashboardPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const role = (await auth())?.user?.role;
-  if (role !== "admin" && role !== "sales") redirect("/");
+  if (role !== "admin" && role !== "sales") redirect("/home");
   const sp = await searchParams;
   const rg = await rangeOf(sp);
   const f: SalesFilters = { from: rg.from, to: rg.to, period: one(sp.period) || undefined, project: one(sp.project) || undefined, salesperson: one(sp.salesperson) || undefined, status: one(sp.status) || undefined, q: one(sp.q) || undefined };

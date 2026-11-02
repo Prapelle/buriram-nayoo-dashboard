@@ -5,7 +5,7 @@ import { DevelopersManager } from "@/components/DevelopersManager";
 // Home Builder (1/11/2026): ระบบเดียวกับ Developer (ข้อมูลแยกด้วยคอลัมน์ kind) แต่ไม่มีช่องโครงการหลัก / โครงการรอง
 export default async function HomeBuildersPage() {
   const role = (await auth())?.user?.role;
-  if (role !== "admin" && role !== "sales") redirect("/");
+  if (role !== "admin" && role !== "sales") redirect("/home");
   return (
     <section className="max-w-7xl space-y-4">
       <div>

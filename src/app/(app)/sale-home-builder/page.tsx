@@ -4,7 +4,7 @@ import { DevBoard } from "@/components/DevBoard";
 
 export default async function SaleHomeBuilderPage() {
   const role = (await auth())?.user?.role;
-  if (role !== "admin" && role !== "sales") redirect("/");
+  if (role !== "admin" && role !== "sales") redirect("/home");
   return (
     <section className="space-y-4">
       <div>

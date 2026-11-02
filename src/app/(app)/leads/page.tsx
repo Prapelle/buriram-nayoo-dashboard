@@ -5,7 +5,7 @@ import { LeadsManager } from "@/components/LeadsManager";
 export default async function LeadsPage() {
   const s = await auth();
   const role = s?.user?.role;
-  if (role !== "admin" && role !== "sales") redirect("/");
+  if (role !== "admin" && role !== "sales") redirect("/home");
   return (
     <section className="max-w-7xl space-y-4">
       <div>
