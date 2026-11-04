@@ -114,14 +114,11 @@ Commit โค้ดใหม่ขึ้น GitHub → Cloudflare build แล�
 
 **ข้อมูลผู้ขายบนเอกสาร:** ค่าเริ่มต้นตามใบเสนอราคาต้นแบบ แก้ได้โดยเพิ่มแถวในแท็บ `APP_CONFIG`: `config_key = account_seller`, `config_value = {"name":"…","address":"…","tax_id":"…","phone":"…"}` (ใส่เฉพาะช่องที่ต้องการเปลี่ยน)
 
-### เปิดที่เก็บไฟล์แนบ (Cloudflare R2 — ฟรี 10 GB)
-ระบบทำงานได้ครบโดยไม่มีที่เก็บไฟล์ ยกเว้นการ **แนบไฟล์** (จะขึ้นข้อความให้เปิดที่เก็บไฟล์) — ทำครั้งเดียว:
-1. Cloudflare Dashboard → R2 → Create bucket ชื่อ `nayoo-account-files` (ไม่ต้องเปิด public)
-2. เพิ่มใน `wrangler.jsonc` (แล้ว push — ต้องสร้าง bucket ก่อน ไม่งั้น deploy จะล้ม):
-   ```jsonc
-   "r2_buckets": [{ "binding": "ACC_FILES", "bucket_name": "nayoo-account-files" }]
-   ```
-3. ไฟล์ดาวน์โหลดผ่าน `/api/account/files?id=…` ต้องล็อกอินเสมอ (ไม่มีลิงก์สาธารณะ)
+### ที่เก็บไฟล์แนบ (Cloudflare KV — แผนฟรี ไม่ต้องผูกบัตร)
+ไฟล์แนบ (สลิป / ใบเสนอราคาที่ลูกค้าเซ็น) เก็บใน Cloudflare KV: ฟรี 1 GB · ไฟล์ละไม่เกิน 25 MiB (ระบบจำกัด 10 MB) · เขียนได้ 1,000 ครั้ง/วัน
+- namespace `nayoo-account-files` ผูกไว้แล้วใน `wrangler.jsonc` (`kv_namespaces`, binding `ACC_FILES`) — ไม่ต้องตั้งค่าอะไรเพิ่ม
+- ไฟล์ดาวน์โหลดผ่าน `/api/account/files?id=…` ต้องล็อกอินเสมอ (ไม่มีลิงก์สาธารณะ)
+- ถ้าต้องการย้ายไป R2 ภายหลัง แก้ที่ `fileStore()` ใน `src/lib/account-service.ts` ที่เดียว
 
 ### ขั้นตอนการทำงาน
 ใบเสนอราคา → ใบวางบิล → ใบแจ้งหนี้ (ข้ามใบได้) · ยืนยันชำระเงินได้ทุกใบ

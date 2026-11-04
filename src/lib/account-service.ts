@@ -240,22 +240,26 @@ export async function startWork(id: string, actor: string) {
   return { started: await applyWork(t, doc, actor) };
 }
 
-// ── ไฟล์แนบ (เก็บใน Cloudflare R2 ผ่าน binding ACC_FILES — ดู docs/SETUP) ──
-type R2 = { put(key: string, body: ArrayBuffer, o?: { httpMetadata?: { contentType?: string } }): Promise<unknown>; get(key: string): Promise<{ body: ReadableStream; httpMetadata?: { contentType?: string } } | null>; delete(key: string): Promise<void> };
-export async function r2(): Promise<R2 | null> {
-  try { const { getCloudflareContext } = await import("@opennextjs/cloudflare"); const b = (getCloudflareContext().env as unknown as Record<string, unknown>).ACC_FILES; return (b as R2) ?? null; } catch { return null; }
+// ── ไฟล์แนบ (เก็บใน Cloudflare KV ผ่าน binding ACC_FILES — แผนฟรี ไม่ต้องผูกบัตร: 1 GB, ไฟล์ละไม่เกิน 25 MiB — ดู SETUP.md) ──
+export type FileStore = { put(key: string, value: ArrayBuffer): Promise<unknown>; get(key: string, type: "stream"): Promise<ReadableStream | null> };
+let storeOverride: FileStore | null = null;
+/** ใช้ในเทสต์เท่านั้น: แทนที่ที่เก็บไฟล์ด้วยตัวจำลอง */
+export const setFileStoreForTest = (s: FileStore | null) => { storeOverride = s; };
+export async function fileStore(): Promise<FileStore | null> {
+  if (storeOverride) return storeOverride;
+  try { const { getCloudflareContext } = await import("@opennextjs/cloudflare"); const b = (getCloudflareContext().env as unknown as Record<string, unknown>).ACC_FILES; return (b as FileStore) ?? null; } catch { return null; }
 }
 export async function attachFile(docId: string, paymentId: string, file: { name: string; type: string; data: ArrayBuffer }, actor: string) {
   if (!FILE_TYPES.includes(file.type)) throw new AccError(422, "แนบได้เฉพาะ PDF / PNG / JPG", "VALIDATION");
   if (file.data.byteLength > MAX_FILE_BYTES) throw new AccError(422, "ไฟล์ใหญ่เกิน 10 MB", "VALIDATION");
-  const bucket = await r2();
-  if (!bucket) throw new AccError(409, "ยังไม่ได้เปิดที่เก็บไฟล์ (Cloudflare R2) — ดูขั้นตอนใน docs/SETUP", "STORAGE_NOT_READY");
+  const store = await fileStore();
+  if (!store) throw new AccError(409, "ยังไม่ได้เปิดที่เก็บไฟล์ (Cloudflare KV) — ดูขั้นตอนใน SETUP.md", "STORAGE_NOT_READY");
   const t = await load();
   if (!t.ACC_DOCS.rows.some((d) => d.doc_id === docId)) throw new AccError(404, "ไม่พบเอกสาร", "NOT_FOUND");
   if (!t.ACC_FILES.headers.includes("file_id")) throw new AccError(409, "แท็บไฟล์แนบยังไม่พร้อม — กด เตรียม Google Sheet", "SHEET_NOT_READY");
   const fileId = crypto.randomUUID(), name = file.name.replace(/[^\p{L}\p{N}._\- ()]/gu, "_").slice(0, 120) || "file";
   const key = `acc/${docId}/${fileId}`;
-  await bucket.put(key, file.data, { httpMetadata: { contentType: file.type } });
+  await store.put(key, file.data);
   const rec: Rec = { file_id: fileId, doc_id: docId, payment_id: paymentId, file_name: name, mime: file.type, size: String(file.data.byteLength), storage_key: key, uploaded_by: actor, uploaded_at: new Date().toISOString() };
   await appendRows("ACC_FILES", [toRow(t.ACC_FILES.headers, rec)]);
   await writeAudit(actor, "account_file_attach", "account_doc", docId, `${name} (${file.data.byteLength} bytes)`);
@@ -265,9 +269,9 @@ export async function openFile(fileId: string) {
   const t = await load();
   const f = t.ACC_FILES.rows.find((x) => x.file_id === fileId);
   if (!f) throw new AccError(404, "ไม่พบไฟล์", "NOT_FOUND");
-  const bucket = await r2(); const obj = bucket ? await bucket.get(f.storage_key) : null;
-  if (!obj) throw new AccError(404, "ไม่พบไฟล์ในที่เก็บ", "NOT_FOUND");
-  return { body: obj.body, name: f.file_name, mime: f.mime };
+  const store = await fileStore(); const body = store ? await store.get(f.storage_key, "stream") : null;
+  if (!body) throw new AccError(404, "ไม่พบไฟล์ในที่เก็บ", "NOT_FOUND");
+  return { body, name: f.file_name, mime: f.mime };
 }
 
 // ── Production Job ──

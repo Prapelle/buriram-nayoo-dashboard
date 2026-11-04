@@ -112,6 +112,16 @@ await t("แนบไฟล์: ยังไม่ผูก R2 → แจ้ง�
   await fails(A.attachFile(qt.doc_id, "", { name: "a.pdf", type: "application/pdf", data: new ArrayBuffer(11 * 1024 * 1024) }, ADMIN), "VALIDATION");
   await fails(A.attachFile(qt.doc_id, "", { name: "slip.pdf", type: "application/pdf", data: new ArrayBuffer(10) }, ADMIN), "STORAGE_NOT_READY");
 });
+await t("แนบไฟล์ผ่าน KV จำลอง: บันทึกไฟล์ + แถวใน ACC_FILES · เปิดไฟล์กลับมาได้ครบ · ไฟล์ที่ไม่มีในที่เก็บ → 404", async () => {
+  const kv = new Map<string, ArrayBuffer>();
+  A.setFileStoreForTest({ put: async (k, v) => { kv.set(k, v); }, get: async (k) => { const v = kv.get(k); return v ? new Response(v).body : null; } });
+  const bytes = new TextEncoder().encode("%PDF-slip").buffer as ArrayBuffer;
+  const r = await A.attachFile(qt.doc_id, "", { name: "สลิป 001.pdf", type: "application/pdf", data: bytes }, ADMIN);
+  assert.equal(rows("ACC_FILES").length, 1); assert.equal(rows("ACC_FILES")[0].doc_id, qt.doc_id); assert.equal(kv.size, 1);
+  const f = await A.openFile(r.file.file_id); assert.equal(f.mime, "application/pdf"); assert.equal(await new Response(f.body).text(), "%PDF-slip");
+  kv.clear(); await fails(A.openFile(r.file.file_id), "NOT_FOUND"); await fails(A.openFile("nope"), "NOT_FOUND");
+  A.setFileStoreForTest(null);
+});
 await t("รายการ/รายละเอียดเอกสาร: สายเอกสาร · ยอดชำระ · งานที่สร้าง · ลูกค้า", async () => {
   const l = await A.listDocs(); assert.ok(l.docs.length >= 5); assert.ok(l.docs.find((d) => d.doc_id === iv.doc_id)!.work_started);
   const d = await A.getDoc(iv.doc_id); assert.deepEqual(d.chain.map((c) => c.doc_type), ["billing", "invoice", "quotation"].sort((a, b) => 0)); assert.equal(d.payments.length, 2); assert.equal(d.jobs.length, 1); assert.equal(d.customer!.name, "ซีเจ เออเบิ้ล โฮม");

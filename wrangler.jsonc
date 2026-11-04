@@ -6,8 +6,8 @@
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
   // บันทึก log / error ของเว็บจริง (Workers Logs — ดูได้ที่ Cloudflare Dashboard → Workers → buriram-nayoo-dashboard → Logs)
   "observability": { "enabled": true, "head_sampling_rate": 1 },
-  // ที่เก็บไฟล์แนบของระบบบัญชี: เปิดใช้หลังสร้าง R2 bucket แล้วเท่านั้น (ดู SETUP.md → ระบบบัญชี)
-  // "r2_buckets": [{ "binding": "ACC_FILES", "bucket_name": "nayoo-account-files" }],
+  // ที่เก็บไฟล์แนบของระบบบัญชี (Cloudflare KV แผนฟรี ไม่ต้องผูกบัตร) — namespace: nayoo-account-files
+  "kv_namespaces": [{ "binding": "ACC_FILES", "id": "acd34b4ff9084821b7604a181deb5762" }],
   "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
   // ค่าที่ไม่ลับ ตั้งตรงนี้ได้; ค่าลับ (AUTH_SECRET, AUTH_GOOGLE_SECRET, GOOGLE_PRIVATE_KEY) ใช้ `wrangler secret put`
   "vars": {
