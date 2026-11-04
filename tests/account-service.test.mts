@@ -185,8 +185,7 @@ await t("ลบไฟล์แนบ: ลบแถว + ตัวไฟล์ใ
 await t("ลบเอกสาร: มีใบถัดไป/มีงาน Production → ลบไม่ได้ · ลบใบเสนอราคาที่มีชำระ = ลบรายการ ชำระ ไฟล์ ใบเสร็จ ด้วย · ลบใบเสร็จใบเดียว → ออกใหม่ได้", async () => {
   const q = (await A.saveDoc(form(), ADMIN)).doc;
   const b = (await A.convertDoc(q.doc_id, "billing", ADMIN)).doc;
-  await fails(A.deleteDoc(q.doc_id, ADMIN), "LOCKED"); // มีใบวางบิลต่อแล้ว
-  const jobsDoc = rows("PRODUCTION_JOBS")[0].doc_id; await fails(A.deleteDoc(jobsDoc, ADMIN), "LOCKED"); // สร้างงานไปแล้ว
+  if (A.DELETE_RESTRICTED) { await fails(A.deleteDoc(q.doc_id, ADMIN), "LOCKED"); const jobsDoc = rows("PRODUCTION_JOBS")[0].doc_id; await fails(A.deleteDoc(jobsDoc, ADMIN), "LOCKED"); } // มีใบต่อ / สร้างงานแล้ว (โหมดปกติ)
   const r = await payNow(b.doc_id, { amount: 1000, paid_at: today, method: "เงินสด", updated_at_seen: b.updated_at }, ADMIN);
   const rc = r.receipt!.doc_id; await A.deleteDoc(rc, ADMIN);
   assert.ok(!rows("ACC_DOCS").some((d) => d.doc_id === rc)); assert.equal(rows("ACC_PAYMENTS").find((p) => p.payment_id === r.payment.payment_id)!.receipt_doc_id, "");
@@ -197,6 +196,10 @@ await t("ลบเอกสาร: มีใบถัดไป/มีงาน P
   assert.equal(rows("ACC_FILES").length, nFiles - 1); assert.equal(rows("ACC_LINES").length, nLines - 2);
   await fails(A.deleteDoc(b.doc_id, ADMIN), "NOT_FOUND");
   await A.deleteDoc(q.doc_id, ADMIN); // ใบเสนอราคาลบได้แล้วเมื่อใบวางบิลถูกลบ
+  if (!A.DELETE_RESTRICTED) { // โหมดทดสอบ: ลบใบที่มีใบต่อและงานแล้วได้
+    const jd = rows("PRODUCTION_JOBS")[0].doc_id, jobs0 = rows("PRODUCTION_JOBS").length; await A.deleteDoc(jd, ADMIN);
+    assert.ok(!rows("ACC_DOCS").some((d) => d.doc_id === jd)); assert.ok(rows("PRODUCTION_JOBS").length < jobs0); assert.ok(!rows("PRODUCTION_JOBS").some((j) => j.doc_id === jd));
+  }
 });
 await t("สรุปบัญชี: นับเอกสารแต่ละชนิด · หนึ่งสายนับหนึ่งงาน (ใบล่าสุด) · รอเรียกเก็บ = สุทธิ − ที่ชำระ · ยอดรับจากใบเสร็จ · เกินกำหนด", async () => {
   const { summarize } = await import("../src/lib/account");

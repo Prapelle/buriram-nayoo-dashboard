@@ -384,12 +384,17 @@ async function deleteRowsBy(t: Record<string, Tab>, tab: string, idCol: string, 
  * ลบไม่ได้ถ้ามีใบถัดไปที่สร้างต่อแล้ว (ลบใบถัดไปก่อน) หรือมีงาน Production ที่สร้างจากใบนี้แล้ว (ไปยกเลิกงานที่หน้า Production)
  * ลบ "ใบเสร็จ" ใบเดียว = ล้างลิงก์ที่รายการชำระ แล้วกด ออกใบเสร็จ ใหม่ได้
  */
+/**
+ * ⚠ โหมดทดสอบ (5/11/2026): false = ลบได้ทุกเอกสาร (รวมใบที่มีใบถัดไป / สร้างงานแล้ว — ลบ Job ของใบนั้นด้วย)
+ * เทสเสร็จแล้วให้เปลี่ยนเป็น true เพื่อกลับไปใช้กติกาเดิม (ลบไม่ได้ถ้ามีใบถัดไปหรือมีงาน Production)
+ */
+export const DELETE_RESTRICTED = false;
 export async function deleteDoc(id: string, actor: string) {
   const t = await load();
   const doc = t.ACC_DOCS.rows.find((d) => d.doc_id === id);
   if (!doc) throw new AccError(404, "ไม่พบเอกสาร", "NOT_FOUND");
-  if (t.ACC_DOCS.rows.some((d) => d.parent_doc_id === id && d.doc_type !== "receipt")) throw new AccError(409, "มีใบถัดไปที่สร้างต่อจากใบนี้แล้ว — ลบใบถัดไปก่อน", "LOCKED");
-  if (t.PRODUCTION_JOBS.rows.some((j) => j.job_id && j.doc_id === id)) throw new AccError(409, "ใบนี้เริ่มงานและสร้างงาน Production ไปแล้ว — ลบไม่ได้ (ถ้าไม่ใช้แล้วให้ยกเลิกเอกสาร / ยกเลิก Job)", "LOCKED");
+  if (DELETE_RESTRICTED && t.ACC_DOCS.rows.some((d) => d.parent_doc_id === id && d.doc_type !== "receipt")) throw new AccError(409, "มีใบถัดไปที่สร้างต่อจากใบนี้แล้ว — ลบใบถัดไปก่อน", "LOCKED");
+  if (DELETE_RESTRICTED && t.PRODUCTION_JOBS.rows.some((j) => j.job_id && j.doc_id === id)) throw new AccError(409, "ใบนี้เริ่มงานและสร้างงาน Production ไปแล้ว — ลบไม่ได้ (ถ้าไม่ใช้แล้วให้ยกเลิกเอกสาร / ยกเลิก Job)", "LOCKED");
   const receipts = t.ACC_DOCS.rows.filter((d) => d.parent_doc_id === id && d.doc_type === "receipt").map((d) => d.doc_id);
   const gone = [id, ...receipts], goneSet = new Set(gone);
   const files = t.ACC_FILES.rows.filter((f) => f.file_id && goneSet.has(f.doc_id));
@@ -399,6 +404,16 @@ export async function deleteDoc(id: string, actor: string) {
   if (doc.doc_type === "receipt") {
     const pi = t.ACC_PAYMENTS.rows.findIndex((p) => p.receipt_doc_id === id);
     if (pi >= 0) { const g = await guardRow("ACC_PAYMENTS", t.ACC_PAYMENTS.headers, "payment_id", t.ACC_PAYMENTS.rows[pi].payment_id, pi + 2); if ("row" in g) await batchUpdateValues([{ range: rowRange("ACC_PAYMENTS", t.ACC_PAYMENTS.headers, g.row), values: [toRow(t.ACC_PAYMENTS.headers, { ...t.ACC_PAYMENTS.rows[pi], receipt_doc_id: "" })] }]); }
+  }
+  if (!DELETE_RESTRICTED) {
+    // โหมดทดสอบ: ลบ Job ของใบนี้ และถ้าสายเอกสารไม่เหลือ Job แล้ว ล้างธง "เริ่มงานแล้ว" ที่ใบแรก เพื่อทดสอบเริ่มงานซ้ำได้ (Product ที่เพิ่มให้ลูกค้าแล้วไม่ถูกลบ)
+    await deleteRowsBy(t, "PRODUCTION_JOBS", "doc_id", gone);
+    const rootId = doc.root_id || doc.doc_id, ri = t.ACC_DOCS.rows.findIndex((d) => d.doc_id === rootId);
+    const left = t.PRODUCTION_JOBS.rows.some((j) => j.job_id && !goneSet.has(j.doc_id) && t.ACC_DOCS.rows.some((d) => d.doc_id === j.doc_id && (d.root_id || d.doc_id) === rootId));
+    if (ri >= 0 && !goneSet.has(rootId) && !left && t.ACC_DOCS.rows[ri].work_started_at) {
+      const g = await guardRow("ACC_DOCS", t.ACC_DOCS.headers, "doc_id", rootId, ri + 2);
+      if ("row" in g) await batchUpdateValues([{ range: rowRange("ACC_DOCS", t.ACC_DOCS.headers, g.row), values: [toRow(t.ACC_DOCS.headers, { ...t.ACC_DOCS.rows[ri], work_started_at: "" })] }]);
+    }
   }
   await deleteRowsBy(t, "ACC_DOCS", "doc_id", gone);
   const store = await fileStore();
