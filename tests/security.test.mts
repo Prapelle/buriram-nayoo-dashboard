@@ -24,6 +24,9 @@ const EXPECT: Record<string, string[] | "public" | Record<string, string[]>> = {
   "src/app/api/sales/plan/route.ts": ["admin"], "src/app/api/sales/commit/route.ts": ["admin"], "src/app/api/sales/history/route.ts": ["admin", "ae"],
   "src/app/api/export/sales-transactions/route.ts": ["admin"],
   "src/app/api/export/[dataset]/route.ts": ["admin"], // สิทธิ์รายชุดข้อมูลบังคับใน service (ตรวจในข้อ 3)
+  // ระบบบัญชี + Production (5/11/2026): AE ออก/แก้เอกสารได้ แต่ยืนยันชำระเงิน / เริ่มงาน / แนบไฟล์ / แก้ Job = Admin ขึ้นไป
+  "src/app/api/account/route.ts": { GET: ["admin", "ae"], POST: ["admin", "ae"] }, "src/app/api/account/[id]/route.ts": ["admin", "ae"], "src/app/api/account/pay/route.ts": ["admin"],
+  "src/app/api/account/files/route.ts": { GET: ["admin", "ae"], POST: ["admin"] }, "src/app/api/production/route.ts": { GET: ["admin", "ae"], PATCH: ["admin"] },
   "src/app/api/targets/route.ts": { GET: ["admin", "marketing", "ae"], POST: ["admin"] },
 };
 assert.deepEqual(routes.filter((r) => !(r in EXPECT)), [], "พบ API Route ใหม่ที่ยังไม่ได้กำหนดสิทธิ์ในเทสต์นี้ — ต้องตรวจสอบก่อน");
@@ -60,7 +63,9 @@ assert.ok(!can("admin", "/settings"), "Admin ต้องเข้าตั้�
 for (const n of NAV.flatMap((x) => ("children" in x && x.children ? x.children : [x]) as { href: string }[])) assert.ok(can("super_admin", n.href), `Super Admin ต้องเข้า ${n.href} ได้`);
 assert.equal(normRole("sales"), "ae"); assert.equal(normRole("Admin"), "admin"); assert.equal(normRole("x"), null); assert.equal(homeFor("marketing"), "/"); assert.equal(homeFor("ae"), "/");
 for (const r of ["super_admin", "admin", "ae", "marketing"] as const) assert.ok(can(r, "/"), `${r} ต้องเข้าหน้าเลือกระบบได้`);
-assert.deepEqual(systemsFor("marketing").map((x) => x.id), ["dashboard"]); assert.deepEqual(systemsFor("ae").map((x) => x.id), ["work"]); assert.deepEqual(systemsFor("admin").map((x) => x.id), ["dashboard", "work"]);
+assert.deepEqual(systemsFor("marketing").map((x) => x.id), ["dashboard"]); assert.deepEqual(systemsFor("ae").map((x) => x.id), ["work", "account", "production"]); assert.deepEqual(systemsFor("admin").map((x) => x.id), ["dashboard", "work", "account", "production"]);
+for (const p of ["/account", "/account/new", "/account/abc", "/production"]) { assert.ok(can("ae", p) && can("admin", p), `AE/Admin ต้องเข้า ${p} ได้`); assert.ok(!can("marketing", p), `Marketing ต้องเข้า ${p} ไม่ได้`); }
+assert.equal(systemOf("/account/abc"), "account"); assert.equal(systemOf("/production"), "production");
 assert.equal(systemOf("/dashboard"), "dashboard"); assert.equal(systemOf("/work/sales/import"), "work"); assert.equal(systemOf("/lead-report"), null); assert.equal(systemOf("/settings"), null);
 const hrefs = (sys: "dashboard" | "work", r: "super_admin" | "ae" | "marketing") => navOfSystem(navFor(r), sys).flatMap((n) => n.children ?? [n]).map((n) => n.href);
 const sd = hrefs("dashboard", "super_admin"), sw = hrefs("work", "super_admin");
