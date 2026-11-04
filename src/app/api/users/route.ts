@@ -12,13 +12,13 @@ function fail(e: unknown) {
 
 // จัดการผู้ใช้ — เฉพาะ Admin
 export async function GET() {
-  const g = await requireRole(["admin"]);
+  const g = await requireRole(["super_admin"]);
   if (!g.ok) return g.res;
   try { return NextResponse.json({ users: await listUsers(), me: g.email.toLowerCase() }); } catch (e) { return fail(e); }
 }
 
 export async function POST(req: Request) {
-  const g = await requireRole(["admin"]);
+  const g = await requireRole(["super_admin"]);
   if (!g.ok) return g.res;
   try { return NextResponse.json(await saveUser((await req.json()) as SaveUserInput, g.email)); } catch (e) { return fail(e); }
 }

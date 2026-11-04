@@ -37,9 +37,9 @@ export async function initializeSpreadsheet(actor: string): Promise<InitReport> 
     if (!users.rows.some((r) => r.email.toLowerCase() === env.initialAdmin)) {
       await appendRows("APP_USERS", [toRow(users.headers, {
         user_id: crypto.randomUUID(), email: env.initialAdmin, display_name: "Initial Admin",
-        role: "admin", active: true, created_at: now, updated_at: now, created_by: "system",
+        role: "super_admin", active: true, created_at: now, updated_at: now, created_by: "system",
       })]);
-      report.seeded.push("APP_USERS: initial admin");
+      report.seeded.push("APP_USERS: initial super admin");
     }
   }
 

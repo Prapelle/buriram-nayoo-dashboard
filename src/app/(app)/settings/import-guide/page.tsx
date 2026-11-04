@@ -1,11 +1,10 @@
+import { requirePage } from "@/lib/page-guard";
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { auth } from "@/auth";
 import { GUIDES } from "@/lib/guides/import-guide";
 
 // สารบัญคู่มือนำเข้าข้อมูล — กดหัวข้อเพื่อเปิดหน้าของแพลตฟอร์มนั้น (ไม่แสดงเนื้อหาทั้งหมดในหน้าเดียว)
 export default async function ImportGuideIndex() {
-  if (!(await auth())?.user?.role) redirect("/home");
+  await requirePage("/settings/import-guide");
   return (
     <section className="max-w-4xl space-y-5">
       <div>

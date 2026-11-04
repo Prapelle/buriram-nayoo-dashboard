@@ -1,11 +1,9 @@
+import { requirePage } from "@/lib/page-guard";
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { auth } from "@/auth";
 import { SalesImport } from "@/components/SalesImport";
 
 export default async function SalesImportPage() {
-  const role = (await auth())?.user?.role;
-  if (role !== "admin" && role !== "sales") redirect("/home");
+  const role = await requirePage("/sales/import");
   return (
     <section className="max-w-6xl space-y-4">
       <div>

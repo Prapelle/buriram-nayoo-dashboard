@@ -11,6 +11,7 @@ import { CHANNELS } from "@/lib/dashboard";
 import { CALL_DEFAULT, normCall } from "@/lib/lead-options";
 import { CLOSED_BUY, CLOSED_CALL, CLOSED_SELL, followUps, STALE_DAYS } from "@/lib/lead-insights";
 import { lineHref, telHref } from "@/lib/contact-links";
+import { nayooUrlError, propDefault, propSideSell, propStatusesFor, type LeadProperty } from "@/lib/lead-properties";
 import {
   areaLabel, BUY_STATUS, CALL_STATUS, CONDITIONS, EDITABLE, NEEDS, PRICE_RANGES, PROPERTY_TYPES, SELL_NEEDS, SELL_STATUS,
   filterLeads, leadStatusOf, statusFieldOf, statusOptionsOf, todayBkk, type DupMatch, type Lead,
@@ -35,8 +36,9 @@ const isClosedValue = (field: string, v: string) => (field === "call_status" ? C
 type SortKey = "lead_code" | "received_at" | "customer_name" | "source_channel" | "need" | "status" | "call_status" | "staff" | "next_follow_up_at";
 type Conflict = { field: string; value: string };
 
-export function LeadsManager() {
-  const [data, setData] = useState<{ state: "loading" | "ok" | "error"; rows: Lead[]; staff: string[]; areas: string[]; error?: string }>({ state: "loading", rows: [], staff: [], areas: [] });
+export function LeadsManager({ canDelete = true }: { canDelete?: boolean }) {
+  const [data, setData] = useState<{ state: "loading" | "ok" | "error"; rows: Lead[]; staff: string[]; areas: string[]; properties: Record<string, LeadProperty[]>; propsReady: boolean; error?: string }>({ state: "loading", rows: [], staff: [], areas: [], properties: {}, propsReady: false });
+  const [props, setProps] = useState<{ property_id?: string; url: string; status: string }[]>([]);
   const mobile = useIsMobile();
   const [f, setF] = useState(EMPTY_F);
   const [page, setPage] = useState(1);
@@ -58,8 +60,8 @@ export function LeadsManager() {
     try {
       const r = await fetch("/api/leads"); const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
-      setData({ state: "ok", rows: j.rows, staff: j.staff ?? [], areas: j.areas ?? [] });
-    } catch (e) { if (silent) return; setData({ state: "error", rows: [], staff: [], areas: [], error: e instanceof Error ? e.message : "error" }); }
+      setData({ state: "ok", rows: j.rows, staff: j.staff ?? [], areas: j.areas ?? [], properties: j.properties ?? {}, propsReady: j.propertiesReady === true });
+    } catch (e) { if (silent) return; setData({ state: "error", rows: [], staff: [], areas: [], properties: {}, propsReady: false, error: e instanceof Error ? e.message : "error" }); }
   }, []);
   useEffect(() => { load(); }, [load]);
   useAutoRefresh(() => load(true));
@@ -96,18 +98,21 @@ export function LeadsManager() {
   const closeForm = () => { setForm(null); setEditing(null); setErrors({}); setDups(null); setNeedAsk(null); setDelAsk(false); };
   const openForm = (r: Lead | null) => {
     setForm(r ? { ...emptyForm(), ...Object.fromEntries(EDITABLE.map((k) => [k, r[k] ?? ""])), call_status: normCall(r.call_status) || CALL_DEFAULT, area: areaLabel(r.area) } : emptyForm());
+    setProps(r ? (data.properties[r.lead_id] ?? []).map((p) => ({ property_id: p.property_id, url: p.url, status: p.status })) : []);
     setEditing(r); setViewing(null); setErrors({}); setDups(null); setNeedAsk(null); setDelAsk(false); setMsg(null);
     setAutoFollow("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  async function save(opts: { confirmDuplicate?: boolean; confirmNeedChange?: boolean } = {}) {
+  async function save(opts: { confirmNeedChange?: boolean } = {}) {
     if (!form) return;
     setSaving(true); setMsg(null); setErrors({}); setDups(null); setNeedAsk(null); setDelAsk(false);
     try {
-      const { ok, j } = await post({ ...form, lead_id: editing?.lead_id, updated_at_seen: editing?.updated_at, ...opts });
+      const allowed = propStatusesFor(form.need);
+      const properties = props.map((p) => ({ ...p, status: allowed.includes(p.status) ? p.status : propDefault(form.need) })); // เปลี่ยนฝั่ง ซื้อ↔ขาย → สถานะเริ่มต้นของฝั่งใหม่
+      const { ok, j } = await post({ ...form, lead_id: editing?.lead_id, updated_at_seen: editing?.updated_at, ...opts, ...(data.propsReady || properties.length ? { properties } : {}) });
       if (!ok) {
-        if (j.code === "DUPLICATE_WARNING") { setDups(j.matches); return; }
+        if (j.code === "DUPLICATE_SAME_SIDE") { setDups(j.matches); return; }
         if (j.code === "NEED_CHANGE") { setNeedAsk({ msg: j.error, conflict: j.conflict }); return; }
         if (j.fields) setErrors(j.fields);
         throw new Error(j.error ?? "บันทึกไม่สำเร็จ");
@@ -211,6 +216,9 @@ export function LeadsManager() {
           </dl>
           {[["รายละเอียดเพิ่มเติม (Remark)", viewing.need_description], ["บันทึกภายใน (Note)", viewing.notes], ...(viewing.lost_reason ? [["เหตุผลที่ปิดไม่สำเร็จ", viewing.lost_reason]] : [])].map(([k, v]) => (
             <div key={k} className="text-sm"><div className="text-xs text-slate-500">{k}</div><p className="whitespace-pre-wrap">{v || <span className="text-slate-300">—</span>}</p></div>))}
+          {(data.properties[viewing.lead_id] ?? []).length > 0 && (
+            <div className="text-sm"><div className="text-xs text-slate-500">{propSideSell(viewing.need) ? "ทรัพย์ที่ต้องการขาย" : "ทรัพย์ที่สนใจ"}</div>
+              <ul className="mt-1 space-y-1">{data.properties[viewing.lead_id].map((p) => <li key={p.property_id} className="flex flex-wrap items-center gap-2"><span className="rounded bg-slate-100 px-1.5 text-xs">{p.status}</span><a href={p.url} target="_blank" rel="noreferrer noopener" className="break-all text-sky-700 underline">{p.url}</a></li>)}</ul></div>)}
           {!viewing.need && <p className="rounded-md bg-amber-50 p-2 text-sm text-amber-800">Lead นี้บันทึกก่อนมีช่อง Need — กด แก้ไข เพื่อเลือก Need และสถานะ</p>}
         </section>
       )}
@@ -265,24 +273,44 @@ export function LeadsManager() {
                 <div className="sm:col-span-2 md:col-span-2">{field("need_description", "รายละเอียดเพิ่มเติม (Remark)", { area: true })}</div>
                 <div className="sm:col-span-2 md:col-span-4">{field("notes", "บันทึกภายใน (Note)", { area: true })}</div>
               </>, autoFollow && form.next_follow_up_at === autoFollow ? `เปลี่ยนสถานะแล้ว — ตั้งวันติดตามให้เป็น ${dmy(autoFollow)} (แก้ได้)` : undefined)}
+              {need && grp(isSell ? "5. ทรัพย์ที่ต้องการขาย" : "5. ทรัพย์ที่สนใจ", <div className="space-y-2 sm:col-span-2 md:col-span-4">
+                {props.length === 0 && <p className="text-sm text-slate-500">ยังไม่มีรายการ — กด + เพิ่ม URL</p>}
+                {props.map((p, i) => {
+                  const opts = propStatusesFor(need); const st = opts.includes(p.status) ? p.status : opts[0];
+                  const bad = p.url.trim() ? nayooUrlError(p.url) : null; const er = errors[`property_${i}`] ?? bad;
+                  const upd = (x: Partial<typeof p>) => setProps((all) => all.map((q, k) => (k === i ? { ...q, ...x } : q)));
+                  return (
+                    <div key={p.property_id ?? `new-${i}`} className="flex flex-wrap items-start gap-2">
+                      <label className="min-w-0 flex-1 text-sm"><span className="sr-only">URL ทรัพย์ที่ {i + 1}</span>
+                        <input type="url" inputMode="url" value={p.url} placeholder="https://nayoo.co/..." onChange={(e) => upd({ url: e.target.value })} className={`w-full rounded-md border px-2 py-1.5 text-sm ${er ? "border-red-500" : "border-slate-300"}`} />
+                        {er && <span role="alert" className="mt-0.5 block text-xs text-red-600">{er}</span>}</label>
+                      <label className="text-sm"><span className="sr-only">สถานะทรัพย์ที่ {i + 1}</span>
+                        <select value={st} onChange={(e) => upd({ status: e.target.value })} className="rounded-md border border-slate-300 px-2 py-1.5 text-sm">{opts.map((o) => <option key={o} value={o}>{o}</option>)}</select></label>
+                      {p.url.trim() && !bad && <a href={p.url.trim()} target="_blank" rel="noreferrer noopener" className="py-1.5 text-sm text-sky-700 underline">เปิด</a>}
+                      {(!p.property_id || canDelete) && <button type="button" onClick={() => setProps((all) => all.filter((_, k) => k !== i))} className="py-1.5 text-sm text-red-700 underline" aria-label={`เอาทรัพย์ที่ ${i + 1} ออก`}>เอาออก</button>}
+                    </div>);
+                })}
+                <button type="button" onClick={() => setProps((all) => [...all, { url: "", status: propDefault(need) }])} disabled={props.length >= 30} className="rounded-md border border-slate-300 px-3 py-1 text-sm hover:bg-slate-50 disabled:opacity-40">+ เพิ่ม URL</button>
+                {!data.propsReady && <p className="text-xs text-amber-700">ยังไม่ได้เตรียมแท็บ LEAD_PROPERTIES — ให้ Super Admin กด ตั้งค่า → เตรียม Google Sheet ก่อนบันทึก URL</p>}
+              </div>, "ใส่ได้เฉพาะลิงก์ของน่าอยู่ (nayoo.co) · สถานะของแต่ละทรัพย์แยกจากสถานะของ Lead" + (canDelete ? "" : " · Admin เอารายการที่บันทึกแล้วออกไม่ได้ (เปลี่ยนสถานะเป็น ยกเลิก แทน)"))}
             </>);
           })()}
           {prevOther && <p role="status" className="rounded-md bg-amber-50 p-2 text-sm text-amber-800">{statusFieldOf(editing!.need) === "buy_status" ? "Buy Status" : "Sell Status"} เดิม &quot;{prevOther}&quot; ใช้กับความต้องการ &quot;{form.need}&quot; ไม่ได้ — ระบบจะถามยืนยันก่อนล้างค่าเดิมเมื่อกดบันทึก</p>}
           {needAsk && (
             <div role="alert" className="space-y-2 rounded-md bg-amber-50 p-3 text-sm text-amber-900">
               <p>{needAsk.msg}</p>
-              <div className="flex gap-3"><button onClick={() => save({ confirmNeedChange: true })} disabled={saving} className="rounded-md bg-amber-700 px-3 py-1.5 text-white">ยืนยันเปลี่ยน Need</button><button onClick={() => setNeedAsk(null)} className="underline">กลับไปแก้ไข</button></div>
+              <div className="flex gap-3"><button onClick={() => save({ confirmNeedChange: true })} disabled={saving} className="rounded-md bg-amber-700 px-3 py-1.5 text-white">ยืนยันเปลี่ยน Need</button><button onClick={() => setNeedAsk(null)} className="underline">ปิด</button></div>
             </div>
           )}
           {dups && (
             <div role="alert" className="space-y-2 rounded-md bg-amber-50 p-3 text-sm text-amber-900">
-              <p className="font-medium">พบ Lead ที่เบอร์โทรหรืออีเมลซ้ำ (ระบบไม่รวมข้อมูลให้อัตโนมัติ)</p>
+              <p className="font-medium">บันทึกไม่ได้: มี Lead ฝั่งเดียวกัน (ซื้อ / ขาย) ที่เบอร์โทร / Line / อีเมลซ้ำอยู่แล้ว — คนเดียวกันมีได้ฝั่งละ 1 รายการ ให้แก้ไขที่รายการเดิม</p>
               <ul className="list-disc pl-5">{dups.map((d) => <li key={d.lead_code}>{d.lead_code} · {d.customer_name}{d.company_name && ` (${d.company_name})`} · รับ {dmy(d.received_at)} · ซ้ำที่ {d.matched.map((m) => m === "phone" ? "เบอร์โทร" : m === "line" ? "Line" : "อีเมล").join(" และ ")}</li>)}</ul>
-              <div className="flex gap-3"><button onClick={() => save({ confirmDuplicate: true })} disabled={saving} className="rounded-md bg-amber-700 px-3 py-1.5 text-white">บันทึกต่อ (เป็นรายการแยก)</button><button onClick={() => setDups(null)} className="underline">กลับไปแก้ไข</button></div>
+              <div className="flex gap-3"><button onClick={() => setDups(null)} className="underline">กลับไปแก้ไข</button></div>
             </div>
           )}
           <button onClick={() => save()} disabled={saving} className="rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-40">{saving ? "กำลังบันทึก..." : "บันทึก"}</button>
-          {editing && (
+          {editing && canDelete && (
             <div className="border-t pt-4">
               {!delAsk
                 ? <button onClick={() => setDelAsk(true)} disabled={saving} className="text-sm text-red-700 underline">ลบ Lead นี้</button>

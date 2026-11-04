@@ -11,16 +11,16 @@ function fail(e: unknown) {
   { logError("/api/developers", e); return NextResponse.json({ error: e instanceof Error ? e.message : "unknown error" }, { status: 500 }); }
 }
 
-// Developer (มีเบอร์/Line ผู้ติดต่อ) — เฉพาะ Admin และ Sales
+// Developer (มีเบอร์/Line ผู้ติดต่อ) — เฉพาะ Admin และ AE
 export async function GET(req: Request) {
-  const g = await requireRole(["admin", "sales"]);
+  const g = await requireRole(["admin", "ae"]);
   if (!g.ok) return g.res;
   try { return NextResponse.json(await listDevelopers(parseKind(new URL(req.url).searchParams.get("kind")))); } catch (e) { return fail(e); }
 }
 
 /** action: save (ค่าเริ่มต้น) · product · product_type · contact (บันทึกการติดต่อ) · import_plan · import_commit */
 export async function POST(req: Request) {
-  const g = await requireRole(["admin", "sales"]);
+  const g = await requireRole(["admin", "ae"]);
   if (!g.ok) return g.res;
   try {
     const b = (await req.json()) as Record<string, unknown>;
@@ -37,7 +37,7 @@ export async function POST(req: Request) {
 
 /** เปลี่ยน Status จากบอร์ด Sale developer */
 export async function PATCH(req: Request) {
-  const g = await requireRole(["admin", "sales"]);
+  const g = await requireRole(["admin", "ae"]);
   if (!g.ok) return g.res;
   try {
     const b = (await req.json()) as { developer_id?: string; status?: string; updated_at_seen?: string; method?: string };
@@ -47,7 +47,7 @@ export async function PATCH(req: Request) {
 
 /** ลบ Developer (พร้อม Product) หรือ ลบ Product (product_id) */
 export async function DELETE(req: Request) {
-  const g = await requireRole(["admin", "sales"]);
+  const g = await requireRole(["ae"]);
   if (!g.ok) return g.res;
   try {
     const b = (await req.json()) as { developer_id?: string; product_id?: string; updated_at_seen?: string };

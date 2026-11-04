@@ -26,7 +26,7 @@
 - **Framework:** Next.js 16 (App Router, Turbopack) + React 19.2 + TypeScript + Tailwind 4
 - **Hosting:** Cloudflare Workers ผ่าน OpenNext (@opennextjs/cloudflare) Deploy จาก GitHub
 - **ฐานข้อมูล:** Google Sheets ผ่าน REST API ฝั่ง Server (Service Account, JWT ด้วย `jose`) ไม่มี Supabase/ฐานข้อมูลอื่น
-- **Login:** Auth.js (next-auth v5) + Google OAuth อนุญาตเฉพาะอีเมลใน `APP_USERS` (+ `INITIAL_ADMIN_EMAIL`) Role: admin / marketing / sales ตรวจฝั่ง Server ทุก Route (`requireRole`) ปฏิเสธคำขอข้ามเว็บ
+- **Login:** Auth.js (next-auth v5) + Google OAuth อนุญาตเฉพาะอีเมลใน `APP_USERS` (+ `INITIAL_ADMIN_EMAIL`) Role: super_admin / admin / ae / marketing (ดูส่วน 4/11/2026 ท้ายไฟล์ · ค่า "sales" เดิม = ae) ตรวจฝั่ง Server ทุก Route (`requireRole`) ปฏิเสธคำขอข้ามเว็บ
 - **ขนาดโค้ด:** 74 ไฟล์ .ts/.tsx ประมาณ 4,600 บรรทัด
 - **หน้าจอ (13):** ภาพรวมการตลาด `/`, นำเข้า CSV, Facebook Page, Facebook Ads, Google Ads, LINE OA, Leads, Sales, Sales/นำเข้า, ส่งออกข้อมูล, ตั้งค่า, login, [slug] (placeholder)
 - **API (13):** auth, init, health, import (plan/commit/history), line-oa, leads, sales (plan/commit/history), export ([dataset], sales-transactions)
@@ -1362,3 +1362,20 @@ Users 17,443 · Page Views 42,450 · PV/User 2.43 · Duration 1 นาที 0 �
 - Log Cloudflare ยืนยัน: แผนฟรีจำกัด CPU 10 ms/คำขอ (`exceededCpu`) · หน้า ภาพรวม ใช้ ~1,191 ms · Facebook Page ~702 ms · Performance ~539 ms → error #412 (Connection closed) — แนะนำผู้ใช้อัปเกรด Workers Paid
 - `/home` ส่งไปตาม Role: Admin / Sales → `/leads` · Marketing → `/import` (`homeFor` ใน lib/roles.ts) · ใช้กับ: ล็อกอิน Google (callbackUrl), หน้า login ที่ล็อกอินแล้ว, โลโก้บนแถบบน, ทุกหน้าที่ Role ไม่มีสิทธิ์ (เดิมส่งไป / = ภาพรวม)
 - หน้า ภาพรวม ยังอยู่ที่ `/` (เมนู "ภาพรวมการตลาด") เปิดเมื่อกดเท่านั้น
+
+## 4/11/2026 — Role ใหม่ 4 ระดับ · Lead ฝั่งละ 1 · URL ทรัพย์
+
+**Role** (`src/lib/roles.ts` ตารางเมนู/สิทธิ์ที่เดียว · หน้าใช้ `requirePage()` ใน `src/lib/page-guard.ts` · API ผ่าน `checkRole` — Super Admin ผ่านทุก API)
+| Role | เห็น | ทำได้ |
+|---|---|---|
+| Super Admin (เดิม admin) | ทุกหน้า | ทุกอย่าง · ตั้งค่าระบบ / ผู้ใช้ / เตรียม Sheet · ยืนยันนำเข้าไฟล์ซ้ำ |
+| Admin (ใหม่) | ทุกหน้า ยกเว้นตั้งค่าระบบ | นำเข้า CSV / ส่งออก / เป้าหมาย · เพิ่ม + แก้ไขข้อมูล · **ลบไม่ได้** (Lead / Developer / Product / ทรัพย์) |
+| AE (เดิม sales) | ฝ่ายขาย + Project (รวม Revenue) + รายงาน Lead | เพิ่ม / แก้ / ลบ Lead และ Project |
+| Marketing | ภาพรวมการตลาด · กลุ่มการตลาด · รายงาน Lead · คำอธิบายตัวเลข | ดูอย่างเดียว (ไม่มีนำเข้า / ส่งออก / เป้าหมาย / คู่มือนำเข้า) · หน้าแรก = Facebook Ads |
+- ค่า `sales` ใน APP_USERS / token เดิมอ่านเป็น `ae` (`normRole`) · ต้องมี Super Admin ใช้งานได้ ≥ 1 คน
+- **Lead ฝั่งละ 1:** เบอร์ / Line / อีเมลซ้ำกับ Lead ฝั่งเดียวกัน (ซื้อ/เช่า/สร้าง vs ขาย) → บล็อก 409 `DUPLICATE_SAME_SIDE` (ยืนยันต่อไม่ได้) · คนเดียวกันมี Lead ซื้อ 1 + ขาย 1 ได้
+- **URL ทรัพย์:** แท็บใหม่ `LEAD_PROPERTIES` (property_id, lead_id, url, status, created/updated) · ฟอร์ม Lead กลุ่ม 5 กด "+ เพิ่ม URL" · nayoo.co / *.nayoo.co เท่านั้น · สถานะ ซื้อ: สนใจ / เข้าชมแล้ว / ซื้อ / ยกเลิก · ขาย: สนใจขาย / สัญญาปิด / สัญญาเปิด / ขายสำเร็จ / ยกเลิก · แยกจากสถานะ Lead (ไม่กระทบรายงาน) · ลบ Lead → ลบทรัพย์ของ Lead ด้วย · ต้องกด **เตรียม Google Sheet** 1 ครั้ง
+
+ไฟล์: `src/lib/{roles,page-guard,guard-core,lead-properties,leads-service,users-service,health,init-sheet,schema}.ts`, `src/components/{LeadsManager,DevelopersManager,LineOaManager,WebsiteManager,ImportWizard,Sidebar,UsersManager}.tsx`, ทุก `src/app/(app)/**/page.tsx`, ทุก `src/app/api/**/route.ts`
+
+**Passed:** 509/509 (security เขียนใหม่ตามตารางสิทธิ์ · e2e +8 ทรัพย์/ฝั่งละ 1 · http-integration ทุก Role · browser: ฟอร์ม URL ทรัพย์ + Marketing ดูอย่างเดียว)

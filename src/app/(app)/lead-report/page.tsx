@@ -1,10 +1,9 @@
+import { requirePage } from "@/lib/page-guard";
 import { RangeFields } from "@/components/RangeFields";
 import { logError } from "@/lib/log";
 import { rangeOf } from "@/lib/range-memory";
 import Link from "next/link";
 import { Note } from "@/components/Note";
-import { redirect } from "next/navigation";
-import { auth } from "@/auth";
 import { fetchDashboardData } from "@/lib/dashboard-data";
 import { channelLabel } from "@/lib/dashboard";
 import { leadsInRange, loanRejectReasons, lostReasons, LOST_REASONS, sideRows, staffPerformance, staffRow, type Side } from "@/lib/lead-insights";
@@ -17,8 +16,7 @@ const ns = (v: number | null, suffix = "") => (v === null ? "—" : `${v.toLocal
 const n = (v: number | null, suffix = "") => (v === null ? <span className="text-slate-400">—</span> : `${v.toLocaleString("en-US")}${suffix}`);
 
 export default async function LeadReportPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const role = (await auth())?.user?.role;
-  if (!role) redirect("/login");
+  const role = await requirePage("/lead-report");
   const sp = await searchParams;
   const side: Side = one(sp.side) === "seller" ? "seller" : "buyer";
   const rg = await rangeOf(sp); const from = rg.from, to = rg.to;

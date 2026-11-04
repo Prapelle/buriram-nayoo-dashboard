@@ -1,13 +1,12 @@
+import { requirePage } from "@/lib/page-guard";
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { auth } from "@/auth";
 import { SECTIONS } from "@/lib/guides/metrics";
 
 // สารบัญคำอธิบายตัวเลข — กดหัวข้อเพื่อเปิดหน้าของหัวข้อนั้น (ไม่แสดงตารางทั้งหมดในหน้าเดียว)
 const TOPICS = [{ id: "states", title: "สถานะของตัวเลข", desc: "รอข้อมูล · N/A · ข้อมูลไม่ครบ · Missing Data · % เปรียบเทียบ" }];
 
 export default async function MetricsIndex() {
-  if (!(await auth())?.user?.role) redirect("/home");
+  await requirePage("/settings/metrics");
   const topics = [...TOPICS, ...SECTIONS.map((s) => ({ id: s.id, title: s.title, desc: `${s.items.length} ตัวเลข · ${s.items.slice(0, 3).map((m) => m.name).join(", ")}${s.items.length > 3 ? " ..." : ""}` }))];
   return (
     <section className="max-w-4xl space-y-5">

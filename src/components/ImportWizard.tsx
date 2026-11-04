@@ -8,6 +8,7 @@ import { readTextFile, splitCsv, toCsv } from "@/lib/csv";
 import { detectSpec, parseInput } from "@/lib/import/plan";
 import { parseWebsiteFile } from "@/lib/website/parse";
 import { WebsiteManager } from "@/components/WebsiteManager";
+import { canEditMarketing, canOverrideImport, type Role } from "@/lib/roles";
 import { SalesImport } from "@/components/SalesImport";
 
 type Err = { row: number; column: string; raw: string; code: string; message: string };
@@ -42,7 +43,7 @@ function kindOf(name: string, text: string): "marketing" | "website" {
   try { parseWebsiteFile(name, text); return "website"; } catch { return "marketing"; }
 }
 
-export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" | "sales" }) {
+export function ImportWizard({ role = "admin" }: { role?: Role }) {
   const [queue, setQueue] = useState<{ name: string; text: string }[]>([]);
   /** นำเข้าทั้งหมด (1/11/2026): ไล่นำเข้าทุกไฟล์ในคิวต่อกันเอง · ไฟล์ที่ต้องให้คนตัดสินใจ / ซ้ำ / ว่าง → ข้ามและสรุปเหตุผล */
   const [bulk, setBulk] = useState<{ running: boolean; items: BulkItem[] } | null>(null);
@@ -111,7 +112,7 @@ export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" 
     const xlsx = all.filter((f) => /\.xlsx$/i.test(f.name));
     for (const f of all.filter((x) => !/\.(csv|xlsx)$/i.test(x.name))) note.push(`${f.name}: รองรับเฉพาะ .csv และ .xlsx (รายงานยอดขาย)`);
     if (xlsx.length) {
-      if (role !== "admin") note.push(`${xlsx.map((f) => f.name).join(", ")}: ไฟล์รายงานยอดขาย (.xlsx) นำเข้าได้เฉพาะ Admin หรือ Sales (หน้า Sales → นำเข้า) เพราะมีข้อมูลลูกค้า`);
+      if (!canEditMarketing(role)) note.push(`${xlsx.map((f) => f.name).join(", ")}: ไฟล์รายงานยอดขาย (.xlsx) นำเข้าได้เฉพาะ Admin (หน้า Revenue → นำเข้า) เพราะมีข้อมูลลูกค้า`);
       else { setSalesIn({ file: xlsx[0], id: Date.now() }); if (xlsx.length > 1) note.push(`ไฟล์ยอดขายนำเข้าได้ทีละไฟล์ — กำลังตรวจ ${xlsx[0].name} (ที่เหลือเลือกใหม่หลังนำเข้าเสร็จ)`); }
     }
     for (const f of all.filter((x) => /\.csv$/i.test(x.name))) {
@@ -340,8 +341,8 @@ export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" 
         )}
       </section>
 
-      {webIn && <WebsiteManager key={webIn.id} isAdmin={role === "admin"} importOnly incoming={webIn} />}
-      {salesIn && role === "admin" && (
+      {webIn && <WebsiteManager key={webIn.id} isAdmin={canOverrideImport(role)} importOnly incoming={webIn} />}
+      {salesIn && canEditMarketing(role) && (
         <section className="space-y-2 rounded-xl border border-slate-200 bg-white p-5">
           <h2 className="font-semibold">ไฟล์รายงานยอดขาย (Sales)</h2>
           <SalesImport key={salesIn.id} incoming={salesIn} embedded />
@@ -353,7 +354,7 @@ export function ImportWizard({ role = "admin" }: { role?: "admin" | "marketing" 
           <span className="text-lg font-semibold">ประวัติการนำเข้า</span><span className="text-xs text-slate-500">30 รายการล่าสุด · กดเพื่อแสดง</span>
           <span aria-hidden="true" className="ml-auto text-slate-400 transition-transform group-open:rotate-180">▾</span></summary>
         <div className="mt-2">
-        {role === "admin" && <p className="mb-2 text-xs text-slate-500">ประวัติการนำเข้ายอดขาย (FlowAccount) ดูที่หน้า <a href="/sales" className="underline">Sales</a></p>}
+        {canEditMarketing(role) && <p className="mb-2 text-xs text-slate-500">ประวัติการนำเข้ายอดขาย (FlowAccount) ดูที่หน้า <a href="/sales" className="underline">Sales</a></p>}
         {history.state === "loading" && <Skeleton kind={"rows"} />}
         {history.state === "error" && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">โหลดประวัติไม่ได้: {history.error}</p>}
         {history.state === "ok" && history.rows.length === 0 && <p className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">ยังไม่มีประวัติการนำเข้า</p>}

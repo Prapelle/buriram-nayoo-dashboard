@@ -1,12 +1,12 @@
+import { requirePage } from "@/lib/page-guard";
+import { canEditMarketing } from "@/lib/roles";
 import { RangeFields } from "@/components/RangeFields";
 import { logError } from "@/lib/log";
 import { rangeOf } from "@/lib/range-memory";
 import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
-import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Note } from "@/components/Note";
 import { PageHeader, btn } from "@/components/PageHeader";
-import { auth } from "@/auth";
 import { fetchDashboardData } from "@/lib/dashboard-data";
 import { ALL_CHANNELS, channelLabel, SERVICES, computeDashboardCompared, dmyS, type Dashboard, type Filters } from "@/lib/dashboard";
 import type { CompareMode, DRange } from "@/lib/compare";
@@ -33,8 +33,7 @@ const Card = ({ title, children }: { title: string; children: React.ReactNode })
 
 export default async function OverviewPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const sp = await searchParams;
-  const role = (await auth())?.user?.role;
-  if (!role) redirect("/login"); // layout ก็พาไป /login อยู่แล้ว แต่ page เรนเดอร์พร้อมกัน จึงต้องไม่ถือว่ามีเซสชันเสมอ
+  const role = await requirePage("/");
   const rg = await rangeOf(sp);
   const f: Filters = {
     from: rg.from, to: rg.to, channel: one(sp.channel) || undefined,
@@ -49,10 +48,10 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
     const [data, salesDates] = await Promise.all([
       fetchDashboardData(role),
       // Checklist ของ Admin รวมยอดขาย FlowAccount (วันที่เอกสารเท่านั้น) · แท็บยังไม่มี = ข้าม
-      role === "admin" ? readColumns("SALES_TRANSACTIONS", { only: ["invoice_date"] }).then((t) => t.rows.map((r) => String(r.invoice_date ?? "").slice(0, 10))).catch(() => undefined) : Promise.resolve(undefined),
+      role !== "marketing" ? readColumns("SALES_TRANSACTIONS", { only: ["invoice_date"] }).then((t) => t.rows.map((r) => String(r.invoice_date ?? "").slice(0, 10))).catch(() => undefined) : Promise.resolve(undefined),
     ]);
     progress = targetProgress(data, progressMonth(f.from, f.to, today), today, role);
-    if (role !== "sales") {
+    if (role !== "ae") {
       const prevMonth = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 2, 1)).toISOString().slice(0, 7);
       lists = [buildChecklist(data, prevMonth, today, { salesDates }), buildChecklist(data, today.slice(0, 7), today, { salesDates })].filter((x): x is Checklist => !!x);
     }
@@ -77,13 +76,13 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
   const qs = (drop: string) => { const u = new URLSearchParams(); for (const [k, v] of Object.entries({ from: f.from, to: f.to, channel: f.channel, campaign: f.campaign, area: f.area, service: f.service, compare: mode })) if (v && k !== drop) u.set(k, v); if (!f.from && !f.to) u.set("range", "all"); return "/?" + u.toString(); };
   const active = ([["channel", "ช่องทาง", f.channel], ["campaign", "Campaign", f.campaign], ["area", "พื้นที่", f.area && (AREAS.find(([v]) => v === f.area)?.[1] ?? f.area)], ["service", "Service", f.service], ["compare", "เปรียบเทียบ", mode && (mode === "yoy" ? "ปีก่อน" : "ช่วงก่อนหน้า")]] as [string, string, string | undefined][])
     .filter(([, , v]) => v).map(([k, l, v]) => ({ k, label: `${l}: ${v}`, href: qs(k) }));
-  const imp = role !== "sales" ? "/import" : undefined; // ช่องที่ยังไม่มีข้อมูล → ลิงก์ไปนำเข้า
+  const imp = canEditMarketing(role) ? "/import" : undefined; // ช่องที่ยังไม่มีข้อมูล → ลิงก์ไปนำเข้า
 
   return (
     <section className="space-y-6">
       <PageHeader crumb="หน้าแรก" title="ภาพรวมการตลาด" sub={<>อัปเดตล่าสุด: {when(dash.lastImport)}{dash.dataRange && <> · ข้อมูลโฆษณาครอบคลุม {dmy(dash.dataRange.start)} – {dmy(dash.dataRange.end)}</>}</>}>
         <Link href="/export" prefetch={false} className={btn.secondary}>ส่งออก</Link>
-        {role !== "sales" && <Link href="/import" prefetch={false} className={btn.primary}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 20h16" /></svg>นำเข้าข้อมูล</Link>}
+        {canEditMarketing(role) && <Link href="/import" prefetch={false} className={btn.primary}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 20h16" /></svg>นำเข้าข้อมูล</Link>}
       </PageHeader>
 
       <form method="get" action="/" className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm">
@@ -113,13 +112,13 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
 
       {!dash.hasAnyData && (
         <div className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-slate-600">
-          ยังไม่มีข้อมูลในระบบ — {role === "sales" ? "รอทีมการตลาดนำเข้าข้อมูล" : <>เริ่มจาก <Link href="/import" className="underline">นำเข้า CSV</Link></>}
+          ยังไม่มีข้อมูลในระบบ — {!canEditMarketing(role) ? "รอทีมการตลาดนำเข้าข้อมูล" : <>เริ่มจาก <Link href="/import" className="underline">นำเข้า CSV</Link></>}
         </div>
       )}
       {/* ลำดับตามบทบาท: Sales เห็นงานติดตามลูกค้าก่อน · Marketing/Admin เห็นสถานะข้อมูล (แถบย่อ) แล้วเป้าหมาย */}
       <ChecklistCard lists={lists} />
       {fu && <FollowUpCard {...fu} />}
-      <TargetCard p={progress} canEdit={role !== "sales"} />
+      <TargetCard p={progress} canEdit={canEditMarketing(role)} />
       {mode && cmpNote && <p role="status" className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">⚠ {cmpNote}</p>}
       {prevRange && <p className="text-sm text-slate-600">เทียบกับ{mode === "yoy" ? "ช่วงเดียวกันของปีก่อน" : "ช่วงก่อนหน้า"}: <b>{dmyS(prevRange.from)} – {dmyS(prevRange.to)}</b> (ตัวกรองอื่นเหมือนกัน) · % เปลี่ยนแปลง = (ปัจจุบัน − ค่าเปรียบเทียบ) ÷ ค่าเปรียบเทียบ × 100 · ค่าเปรียบเทียบ = 0 → N/A</p>}
       {dash.warnings.map((w, i) => <p key={i} role="alert" className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">⚠ {w}</p>)}
@@ -128,7 +127,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
       {dash.groups.map((g) => (
         <div key={g.title}>
           <h2 className="mb-2 text-sm font-semibold text-slate-700">{g.title}</h2>
-          <KpiGrid items={g.items} importHref={role !== "sales" ? "/import" : undefined} />
+          <KpiGrid items={g.items} importHref={imp} />
         </div>
       ))}
 

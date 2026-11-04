@@ -18,7 +18,7 @@ const my = (m: string) => thMonth(m);
 const when = (iso: string) => thDateTime(iso);
 const SHOW: [string, string][] = [["friends_end", "เพื่อนสิ้นเดือน"], ["new_friends", "เพื่อนใหม่"], ["inquiries", "Inquiries"], ["leads", "Leads"], ["qualified_leads", "Qualified"]];
 
-export function LineOaManager() {
+export function LineOaManager({ readOnly = false }: { readOnly?: boolean }) {
   const [list, setList] = useState<{ state: "loading" | "ok" | "error"; rows: Row[]; error?: string }>({ state: "loading", rows: [] });
   const [form, setForm] = useState<Row>(EMPTY);
   const [seen, setSeen] = useState<string | undefined>(undefined); // updated_at ของแถวที่เปิดแก้ไข
@@ -64,7 +64,7 @@ export function LineOaManager() {
 
   return (
     <div className="space-y-8">
-      <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-5">
+      {!readOnly && <section className="space-y-4 rounded-xl border border-slate-200 bg-white p-5">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">{editing ? `แก้ไขข้อมูลเดือน ${my(form.report_month)}` : "เพิ่ม / แก้ไขข้อมูลรายเดือน"}</h2>
           {(editing || form.report_month) && <button onClick={reset} className="text-sm underline">ล้างฟอร์ม</button>}
@@ -94,7 +94,7 @@ export function LineOaManager() {
         <button onClick={save} disabled={saving || !form.report_month} className="rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-40">
           {saving ? "กำลังบันทึก..." : editing ? "บันทึกการแก้ไข" : "บันทึก"}
         </button>
-      </section>
+      </section>}
 
       <section>
         <h2 className="mb-2 text-lg font-semibold">ข้อมูลที่บันทึกแล้ว</h2>
@@ -110,7 +110,7 @@ export function LineOaManager() {
                   <td className="whitespace-nowrap p-2 font-medium">{my(r.report_month)}</td>
                   {SHOW.map(([k]) => <td key={k} className="text-right tabular-nums">{r[k] === "" ? <span className="text-slate-300">ว่าง</span> : Number(r[k]).toLocaleString("en-US")}</td>)}
                   <td className="whitespace-nowrap pl-4 text-xs text-slate-500">{when(r.updated_at)}</td>
-                  <td className="p-2 text-right"><button onClick={() => { open(r); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="text-sm underline">แก้ไข</button></td>
+                  <td className="p-2 text-right">{!readOnly && <button onClick={() => { open(r); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="text-sm underline">แก้ไข</button>}</td>
                 </tr>))}</tbody>
             </table>
           </div>

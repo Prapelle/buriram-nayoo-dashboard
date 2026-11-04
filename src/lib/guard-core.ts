@@ -1,4 +1,4 @@
-import type { Role } from "./roles";
+import { normRole, type Role } from "./roles";
 
 export type SessionLike = { user?: { email?: string | null; role?: Role | null } } | null | undefined;
 export type GuardResult = { ok: true; email: string; role: Role } | { ok: false; status: 401 | 403; error: string };
@@ -9,9 +9,9 @@ export const crossSiteBlocked = (secFetchSite: string | null | undefined) =>
 
 export function checkRole(session: SessionLike, allowed: Role[], secFetchSite?: string | null): GuardResult {
   if (crossSiteBlocked(secFetchSite)) return { ok: false, status: 403, error: "cross-site request blocked" };
-  const role = session?.user?.role;
+  const role = normRole(session?.user?.role);
   const email = session?.user?.email;
   if (!email || !role) return { ok: false, status: 401, error: "unauthenticated" };
-  if (!allowed.includes(role)) return { ok: false, status: 403, error: "forbidden" };
+  if (role !== "super_admin" && !allowed.includes(role)) return { ok: false, status: 403, error: "forbidden" };
   return { ok: true, email, role };
 }

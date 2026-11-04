@@ -1,10 +1,8 @@
-import { redirect } from "next/navigation";
-import { auth } from "@/auth";
+import { requirePage } from "@/lib/page-guard";
 import { TargetsManager } from "@/components/TargetsManager";
 
 export default async function TargetsPage() {
-  const role = (await auth())?.user?.role;
-  if (role !== "admin" && role !== "marketing") redirect("/home");
+  const role = await requirePage("/settings/targets");
   return (
     <section className="max-w-4xl space-y-4">
       <div>

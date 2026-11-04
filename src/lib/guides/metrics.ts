@@ -98,7 +98,7 @@ export const SECTIONS: Sec[] = [
   },
   {
     id: "sales", title: "5. Revenue (ยอดขาย)", page: "/sales",
-    intro: "จากรายงานยอดขาย FlowAccount (.xlsx) · เฉพาะ Admin / Sales",
+    intro: "จากรายงานยอดขาย FlowAccount (.xlsx) · เฉพาะ Admin / AE",
     items: [
       { name: "ยอดขายสุทธิ", source: "FlowAccount — ยอดรวมสุทธิ", formula: "ผลรวมทุกเอกสารในช่วง (เอกสารยกเลิกรวมตามรายงานบัญชี — มีคำเตือน)", use: "รายได้ตามเอกสารขาย" },
       { name: "ยอดขายก่อนส่วนลด / ส่วนลดรวม / ภาษีมูลค่าเพิ่ม", source: "FlowAccount — ขายแยกภาษี / ส่วนลด / ภาษีมูลค่าเพิ่ม", formula: "ผลรวมตามคอลัมน์ในรายงาน", use: "ดูโครงสร้างยอดขาย" },

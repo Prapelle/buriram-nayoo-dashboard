@@ -1,11 +1,9 @@
+import { requirePage } from "@/lib/page-guard";
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { auth } from "@/auth";
 import { ImportWizard } from "@/components/ImportWizard";
 
 export default async function ImportPage() {
-  const role = (await auth())?.user?.role;
-  if (role !== "admin" && role !== "marketing") redirect("/home");
+  const role = await requirePage("/import");
   return (
     <section className="max-w-6xl space-y-4">
       <h1 className="text-[26px] font-bold tracking-tight">นำเข้า CSV</h1>

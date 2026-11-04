@@ -9,7 +9,7 @@ const B = ({ children }: { children: React.ReactNode }) => <b className="font-se
 
 export const GUIDES: Guide[] = [
   {
-    id: "fb-posts", title: "1.1 Facebook Page — สถิติโพสต์รายวัน", where: "Meta Business Suite → เนื้อหา (Content)", who: "Admin / Marketing", when: "ต้นเดือน (ข้อมูลเดือนก่อนหน้า)",
+    id: "fb-posts", title: "1.1 Facebook Page — สถิติโพสต์รายวัน", where: "Meta Business Suite → เนื้อหา (Content)", who: "Admin / Super Admin", when: "ต้นเดือน (ข้อมูลเดือนก่อนหน้า)",
     steps: [
       <>เปิด <B>Meta Business Suite</B> → เมนู <B>เนื้อหา (Content)</B></>,
       <>กด <B>ส่งออกข้อมูล (Export data)</B></>,
@@ -26,7 +26,7 @@ export const GUIDES: Guide[] = [
     ],
   },
   {
-    id: "fb-results", title: "1.2 Facebook Page — Viewers และ Link clicks", where: "Meta Business Suite → ข้อมูลเชิงลึก (Insights) → ผลลัพธ์ (Results)", who: "Admin / Marketing", when: "ต้นเดือน (ช่วงเดียวกับข้อ 1.1)",
+    id: "fb-results", title: "1.2 Facebook Page — Viewers และ Link clicks", where: "Meta Business Suite → ข้อมูลเชิงลึก (Insights) → ผลลัพธ์ (Results)", who: "Admin / Super Admin", when: "ต้นเดือน (ช่วงเดียวกับข้อ 1.1)",
     steps: [
       <>เปิด <B>Meta Business Suite</B> → <B>ข้อมูลเชิงลึก (Insights)</B> → หน้า <B>ผลลัพธ์ (Results)</B></>,
       <><B>ตั้งช่วงวันที่ด้านบน</B> เป็นเดือนที่ต้องการ</>,
@@ -40,7 +40,7 @@ export const GUIDES: Guide[] = [
     ],
   },
   {
-    id: "fb-ads", title: "2. Facebook Ads (Meta Ads)", where: "Ads Manager → Ads Reporting", who: "Admin / Marketing", when: "ต้นเดือน",
+    id: "fb-ads", title: "2. Facebook Ads (Meta Ads)", where: "Ads Manager → Ads Reporting", who: "Admin / Super Admin", when: "ต้นเดือน",
     steps: [
       <>เปิด <B>Ads Manager</B> → เมนู <B>Ads Reporting</B> (รายงานโฆษณา)</>,
       <>ตั้งช่วงวันที่เป็นเดือนที่ต้องการ</>,
@@ -54,7 +54,7 @@ export const GUIDES: Guide[] = [
     ],
   },
   {
-    id: "google-ads", title: "3. Google Ads", where: "Google Ads → ภาพรวม (Overview) / แคมเปญ (Campaigns)", who: "Admin / Marketing", when: "ต้นเดือน",
+    id: "google-ads", title: "3. Google Ads", where: "Google Ads → ภาพรวม (Overview) / แคมเปญ (Campaigns)", who: "Admin / Super Admin", when: "ต้นเดือน",
     steps: [
       <>เปิด <B>Google Ads</B> แล้วตั้งช่วงวันที่มุมขวาบนเป็นเดือนที่ต้องการ</>,
       <><B>สำคัญที่สุด:</B> หน้า <B>แคมเปญ (Campaigns)</B> → ดาวน์โหลด (Download) → <B>CSV</B> = Campaign Report (ยอดใช้จ่ายหลักของ Dashboard)</>,
@@ -65,7 +65,7 @@ export const GUIDES: Guide[] = [
     tips: [<>ตั้งภาษา Google Ads เป็น <B>English</B> ก่อนดาวน์โหลด (ระบบอ่านชื่อคอลัมน์ภาษาอังกฤษ)</>],
   },
   {
-    id: "website", title: "4. Website — Google Analytics 4 และ Google Search Console", where: "GA4 และ Search Console", who: "Admin / Marketing", when: "ต้นเดือน",
+    id: "website", title: "4. Website — Google Analytics 4 และ Google Search Console", where: "GA4 และ Search Console", who: "Admin / Super Admin", when: "ต้นเดือน",
     steps: [
       <><B>GA4 (แนะนำ):</B> Reports → <B>Reports snapshot</B> → ตั้งช่วงวันที่ → Share this report → Download file → <B>CSV</B> (มียอดผู้ใช้จริง Users, Sessions, เวลามีส่วนร่วม)</>,
       <>GA4 (ไม่บังคับ): Reports → Engagement → <B>Pages and screens</B> → ช่วงวันที่เดียวกัน → Download CSV (รายละเอียดรายหน้า)</>,
@@ -78,7 +78,7 @@ export const GUIDES: Guide[] = [
     ],
   },
   {
-    id: "sales", title: "5. Sales — FlowAccount", where: "FlowAccount → รายงาน → รายงานยอดขาย", who: "Admin / Sales (มีข้อมูลลูกค้า)", when: "ต้นเดือน หรือเมื่อต้องการอัปเดต",
+    id: "sales", title: "5. Sales — FlowAccount", where: "FlowAccount → รายงาน → รายงานยอดขาย", who: "Admin / Super Admin (มีข้อมูลลูกค้า)", when: "ต้นเดือน หรือเมื่อต้องการอัปเดต",
     steps: [
       <>เข้า <B>FlowAccount</B> → เมนู <B>รายงาน</B> → <B>รายงานยอดขาย</B></>,
       <>เลือกช่วงวันที่ (เช่น เดือนก่อนหน้า)</>,

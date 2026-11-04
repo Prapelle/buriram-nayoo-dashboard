@@ -6,7 +6,7 @@ import { listBatches } from "@/lib/import/service";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const g = await requireRole(["admin", "marketing"]);
+  const g = await requireRole(["admin"]);
   if (!g.ok) return g.res;
   try {
     return NextResponse.json({ batches: await listBatches() });

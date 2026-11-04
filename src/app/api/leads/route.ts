@@ -10,21 +10,21 @@ function fail(e: unknown) {
   { logError("/api/leads", e); return NextResponse.json({ error: e instanceof Error ? e.message : "unknown error" }, { status: 500 }); }
 }
 
-// ข้อมูลลูกค้า (PII) — เฉพาะ Admin และ Sales
+// ข้อมูลลูกค้า (PII) — เฉพาะ Admin และ AE
 export async function GET() {
-  const g = await requireRole(["admin", "sales"]);
+  const g = await requireRole(["admin", "ae"]);
   if (!g.ok) return g.res;
   try { return NextResponse.json(await listLeads()); } catch (e) { return fail(e); }
 }
 
 export async function POST(req: Request) {
-  const g = await requireRole(["admin", "sales"]);
+  const g = await requireRole(["admin", "ae"]);
   if (!g.ok) return g.res;
-  try { return NextResponse.json(await saveLead((await req.json()) as Record<string, unknown>, g.email)); } catch (e) { return fail(e); }
+  try { return NextResponse.json(await saveLead((await req.json()) as Record<string, unknown>, g.email, g.role)); } catch (e) { return fail(e); }
 }
 
 export async function DELETE(req: Request) {
-  const g = await requireRole(["admin", "sales"]);
+  const g = await requireRole(["ae"]);
   if (!g.ok) return g.res;
   try {
     const b = (await req.json()) as { lead_id?: string; updated_at_seen?: string };
@@ -34,7 +34,7 @@ export async function DELETE(req: Request) {
 
 // เปลี่ยนสถานะช่องเดียว: field = sell_status (Seller Leads) หรือ call_status (Buyer Leads)
 export async function PATCH(req: Request) {
-  const g = await requireRole(["admin", "sales"]);
+  const g = await requireRole(["admin", "ae"]);
   if (!g.ok) return g.res;
   try {
     const b = (await req.json()) as { lead_id?: string; field?: string; value?: string; updated_at_seen?: string; lost_reason?: string };

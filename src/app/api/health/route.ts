@@ -6,7 +6,7 @@ import { systemCheck } from "@/lib/health";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const g = await requireRole(["admin"]);
+  const g = await requireRole(["super_admin"]);
   if (!g.ok) return g.res;
   try { return NextResponse.json({ checks: await systemCheck() }); }
   catch (e) { { logError("/api/health", e); return NextResponse.json({ error: e instanceof Error ? e.message : "unknown error" }, { status: 500 }); } }

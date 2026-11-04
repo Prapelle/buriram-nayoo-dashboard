@@ -17,7 +17,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const g = await requireRole(["admin", "marketing"]);
+  const g = await requireRole(["admin"]);
   if (!g.ok) return g.res;
   try { return NextResponse.json(await saveLine((await req.json()) as Record<string, unknown>, g.email)); } catch (e) { return fail(e); }
 }

@@ -135,8 +135,8 @@ export async function runCommit(input: ImportInput, actor: string, role: Role) {
   const { spec, plan } = p;
   if (p.periodError) throw new HttpError(422, p.periodError, "PERIOD_REQUIRED");
   if (p.fileDuplicate) {
-    const allowed = input.overrideDuplicate === true && role === "admin";
-    if (!allowed) throw new HttpError(409, "ไฟล์นี้เคยนำเข้าสำเร็จแล้ว (Admin เท่านั้นที่ยืนยันนำเข้าซ้ำได้)", "DUPLICATE_FILE");
+    const allowed = input.overrideDuplicate === true && role === "super_admin";
+    if (!allowed) throw new HttpError(409, "ไฟล์นี้เคยนำเข้าสำเร็จแล้ว (Super Admin เท่านั้นที่ยืนยันนำเข้าซ้ำได้)", "DUPLICATE_FILE");
   }
   if (plan.counts.insert + plan.counts.update + plan.counts.skip === 0)
     throw new HttpError(422, "ไม่มีแถวที่ถูกต้องให้นำเข้า", "NOTHING_TO_IMPORT");

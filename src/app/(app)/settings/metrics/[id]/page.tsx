@@ -1,13 +1,13 @@
+import { requirePage } from "@/lib/page-guard";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { auth } from "@/auth";
 import { SECTIONS, STATES } from "@/lib/guides/metrics";
 
 // คำอธิบายตัวเลขของหัวข้อเดียว (เปิดจากสารบัญ)
 const ORDER = [{ id: "states", title: "สถานะของตัวเลข" }, ...SECTIONS.map((s) => ({ id: s.id, title: s.title }))];
 
 export default async function MetricsTopic({ params }: { params: Promise<{ id: string }> }) {
-  if (!(await auth())?.user?.role) redirect("/home");
+  await requirePage("/settings/metrics");
   const { id } = await params;
   const i = ORDER.findIndex((t) => t.id === id);
   if (i < 0) notFound();

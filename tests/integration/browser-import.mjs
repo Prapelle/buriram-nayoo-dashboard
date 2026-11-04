@@ -28,6 +28,7 @@ try {
   const api = (p, body) => fetch(BASE + p, { method: "POST", headers: { cookie: `authjs.session-token=${adminC}`, "sec-fetch-site": "same-origin", "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
   assert.equal((await api("/api/init")).status, 200);
   assert.equal((await api("/api/users", { email: "marketing@example.com", display_name: "mkt", role: "marketing", active: "TRUE" })).status, 200);
+  assert.equal((await api("/api/users", { email: "importer@example.com", display_name: "imp", role: "admin", active: "TRUE" })).status, 200); // Admin (ใหม่): นำเข้า + ฝ่ายขาย + Project
   // หน้าสาธารณะสำหรับ Google OAuth consent screen (Privacy policy URL) — เปิดได้โดยไม่ล็อกอิน
   const pv = await fetch(BASE + "/privacy", { redirect: "manual" }); const pvt = await pv.text();
   assert.equal(pv.status, 200); assert.ok(pvt.includes("นโยบายความเป็นส่วนตัว") && pvt.includes("Limited Use") && pvt.includes("openid"));
@@ -174,16 +175,26 @@ try {
   assert.equal(await page.getByLabel("พื้นที่ (กรอกเองหรือเลือกจากรายการ)").inputValue(), "");
   assert.deepEqual(await page.locator("#area-list option").evaluateAll((o) => o.map((x) => x.value).slice(0, 3)), ["บุรีรัมย์", "สุรินทร์", "หลายจังหวัด"]);
   await page.getByLabel("พื้นที่ (กรอกเองหรือเลือกจากรายการ)").fill("ประโคนชัย");
+  // URL ทรัพย์ที่สนใจ (4/11/2026): + เพิ่ม URL · nayoo.co เท่านั้น · สถานะต่อทรัพย์ (ฝั่งซื้อ)
+  const pg5 = page.getByRole("group", { name: /^5\. ทรัพย์ที่สนใจ/ });
+  await pg5.getByRole("button", { name: "+ เพิ่ม URL" }).click(); await pg5.getByLabel("URL ทรัพย์ที่ 1").fill("https://example.com/x");
+  await pg5.getByRole("alert").filter({ hasText: "ใส่ได้เฉพาะลิงก์ของน่าอยู่ (nayoo.co)" }).waitFor();
+  await pg5.getByLabel("URL ทรัพย์ที่ 1").fill("https://nayoo.co/property/9001");
+  assert.deepEqual(await pg5.getByLabel("สถานะทรัพย์ที่ 1").locator("option").allInnerTexts(), ["สนใจ", "เข้าชมแล้ว", "ซื้อ", "ยกเลิก"]);
+  await pg5.getByRole("button", { name: "+ เพิ่ม URL" }).click(); await pg5.getByLabel("URL ทรัพย์ที่ 2").fill("nayoo.co/property/9002"); await pg5.getByLabel("สถานะทรัพย์ที่ 2").selectOption("เข้าชมแล้ว");
   if (process.env.SHOT_DIR) await page.locator("section", { has: page.getByRole("heading", { name: "เพิ่ม Lead ใหม่" }) }).last().screenshot({ path: process.env.SHOT_DIR + "/lead-form.png" });
   await page.getByRole("button", { name: "บันทึก", exact: true }).click(); await page.getByText("ทดสอบไลน์").first().waitFor();
   lr = await tab("LEADS"); const row = lr.find((r) => r[lr[0].indexOf("customer_name")] === "ทดสอบไลน์");
   assert.equal(row[lr[0].indexOf("line_id")], "@line.test"); assert.equal(row[lr[0].indexOf("interest")], "ทาวน์โฮมใกล้โรงเรียน"); assert.equal(row[lr[0].indexOf("area")], "ประโคนชัย");
+  const lpT = await tab("LEAD_PROPERTIES"); const mineP = lpT.slice(1).filter((r) => r[lpT[0].indexOf("lead_id")] === row[lr[0].indexOf("lead_id")]).map((r) => [r[lpT[0].indexOf("url")], r[lpT[0].indexOf("status")]]);
+  assert.deepEqual(mineP, [["https://nayoo.co/property/9001", "สนใจ"], ["https://nayoo.co/property/9002", "เข้าชมแล้ว"]]);
   const areaF = page.locator("label", { has: page.locator("span", { hasText: /^พื้นที่$/ }) }).locator("select");
   await areaF.selectOption("ประโคนชัย"); await page.getByText("1 รายการ").first().waitFor(); assert.ok(await page.getByText("ทดสอบไลน์").first().isVisible());
   assert.equal(await page.getByRole("combobox", { name: "หมวดบริการ" }).count(), 0);
   // ตารางเรียงตามหัวคอลัมน์ได้ (ทุกหน้า) · มือถือเป็นการ์ด + ปุ่มโทร
   await page.getByRole("button", { name: /^ชื่อ/ }).click(); assert.equal(await page.locator("th[aria-sort]").getAttribute("aria-sort"), "ascending");
   await page.getByRole("button", { name: /^ชื่อ/ }).click(); assert.equal(await page.locator("th[aria-sort]").getAttribute("aria-sort"), "descending");
+  ok("หน้า Leads: URL ทรัพย์ที่สนใจ กด + เพิ่มได้หลายรายการ · URL ที่ไม่ใช่ nayoo.co แจ้งเตือนทันที · สถานะต่อทรัพย์ (สนใจ / เข้าชมแล้ว / ซื้อ / ยกเลิก) → แท็บ LEAD_PROPERTIES");
   ok("หน้า Leads: ฟอร์มไม่มี บริษัท / อีเมล / หมวดบริการ / บริการที่สนใจ / UTM แล้ว · มีช่อง Line / ความสนใจ / พื้นที่กรอกเอง (มีรายการแนะนำ) → บันทึกลง Sheet ตามที่กรอก · ตัวกรองพื้นที่มีค่าที่กรอกเอง · ตัวกรองหมวดบริการถูกตัดออก");
   assert.deepEqual(errors, []);
 
@@ -301,8 +312,8 @@ try {
   }
   assert.deepEqual(errors, []);
 
-  const m = await open("marketing@example.com");
-  // ---- ตั้งค่า → คู่มือนำเข้าข้อมูล / คำอธิบายตัวเลข (Marketing เปิดได้ · ตั้งค่าระบบไม่เห็น) ----
+  const m = await open("importer@example.com");
+  // ---- ตั้งค่า → คู่มือนำเข้าข้อมูล / คำอธิบายตัวเลข (Admin เปิดได้ · ตั้งค่าระบบไม่เห็น) ----
   await m.page.goto(BASE + "/settings/import-guide"); await m.page.getByRole("heading", { name: "คู่มือนำเข้าข้อมูล" }).waitFor();
   const nav = await m.page.getByRole("navigation", { name: "เมนูหลัก" }).innerText();
   assert.ok(nav.includes("คู่มือนำเข้าข้อมูล") && nav.includes("คำอธิบายตัวเลข") && !nav.includes("ตั้งค่าระบบ"));
@@ -332,7 +343,7 @@ try {
   await m.page.goto(BASE + "/settings/metrics/overview"); await m.page.getByRole("heading", { name: /ภาพรวมการตลาด/, level: 1 }).waitFor();
   if (process.env.SHOT_DIR) await m.page.screenshot({ path: process.env.SHOT_DIR + "/guide-metrics-topic.png", fullPage: true });
   await m.page.goto(BASE + "/settings/metrics/xyz"); await m.page.waitForLoadState("networkidle"); assert.ok(/404|could not be found|ไม่พบ/i.test(await m.page.locator("body").innerText())); assert.equal(await m.page.locator("article").count(), 0);
-  await m.page.goto(BASE + "/settings"); await m.page.waitForURL(BASE + "/import");
+  await m.page.goto(BASE + "/settings"); await m.page.waitForURL(BASE + "/leads"); // Admin เข้าตั้งค่าระบบไม่ได้ → หน้าแรก (Leads)
   await m.page.setViewportSize({ width: 390, height: 844 }); await m.page.goto(BASE + "/settings/metrics/performance", { waitUntil: "networkidle" }); await m.page.getByRole("heading", { name: /Marketing Performance/, level: 1 }).waitFor();
   assert.ok(await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth) <= 1, "มือถือล้นแนวนอน");
   // ---- ปุ่มเบอร์เกอร์ (มือถือ): เมนูปิดไว้ก่อน · กดเปิด · กดลิงก์แล้วเปลี่ยนหน้า + ปิด · พื้นหลัง/Esc ปิด ----
@@ -361,26 +372,31 @@ try {
   await m.page.locator("#side-menu[data-compact]").waitFor(); await expanded("false");
   await burger.click(); await m.page.locator("#side-menu:not([data-compact])").waitFor(); await expanded("true");
   ok("ปุ่มเบอร์เกอร์: มือถือปิดไว้ก่อน กดเปิด/กดลิงก์ปิด/Esc/พื้นหลังปิด ไม่ล้นจอ · จอใหญ่เมนูแบ่งกลุ่ม เปิดไว้ก่อน กดย่อเหลือไอคอน/ขยาย และจำค่าหลังโหลดหน้าใหม่");
-  ok("ตั้งค่า (Marketing): คู่มือนำเข้าข้อมูล / คำอธิบายตัวเลข หน้าแรกเป็นสารบัญอย่างเดียว · กดแต่ละหัวข้อเปิดหน้าของหัวข้อนั้น (6 + 5 หน้า) เนื้อหาครบ · หัวข้อที่ไม่มี = 404 · ตั้งค่าระบบไม่เห็นและเข้าไม่ได้ · มือถือไม่ล้น");
-  await m.page.goto(BASE + "/"); await m.page.getByText(/ข้อมูลเดือน .*: ครบ \d+\/9/).first().waitFor(); // Marketing: ไม่มีแถวยอดขาย
-  assert.equal(await m.page.getByRole("heading", { name: "ติดตามลูกค้า (ฝ่ายขาย)" }).count(), 0); assert.ok(await m.page.getByText("แก้ไขเป้า").isVisible());
-  await m.page.goto(BASE + "/lead-report"); await m.page.getByRole("heading", { name: "ผลงานรายพนักงาน" }).waitFor();
-  assert.ok(!(await m.page.locator("main").innerText()).includes("ผู้ซื้อ ก")); // ตัวเลขรวมเท่านั้น ไม่มีชื่อลูกค้า
-  for (const pth of ["/developers", "/sale-developer", "/home-builders", "/sale-home-builder"]) { await m.page.goto(BASE + pth); await m.page.waitForURL(BASE + "/import"); }
-  await m.page.goto(BASE + "/home"); await m.page.waitForURL(BASE + "/import"); // หน้าแรกของ Marketing (2/11/2026)
-  for (const pth of ["/buyer-leads", "/seller-leads"]) { await m.page.goto(BASE + pth); await m.page.waitForURL(BASE + "/import"); } // Marketing ไม่มีสิทธิ์ข้อมูลลูกค้า → กลับหน้าแรก
+  ok("ตั้งค่า (Admin): คู่มือนำเข้าข้อมูล / คำอธิบายตัวเลข หน้าแรกเป็นสารบัญอย่างเดียว · กดแต่ละหัวข้อเปิดหน้าของหัวข้อนั้น (6 + 5 หน้า) เนื้อหาครบ · หัวข้อที่ไม่มี = 404 · ตั้งค่าระบบไม่เห็นและเข้าไม่ได้ · มือถือไม่ล้น");
+  const mk = await open("marketing@example.com");
+  await mk.page.goto(BASE + "/"); await mk.page.getByText(/ข้อมูลเดือน .*: ครบ \d+\/9/).first().waitFor(); // Marketing: ไม่มีแถวยอดขาย
+  assert.equal(await mk.page.getByRole("heading", { name: "ติดตามลูกค้า (ฝ่ายขาย)" }).count(), 0); assert.equal(await mk.page.getByText("แก้ไขเป้า").count(), 0); // ดูอย่างเดียว
+  await mk.page.goto(BASE + "/lead-report"); await mk.page.getByRole("heading", { name: "ผลงานรายพนักงาน" }).waitFor();
+  assert.ok(!(await mk.page.locator("main").innerText()).includes("ผู้ซื้อ ก")); // ตัวเลขรวมเท่านั้น ไม่มีชื่อลูกค้า
+  for (const pth of ["/developers", "/sale-developer", "/home-builders", "/sale-home-builder", "/import", "/export", "/settings/targets", "/settings/import-guide"]) { await mk.page.goto(BASE + pth); await mk.page.waitForURL(BASE + "/facebook-ads"); }
+  await mk.page.goto(BASE + "/home"); await mk.page.waitForURL(BASE + "/facebook-ads"); // หน้าแรกของ Marketing (4/11/2026)
+  for (const pth of ["/buyer-leads", "/seller-leads"]) { await mk.page.goto(BASE + pth); await mk.page.waitForURL(BASE + "/facebook-ads"); } // Marketing ไม่มีสิทธิ์ข้อมูลลูกค้า → กลับหน้าแรก
+  const mknav = await mk.page.getByRole("navigation", { name: "เมนูหลัก" }).innerText();
+  assert.ok(mknav.includes("คำอธิบายตัวเลข") && mknav.includes("รายงาน") && !mknav.includes("นำเข้า CSV") && !mknav.includes("ส่งออก") && !mknav.includes("เป้าหมายรายเดือน") && !mknav.includes("คู่มือนำเข้าข้อมูล"));
+  await mk.page.goto(BASE + "/website"); await mk.page.getByRole("heading", { name: "Website", level: 1 }).waitFor(); assert.equal(await mk.page.getByText("นำเข้าไฟล์ GA4 / Search Console").count(), 0);
+  await mk.page.goto(BASE + "/line-oa"); await mk.page.getByRole("heading", { name: "ข้อมูลที่บันทึกแล้ว" }).waitFor(); assert.equal(await mk.page.getByRole("button", { name: /^บันทึก/ }).count(), 0);
   const pr = await fetch(BASE + "/api/leads", { method: "PATCH", headers: { cookie: `authjs.session-token=${await cookie("marketing@example.com")}`, "sec-fetch-site": "same-origin", "content-type": "application/json" }, body: JSON.stringify({ lead_id: "B1", field: "call_status", value: "จอง" }) });
   assert.equal(pr.status, 403);
+  assert.deepEqual(mk.errors, []);
+  ok("Marketing (ดูอย่างเดียว): หน้าแรก = Facebook Ads · ภาพรวมมี Checklist 9 รายการ ไม่มีปุ่มแก้เป้า · รายงาน Lead ไม่มีชื่อลูกค้า · LINE OA / Website ไม่มีฟอร์มบันทึก/นำเข้า · นำเข้า / ส่งออก / เป้าหมาย / คู่มือนำเข้า / Project / Leads ถูกพาออก · เมนูไม่มีรายการเหล่านั้น");
   await m.page.goto(BASE + "/import"); await m.page.getByText("ประวัติการนำเข้า", { exact: true }).click(); await m.page.getByRole("cell", { name: "Campaigns_2026_09_01-2026_09_30_.csv" }).waitFor();
-  await m.page.locator('input[type="file"]').first().setInputFiles([`${FX}/synthetic_SalesReport.xlsx`, `${FX}/website/gsc_Devices.csv`, `${FX}/Devices_2026_09_01-2026_09_30_.csv`]);
-  await m.page.getByText(/ไฟล์รายงานยอดขาย \(\.xlsx\) นำเข้าได้เฉพาะ Admin หรือ Sales/).waitFor();
+  await m.page.locator('input[type="file"]').first().setInputFiles([`${FX}/website/gsc_Devices.csv`, `${FX}/Devices_2026_09_01-2026_09_30_.csv`]);
   await m.page.getByRole("heading", { name: "ไฟล์เว็บไซต์ (GA4 / Search Console)" }).waitFor();
-  assert.equal(await m.page.getByRole("heading", { name: "ไฟล์รายงานยอดขาย (Sales)" }).count(), 0);
   assert.equal(await m.page.locator("select").first().evaluate((el) => el.options[el.selectedIndex].text), "Google Ads — Devices (เพิ่มเติม)");
   const wtxt = await m.page.locator("section", { has: m.page.getByRole("heading", { name: "ไฟล์เว็บไซต์ (GA4 / Search Console)" }) }).last().innerText();
   assert.ok(wtxt.includes("gsc_Devices.csv") && !wtxt.includes("Devices_2026"));
   assert.deepEqual(m.errors, []);
   ok("Marketing: ภาพรวมมี Checklist 9 รายการ (ไม่มียอดขาย) ไม่มีการ์ดติดตามลูกค้า · รายงาน Lead ไม่มีชื่อลูกค้า · เข้า Seller/Buyer Leads ไม่ได้ และ PATCH /api/leads = 403 · ไฟล์ยอดขาย .xlsx ถูกปฏิเสธพร้อมเหตุผล (ไม่มีส่วน Sales) · Devices ของ Google Ads ไปขั้นตอนโฆษณา ส่วน Devices ของ Search Console ไปส่วน Website (ไม่สลับกัน)");
-  await browser.close();
+  ok("Admin (ใหม่): หน้า นำเข้า CSV ใช้ได้ · ประวัติการนำเข้า · เลือกไฟล์ผสม (เว็บไซต์ + Google Ads) ตรวจประเภทแยกให้ถูก");
   console.log(`\nผ่านทั้งหมด ${pass} รายการ`);
 } catch (e) { if (process.env.SHOT_DIR) try { await browser?.contexts().at(-1)?.pages()[0]?.screenshot({ path: process.env.SHOT_DIR + "/fail-import.png", fullPage: true }); } catch { /* */ } console.error("\n✗ FAIL:", e?.message ?? e); console.error(log.split("\n").slice(-20).join("\n")); process.exitCode = 1; } finally { try { await browser?.close(); } catch { /* */ } stop(); process.exit(process.exitCode ?? 0); }

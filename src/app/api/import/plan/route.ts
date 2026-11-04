@@ -6,7 +6,7 @@ import { HttpError, runPlan, type ImportInput } from "@/lib/import/service";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
-  const g = await requireRole(["admin", "marketing"]);
+  const g = await requireRole(["admin"]);
   if (!g.ok) return g.res;
   try {
     const input = (await req.json()) as ImportInput;

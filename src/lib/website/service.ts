@@ -112,7 +112,7 @@ export async function commitWebsite(batches: UploadBatch[], actor: string, role:
   for (const b of valid) {
     const t = await load(); // อ่านใหม่ทุกไฟล์ เพื่อให้เลขแถวถูกต้องหลังเขียนไฟล์ก่อนหน้า
     const dup = t.IMPORT_BATCHES.rows.find((x) => x.status === "success" && x.file_sha256 === b.sha256 && x.source === "website");
-    if (dup && !(overrideDuplicate && role === "admin")) throw new WebError(409, `${b.filename}: ไฟล์นี้เคยนำเข้าแล้ว (Admin เท่านั้นที่ยืนยันนำเข้าซ้ำได้ — ยอดจะไม่ถูกบวกซ้ำ)`, "DUPLICATE_FILE");
+    if (dup && !(overrideDuplicate && role === "super_admin")) throw new WebError(409, `${b.filename}: ไฟล์นี้เคยนำเข้าแล้ว (Super Admin เท่านั้นที่ยืนยันนำเข้าซ้ำได้ — ยอดจะไม่ถูกบวกซ้ำ)`, "DUPLICATE_FILE");
     const now = new Date().toISOString(), batchId = crypto.randomUUID();
     const s = planRows(b.summary as unknown as Record<string, unknown>[], t[SUM_TAB].rows, (r) => sumKey(r as unknown as SummaryRow), SUM_NUM);
     const d = planRows(b.dims as unknown as Record<string, unknown>[], t[DIM_TAB].rows, (r) => dimKey(r as unknown as DimRow), DIM_NUM);

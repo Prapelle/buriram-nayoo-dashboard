@@ -18,7 +18,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const g = await requireRole(["admin", "marketing"]);
+  const g = await requireRole(["admin"]);
   if (!g.ok) return g.res;
   try {
     const body = (await req.json()) as { action?: string; batches?: UploadBatch[]; overrideDuplicate?: boolean; manual?: ManualInput };

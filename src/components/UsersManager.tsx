@@ -4,7 +4,7 @@ import { Notice } from "@/components/Toast";
 import { useCallback, useEffect, useState } from "react";
 
 type User = { user_id: string; email: string; display_name: string; role: string; active: boolean; updated_at: string; bootstrap: boolean };
-const ROLE_LABEL: Record<string, string> = { admin: "Admin — ทุกอย่าง", marketing: "Marketing — ข้อมูลการตลาด", sales: "Sales — Leads และ Sales" };
+const ROLE_LABEL: Record<string, string> = { super_admin: "Super Admin — ทำได้ทุกอย่าง", admin: "Admin — นำเข้า / เพิ่ม / แก้ไข (ลบไม่ได้, ไม่เข้าตั้งค่า)", ae: "AE — ฝ่ายขาย + Project", marketing: "Marketing — ดูข้อมูลการตลาด (ดูอย่างเดียว)" };
 const empty = { email: "", display_name: "", role: "marketing", active: true };
 
 export function UsersManager() {
@@ -72,7 +72,7 @@ export function UsersManager() {
               return (
                 <tr key={u.user_id || u.email} className={`border-b border-slate-100 ${u.active ? "" : "text-slate-400"}`}>
                   <td className="py-1.5 pr-2">{u.email}{self && <span className="ml-1 text-xs text-slate-500">(คุณ)</span>}{u.bootstrap && <span className="ml-1 rounded bg-slate-100 px-1 text-xs text-slate-600" title="ตั้งไว้ใน Cloudflare (INITIAL_ADMIN_EMAIL) เป็น Admin เสมอ">Admin เริ่มต้น</span>}</td>
-                  <td className="pr-2">{u.display_name}</td><td className="pr-2">{u.role}</td>
+                  <td className="pr-2">{u.display_name}</td><td className="pr-2">{(ROLE_LABEL[u.role] ?? u.role).split(" — ")[0]}</td>
                   <td className="pr-2">{u.active ? <span className="text-emerald-700">ใช้งานได้</span> : "ระงับ"}</td>
                   <td className="whitespace-nowrap text-right">
                     <button onClick={() => { setEditing(u); setForm({ email: u.email, display_name: u.display_name, role: u.role, active: u.active }); setErrors({}); setMsg(null); }} className="underline">แก้ไข</button>

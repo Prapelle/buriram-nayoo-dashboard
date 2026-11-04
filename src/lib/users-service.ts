@@ -7,7 +7,7 @@
  */
 import { writeAudit } from "./audit";
 import { env } from "./env";
-import { ROLES, type Role } from "./roles";
+import { normRole, ROLES, type Role } from "./roles";
 import { appendRows, batchUpdateValues, colLetter, readTab, toRow } from "./sheets";
 
 export class UserError extends Error {
@@ -26,7 +26,7 @@ async function load() {
 export async function listUsers(): Promise<AppUser[]> {
   const t = await load();
   return t.rows.filter((r) => r.email).map((r) => ({
-    user_id: r.user_id, email: norm(r.email), display_name: r.display_name ?? "", role: r.role, active: isActive(r.active),
+    user_id: r.user_id, email: norm(r.email), display_name: r.display_name ?? "", role: normRole(r.role) ?? r.role, active: isActive(r.active),
     created_at: r.created_at ?? "", updated_at: r.updated_at ?? "", created_by: r.created_by ?? "", bootstrap: !!env.initialAdmin && norm(r.email) === env.initialAdmin,
   })).sort((a, b) => Number(b.active) - Number(a.active) || a.email.localeCompare(b.email));
 }
@@ -34,10 +34,10 @@ export async function listUsers(): Promise<AppUser[]> {
 export type SaveUserInput = { user_id?: string; email?: string; display_name?: string; role?: string; active?: boolean; updated_at_seen?: string };
 
 export async function saveUser(input: SaveUserInput, actor: string) {
-  const email = norm(input.email), name = String(input.display_name ?? "").trim(), role = String(input.role ?? "") as Role, active = input.active !== false;
+  const email = norm(input.email), name = String(input.display_name ?? "").trim(), role = (normRole(input.role) ?? String(input.role ?? "")) as Role, active = input.active !== false;
   const fields: Record<string, string> = {};
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 200) fields.email = "อีเมลไม่ถูกต้อง";
-  if (!ROLES.includes(role)) fields.role = "กรุณาเลือก Role (admin / marketing / sales)";
+  if (!ROLES.includes(role)) fields.role = "กรุณาเลือก Role (Super Admin / Admin / AE / Marketing)";
   if (name.length > 100) fields.display_name = "ชื่อยาวเกิน 100 ตัวอักษร";
   if (Object.keys(fields).length) throw new UserError(422, "ข้อมูลไม่ถูกต้อง", "VALIDATION", fields);
 
@@ -51,11 +51,11 @@ export async function saveUser(input: SaveUserInput, actor: string) {
   if (idx >= 0) {
     const prev0 = t.rows[idx];
     if ((prev0.updated_at ?? "") !== (input.updated_at_seen ?? "")) throw new UserError(409, "ผู้ใช้นี้ถูกแก้ไขไปแล้ว กรุณาโหลดใหม่ก่อนแก้ไข", "STALE");
-    if (norm(prev0.email) === me && (role !== prev0.role || !active || email !== me)) throw new UserError(409, "แก้ Role / อีเมล / ระงับบัญชีของตัวเองไม่ได้ (ให้ Admin คนอื่นทำ)", "SELF_CHANGE");
+    if (norm(prev0.email) === me && (role !== normRole(prev0.role) || !active || email !== me)) throw new UserError(409, "แก้ Role / อีเมล / ระงับบัญชีของตัวเองไม่ได้ (ให้ Super Admin คนอื่นทำ)", "SELF_CHANGE");
   }
   // ต้องเหลือ Admin ที่ใช้งานได้อย่างน้อย 1 คน
-  const adminsAfter = t.rows.filter((r, i) => r.email && (i === idx ? role === "admin" && active : r.role === "admin" && isActive(r.active))).length + (idx < 0 && role === "admin" && active ? 1 : 0);
-  if (adminsAfter === 0) throw new UserError(409, "ต้องมี Admin ที่ใช้งานได้อย่างน้อย 1 คน", "LAST_ADMIN");
+  const adminsAfter = t.rows.filter((r, i) => r.email && (i === idx ? role === "super_admin" && active : normRole(r.role) === "super_admin" && isActive(r.active))).length + (idx < 0 && role === "super_admin" && active ? 1 : 0);
+  if (adminsAfter === 0) throw new UserError(409, "ต้องมี Super Admin ที่ใช้งานได้อย่างน้อย 1 คน", "LAST_ADMIN");
 
   if (idx < 0) {
     if (input.user_id) throw new UserError(404, "ไม่พบผู้ใช้นี้ (อาจถูกแก้ไขใน Sheet) กรุณาโหลดใหม่", "NOT_FOUND");

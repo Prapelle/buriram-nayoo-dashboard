@@ -1,3 +1,4 @@
+import { normRole, type Role } from "./roles";
 import { TABS } from "./schema";
 import { batchGet, listTabs, readTabs } from "./sheets";
 
@@ -34,10 +35,11 @@ export async function systemCheck(): Promise<Check[]> {
   if (have.has("APP_USERS")) {
     const { APP_USERS, APP_CONFIG, IMPORT_BATCHES } = await readTabs(["APP_USERS", "APP_CONFIG", "IMPORT_BATCHES"]);
     const active = APP_USERS.rows.filter((u) => String(u.active).toUpperCase() === "TRUE");
-    const admins = active.filter((u) => u.role === "admin").length;
-    add("admin", "มีผู้ดูแล (Admin) ที่ใช้งานได้", admins || process.env.INITIAL_ADMIN_EMAIL ? "ok" : "fail", `Admin ${admins} · Marketing ${active.filter((u) => u.role === "marketing").length} · Sales ${active.filter((u) => u.role === "sales").length}${process.env.INITIAL_ADMIN_EMAIL ? " (+ Admin เริ่มต้นจาก INITIAL_ADMIN_EMAIL)" : ""}`);
-    const bad = APP_USERS.rows.filter((u) => u.email && !["admin", "marketing", "sales"].includes(u.role));
-    if (bad.length) add("roles", "Role ของผู้ใช้ถูกต้อง", "warn", `${bad.length} แถวใน APP_USERS มี role ที่ไม่รู้จัก (ใช้ admin / marketing / sales) ผู้ใช้เหล่านี้จะเข้าระบบไม่ได้`);
+    const cnt = (r: Role) => active.filter((u) => normRole(u.role) === r).length;
+    const admins = cnt("super_admin");
+    add("admin", "มี Super Admin ที่ใช้งานได้", admins || process.env.INITIAL_ADMIN_EMAIL ? "ok" : "fail", `Super Admin ${admins} · Admin ${cnt("admin")} · AE ${cnt("ae")} · Marketing ${cnt("marketing")}${process.env.INITIAL_ADMIN_EMAIL ? " (+ Super Admin เริ่มต้นจาก INITIAL_ADMIN_EMAIL)" : ""}`);
+    const bad = APP_USERS.rows.filter((u) => u.email && !normRole(u.role));
+    if (bad.length) add("roles", "Role ของผู้ใช้ถูกต้อง", "warn", `${bad.length} แถวใน APP_USERS มี role ที่ไม่รู้จัก (ใช้ super_admin / admin / ae / marketing) ผู้ใช้เหล่านี้จะเข้าระบบไม่ได้`);
     const keys = new Set(APP_CONFIG.rows.map((r) => r.config_key));
     add("config", "ค่า Config เริ่มต้น", ["max_upload_mb", "excluded_fb_pages"].every((k) => keys.has(k)) ? "ok" : "warn", ["max_upload_mb", "excluded_fb_pages"].every((k) => keys.has(k)) ? "ครบ" : "ขาดบางค่า — กด เตรียม Google Sheet");
     const stuck = IMPORT_BATCHES.rows.filter((b) => b.status === "processing" && Date.now() - Date.parse(b.uploaded_at) > 10 * 60_000);

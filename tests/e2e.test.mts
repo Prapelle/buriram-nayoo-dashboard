@@ -3,6 +3,7 @@
 import { generateKeyPairSync } from "node:crypto";
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
+import type { Role } from "../src/lib/roles";
 
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048, privateKeyEncoding: { type: "pkcs8", format: "pem" }, publicKeyEncoding: { type: "spki", format: "pem" } });
 Object.assign(process.env, { GOOGLE_SHEET_ID: "SHEET", GOOGLE_SERVICE_ACCOUNT_EMAIL: "sa@x.iam.gserviceaccount.com", GOOGLE_PRIVATE_KEY: privateKey.replace(/\n/g, "\\n"), INITIAL_ADMIN_EMAIL: "Admin@Example.com" });
@@ -115,11 +116,12 @@ console.log("3) นำเข้าซ้ำ / กันซ้ำ");
 const before = { c: total("GOOGLE_ADS_CAMPAIGNS", "cost_thb"), m: total("META_ADS", "amount_spent_thb"), n: rowsOf("META_ADS") };
 await assert.rejects(runCommit(file(names[0]), "m@x.com", "marketing"), (e: unknown) => e instanceof HttpError && e.code === "DUPLICATE_FILE");
 await assert.rejects(runCommit({ ...file(names[0]), overrideDuplicate: true }, "m@x.com", "marketing"), (e: unknown) => e instanceof HttpError && e.code === "DUPLICATE_FILE");
-ok("ไฟล์เดิม → บล็อก (Marketing กด override ก็ไม่ได้)");
+await assert.rejects(runCommit({ ...file(names[0]), overrideDuplicate: true }, "a@x.com", "admin"), (e: unknown) => e instanceof HttpError && e.code === "DUPLICATE_FILE");
+ok("ไฟล์เดิม → บล็อก (Marketing / Admin กด override ก็ไม่ได้ — เฉพาะ Super Admin)");
 const plan = await runPlan(file(names[0])); assert.ok(plan.fileDuplicate);
-const o = await runCommit({ ...file(names[0]), overrideDuplicate: true }, "admin@example.com", "admin");
+const o = await runCommit({ ...file(names[0]), overrideDuplicate: true }, "admin@example.com", "super_admin");
 assert.deepEqual([o.counts.insert, o.counts.update, o.counts.skip], [0, 0, 24]);
-const o2 = await runCommit({ ...file("Facebookads.csv"), overrideDuplicate: true }, "admin@example.com", "admin"); assert.equal(o2.counts.skip, 103);
+const o2 = await runCommit({ ...file("Facebookads.csv"), overrideDuplicate: true }, "admin@example.com", "super_admin"); assert.equal(o2.counts.skip, 103);
 assert.equal(total("GOOGLE_ADS_CAMPAIGNS", "cost_thb"), before.c); assert.equal(total("META_ADS", "amount_spent_thb"), before.m); assert.equal(rowsOf("META_ADS"), before.n);
 assert.ok(col("AUDIT_LOG", "action").includes("import_duplicate_override"));
 ok("Admin override: skip ทุกแถว, Spend/จำนวนแถวไม่เพิ่ม, มี Audit Log");
@@ -211,11 +213,13 @@ assert.equal(l2.lead.lead_code, `LD-${year}-0002`); assert.notEqual(l2.lead.lead
 ok("สร้าง Lead: Lead Code เรียง LD-ปี-0001/0002 ไม่ซ้ำ, UUID ไม่ซ้ำ, Area เริ่มเป็น unknown");
 for (const [name, extra] of [["เบอร์เดียวกันคนละรูปแบบ (+66)", { phone: "+66 81 234 5678" }], ["อีเมลเดียวกันคนละตัวพิมพ์", { email: "SOMCHAI@example.COM" }]] as const) {
   try { await saveLead({ ...base, customer_name: "คนซ้ำ", ...extra }, "s@x.com"); assert.fail("ต้องเตือน"); }
-  catch (x) { assert.ok(x instanceof LeadError && x.code === "DUPLICATE_WARNING", name); assert.equal(x.extra.matches![0].lead_code, `LD-${year}-0001`); }
+  catch (x) { assert.ok(x instanceof LeadError && x.code === "DUPLICATE_SAME_SIDE", name); assert.equal(x.extra.matches![0].lead_code, `LD-${year}-0001`); }
 }
-assert.equal(rowsOf("LEADS"), 2); ok("เตือนซ้ำจากเบอร์ (+66 = 0…) และอีเมล (ไม่สนตัวพิมพ์) โดยยังไม่เขียนข้อมูล");
-const l3 = await saveLead({ ...base, customer_name: "คนซ้ำ", phone: "0812345678", confirmDuplicate: true }, "s@x.com");
-assert.equal(l3.lead.lead_code, `LD-${year}-0003`); assert.equal(rowsOf("LEADS"), 3); ok("ยืนยันบันทึกต่อ → เป็นรายการแยก ไม่ merge อัตโนมัติ (3 แถว)");
+assert.equal(rowsOf("LEADS"), 2); ok("ฝั่งเดียวกันซ้ำเบอร์ (+66 = 0…) / อีเมล (ไม่สนตัวพิมพ์) → บล็อก ไม่เขียนข้อมูล");
+await assert.rejects(saveLead({ ...base, customer_name: "คนซ้ำ", phone: "0812345678", confirmDuplicate: true } as never, "s@x.com"), isLead("DUPLICATE_SAME_SIDE")); assert.equal(rowsOf("LEADS"), 2); ok("ฝั่งเดียวกันซ้ำ: ส่ง confirmDuplicate มาก็ยังบล็อก (ฝั่งละ 1 รายการ)");
+const l3 = await saveLead({ ...base, customer_name: "คนซ้ำ", phone: "0812345678", need: "ขาย" }, "s@x.com");
+assert.equal(l3.lead.lead_code, `LD-${year}-0003`); assert.equal(rowsOf("LEADS"), 3); await assert.rejects(saveLead({ ...base, customer_name: "คนซ้ำ 2", phone: "0812345678", need: "ขาย" }, "s@x.com"), isLead("DUPLICATE_SAME_SIDE"));
+ok("คนเดียวกันคนละฝั่ง (ซื้อ + ขาย) บันทึกได้ · ฝั่งขายซ้ำอีกรายการ → บล็อก (3 แถว)");
 try { await saveLead({ received_at: "2026-02-31", customer_name: " ", source_channel: "x", service_category: "y", need: "z", phone: "12", email: "nope" }, "s@x.com"); assert.fail("ต้อง error"); }
 catch (x) { assert.ok(x instanceof LeadError && x.code === "VALIDATION"); assert.deepEqual(Object.keys(x.extra.fields!).sort(), ["customer_name", "email", "need", "phone", "received_at", "service_category", "source_channel"]); }
 assert.equal(rowsOf("LEADS"), 3); ok("ฟิลด์บังคับ/รูปแบบผิด → แจ้งรายช่อง ไม่เขียนข้อมูล");
@@ -302,7 +306,7 @@ const { parseCsv } = await import("../src/lib/csv");
 const { TABS: TABS10 } = await import("../src/lib/schema");
 const isExp = (code: string) => (x: unknown) => x instanceof ExportError && x.code === code;
 const readBack = (csv: string) => { const t = parseCsv(csv); return { headers: t[0], rows: t.slice(1).map((r) => Object.fromEntries(t[0].map((h, i) => [h, r[i] ?? ""]))) }; };
-const exp = async (id: string, f: Record<string, string> = {}, role: "admin" | "marketing" | "sales" = "admin") => { const r = await exportDataset(id, parseFilters(new URLSearchParams(f)), role, "u@x.com"); return { ...r, ...readBack(r.csv!) }; };
+const exp = async (id: string, f: Record<string, string> = {}, role: Role = "admin") => { const r = await exportDataset(id, parseFilters(new URLSearchParams(f)), role, "u@x.com"); return { ...r, ...readBack(r.csv!) }; };
 
 const need = ["facebook_page_posts", "facebook_ads", "google_ads_campaigns", "google_ads_search_terms", "google_ads_search_words", "google_ads_keywords", "google_ads_network", "google_ads_age", "google_ads_gender", "google_ads_gender_age", "google_ads_schedule_day", "google_ads_schedule_hour", "google_ads_schedule_day_hour", "google_ads_opt_score", "google_ads_campaign_changes", "line_oa_monthly", "leads", "sales", "marketing_monthly_summary"];
 assert.deepEqual(need.filter((i) => !DATASET_BY_ID[i]), []); assert.ok(need.every((i) => DATASET_BY_ID[i].filename === `${i}.csv`)); assert.equal(DATASETS.length, 19 + 3 + 1 + 2 + 2 + 1); // Phase 8: + marketing_performance_kpis, data_dictionary · Phase 5: + website_analytics, website_dimensions · + facebook_page_insights
@@ -321,9 +325,9 @@ ok("Facebook Ads: 103 แถว spend 37,557.54 ไม่มี ฿, กรอ�
 const gc = await exp("google_ads_campaigns"); assert.equal(gc.rows.length, 24); assert.equal(Math.round(gc.rows.reduce((s, r) => s + Number(r.cost_thb), 0) * 100) / 100, total("GOOGLE_ADS_CAMPAIGNS", "cost_thb"));
 assert.equal((await exp("google_ads_time_series", { from: "2026-09-10", to: "2026-09-20" })).rows.length, 11); assert.equal((await exp("google_ads_search_terms", { campaign: "ไม่ใช้กับชุดนี้" })).rows.length, (await exp("google_ads_search_terms")).rows.length);
 ok("Google Ads: Campaign 24 แถว, รายวันกรอง 11 วัน, ตัวกรอง Campaign ไม่มีผลกับรายงานที่ไม่มีคอลัมน์แคมเปญ");
-await assert.rejects(exportDataset("leads", {}, "marketing", "u@x.com"), isExp("FORBIDDEN")); await assert.rejects(exportDataset("sales", {}, "marketing", "u@x.com"), isExp("FORBIDDEN")); await assert.rejects(exportDataset("facebook_ads", {}, "sales", "u@x.com"), isExp("FORBIDDEN")); await assert.rejects(exportDataset("nope", {}, "admin", "u@x.com"), isExp("NOT_FOUND")); await assert.rejects(exportDataset("sales_transactions", {}, "admin", "u@x.com"), isExp("USE_ROUTE"));
+await assert.rejects(exportDataset("leads", {}, "marketing", "u@x.com"), isExp("FORBIDDEN")); await assert.rejects(exportDataset("sales", {}, "marketing", "u@x.com"), isExp("FORBIDDEN")); await assert.rejects(exportDataset("facebook_ads", {}, "ae", "u@x.com"), isExp("FORBIDDEN")); await assert.rejects(exportDataset("nope", {}, "admin", "u@x.com"), isExp("NOT_FOUND")); await assert.rejects(exportDataset("sales_transactions", {}, "admin", "u@x.com"), isExp("USE_ROUTE"));
 ok("สิทธิ์: Marketing ส่งออก Leads/Sales ไม่ได้, Sales ส่งออกข้อมูลโฆษณาไม่ได้, ชุดข้อมูลที่ไม่มี → NOT_FOUND");
-const ld = await exp("leads", {}, "sales"); assert.equal(ld.rows.length, 3); assert.ok(ld.headers.includes("phone") && ld.headers.includes("email")); assert.equal((await exp("leads", { channel: "Google Ads" }, "sales")).rows.length, 0); assert.equal((await exp("leads", { from: "2026-09-06", to: "2026-09-30" }, "sales")).rows.length, 0);
+const ld = await exp("leads", {}, "ae"); assert.equal(ld.rows.length, 3); assert.ok(ld.headers.includes("phone") && ld.headers.includes("email")); assert.equal((await exp("leads", { channel: "Google Ads" }, "ae")).rows.length, 0); assert.equal((await exp("leads", { from: "2026-09-06", to: "2026-09-30" }, "ae")).rows.length, 0);
 assert.equal((await exp("sales", {}, "admin")).rows.length, 1); /* แถวจำลอง MAN-0001 จากการทดสอบหัวข้อ 9 */ ok("Leads: 3 แถวมีเบอร์/อีเมล (เฉพาะ Admin/Sales), ตัวกรองช่องทาง/วันที่ทำงาน; Sales (ดีล) ส่งออกได้");
 const lm = await exp("line_oa_monthly", {}, "marketing"); assert.equal(lm.rows.length, 2); assert.equal((await exp("line_oa_monthly", { from: "2026-10-01", to: "2026-10-31" })).rows.length, 1);
 const sm = await exp("marketing_monthly_summary", {}, "admin"); const sep = sm.rows.find((r) => r.month === "2026-09")!;
@@ -402,7 +406,7 @@ const dc = await runCommit(file(dailyName), "m@x.com", "marketing"); assert.equa
 assert.equal(rowsOf("FB_PAGE_POSTS"), fbBefore + 120); assert.equal(new Set(col("FB_PAGE_POSTS", "row_key")).size, fbBefore + 120);
 ok(`นำเข้าไฟล์รายวันจริงผ่าน service: เพิ่ม 120 แถว (จาก ${fbBefore} เป็น ${fbBefore + 120}) แถว Lifetime เดิมไม่ถูกแตะ, row_key ไม่ซ้ำ`);
 await assert.rejects(runCommit(file(dailyName), "m@x.com", "marketing"), (x: unknown) => x instanceof HttpError && x.code === "DUPLICATE_FILE");
-const dOver = await runCommit({ ...file(dailyName), overrideDuplicate: true }, "admin@example.com", "admin");
+const dOver = await runCommit({ ...file(dailyName), overrideDuplicate: true }, "admin@example.com", "super_admin");
 assert.deepEqual([dOver.counts.insert, dOver.counts.update, dOver.counts.skip], [0, 0, 390]); assert.equal(rowsOf("FB_PAGE_POSTS"), fbBefore + 120);
 ok("นำเข้าไฟล์รายวันเดิมซ้ำ: ถูกบล็อก; Admin ยืนยัน → ข้ามทั้ง 390 แถว จำนวนแถวไม่เพิ่ม");
 const fbt = tabs.get("FB_PAGE_POSTS")!; const fh = fbt.rows[0];
@@ -566,7 +570,7 @@ console.log("15b2) หน้า Leads: ช่อง Line (30/10/2026)");
   const ln = (await saveLead({ ...base, customer_name: "มีไลน์", phone: "", line_id: "@Somchai.BR", need: "ซื้อ" }, "s@x.com")).lead;
   assert.equal(ln.line_id, "@Somchai.BR"); assert.deepEqual(TABS.find((t) => t.name === "LEADS")!.headers.slice(-2), ["line_id", "interest"]);
   const lrow = (await listLeads()).rows.find((r) => r.lead_id === ln.lead_id)!; assert.equal(lrow.line_id, "@Somchai.BR");
-  await assert.rejects(saveLead({ ...base, customer_name: "ไลน์ซ้ำ", phone: "", line_id: "somchai.br ", need: "ซื้อ" }, "s@x.com"), (e: unknown) => e instanceof LeadError && e.code === "DUPLICATE_WARNING" && e.extra.matches![0].matched.includes("line"));
+  await assert.rejects(saveLead({ ...base, customer_name: "ไลน์ซ้ำ", phone: "", line_id: "somchai.br ", need: "ซื้อ" }, "s@x.com"), (e: unknown) => e instanceof LeadError && e.code === "DUPLICATE_SAME_SIDE" && e.extra.matches![0].matched.includes("line"));
   assert.equal(filterLeads((await listLeads()).rows, { q: "somchai.br" }).length, 1);
   const upd = (await saveLead({ ...lrow, line_id: "@Somchai.BR", notes: "แก้โน้ต", updated_at_seen: lrow.updated_at }, "s@x.com")).lead; assert.equal(upd.line_id, "@Somchai.BR");
   ok("บันทึก Line ลง Sheet (คอลัมน์ใหม่ต่อท้าย line_id) · Line ซ้ำ (ไม่สนตัวพิมพ์/@/ช่องว่าง) → เตือน Lead ซ้ำ · ค้นหาด้วย Line ได้ · แก้ไขส่วนอื่นค่า Line คงเดิม");
@@ -599,17 +603,17 @@ await assert.rejects(saveUser({ email: "bad", role: "boss" }, ADM), (x: unknown)
 await assert.rejects(saveUser({ ...nu, role: "sales", updated_at_seen: "เก่า" }, ADM), isU("STALE"));
 ok("อีเมลซ้ำ → ปฏิเสธ · อีเมล/Role ผิด → แจ้งรายช่อง · แก้จากข้อมูลเก่า → ปฏิเสธ");
 await saveUser({ ...nu, role: "sales", active: false, updated_at_seen: nu.updated_at }, ADM);
-assert.equal(await resolveRole("new.user@gmail.com"), null); us = await listUsers(); assert.equal(us.find((u) => u.email === "new.user@gmail.com")!.role, "sales");
+assert.equal(await resolveRole("new.user@gmail.com"), null); us = await listUsers(); assert.equal(us.find((u) => u.email === "new.user@gmail.com")!.role, "ae");
 ok("เปลี่ยน Role + ระงับ → resolveRole = null (เข้าไม่ได้) แถวยังอยู่ (ไม่ลบ)");
 const ad = us.find((u) => u.email === ADM)!;
 await assert.rejects(saveUser({ ...ad, active: false, updated_at_seen: ad.updated_at }, ADM), isU("SELF_CHANGE"));
-await saveUser({ email: "boss2@example.com", role: "admin" }, ADM); us = await listUsers(); const b2 = us.find((u) => u.email === "boss2@example.com")!;
+await saveUser({ email: "boss2@example.com", role: "super_admin" }, ADM); us = await listUsers(); const b2 = us.find((u) => u.email === "boss2@example.com")!;
 const ad2 = us.find((u) => u.email === ADM)!; await saveUser({ ...ad2, role: "marketing", updated_at_seen: ad2.updated_at }, "boss2@example.com");
 us = await listUsers(); const ad3 = us.find((u) => u.email === ADM)!; assert.equal(ad3.role, "marketing"); assert.equal(ad3.bootstrap, true);
 await assert.rejects(saveUser({ ...b2, active: false, updated_at_seen: b2.updated_at }, ADM), isU("LAST_ADMIN"));
-await saveUser({ ...ad3, role: "admin", updated_at_seen: ad3.updated_at }, "boss2@example.com");
-const audU = tabs.get("AUDIT_LOG")!.rows.map((r) => r.join("|")); assert.ok(audU.some((r) => r.includes("user_create")) && audU.some((r) => r.includes("role admin → marketing")));
-ok("แก้/ระงับตัวเองไม่ได้ · ต้องเหลือ Admin ใช้งานได้ ≥ 1 คน · Admin เริ่มต้น (INITIAL_ADMIN_EMAIL) ถูกระบุ · Audit Log บันทึกการเพิ่ม/เปลี่ยน Role");
+await saveUser({ ...ad3, role: "super_admin", updated_at_seen: ad3.updated_at }, "boss2@example.com");
+const audU = tabs.get("AUDIT_LOG")!.rows.map((r) => r.join("|")); assert.ok(audU.some((r) => r.includes("user_create")) && audU.some((r) => r.includes("role super_admin → marketing")));
+ok("แก้/ระงับตัวเองไม่ได้ · ต้องเหลือ Super Admin ใช้งานได้ ≥ 1 คน · Admin เริ่มต้น (INITIAL_ADMIN_EMAIL) ถูกระบุ · Audit Log บันทึกการเพิ่ม/เปลี่ยน Role");
 console.log("15d) Phase 5 — Website Analytics ผ่าน service + Sheets จำลอง");
 {
   const { parseWebsiteFile, assembleBatches } = await import("../src/lib/website/parse");
@@ -630,7 +634,7 @@ console.log("15d) Phase 5 — Website Analytics ผ่าน service + Sheets �
   assert.equal(total("WEBSITE_ANALYTICS", "page_views"), 35820); assert.equal(total("WEBSITE_ANALYTICS", "search_clicks"), 4744);
   ok("นำเข้าทั้งชุด 7 ไฟล์: สรุป 28 แถว (GA4 1 + รายวัน 27) · รายละเอียด 998 แถว · Page Views 35,820 · Search Clicks 4,744 ใน Sheet");
   await assert.rejects(ws.commitWebsite(batches, "m@x.com", "marketing"), (x: unknown) => x instanceof ws.WebError && x.code === "DUPLICATE_FILE");
-  const again = await ws.commitWebsite(batches, "admin@example.com", "admin", true);
+  const again = await ws.commitWebsite(batches, "admin@example.com", "super_admin", true);
   assert.ok(again.results.every((r) => r.inserted === 0 && r.updated === 0)); assert.equal(rowsOf("WEBSITE_ANALYTICS"), 28); assert.equal(total("WEBSITE_ANALYTICS", "page_views"), 35820);
   ok("นำเข้าซ้ำ: Marketing ถูกบล็อก · Admin ยืนยัน → ข้ามทุกแถว (เพิ่ม 0) ยอดไม่ซ้ำ");
   const ch = JSON.parse(JSON.stringify(batches.find((b) => b.kind === "gsc_chart")!)); ch.sha256 = "f".repeat(64); ch.summary[0].search_clicks = 170; ch.summary[0].search_ctr_pct = 2.3;
@@ -694,7 +698,7 @@ console.log("16b) Facebook Page ระดับเพจ: Viewers / Link clicks 
   const sm = await exp("marketing_monthly_summary", {}, "marketing"); const sep = sm.rows.find((r) => r.month === "2026-09")!;
   assert.equal(sep.fb_page_viewers_sum, "806272"); assert.equal(sep.fb_page_link_clicks, "6443"); assert.equal(sm.headers.slice(-2).join(), "fb_page_viewers_sum,fb_page_link_clicks");
   const pi = await exp("facebook_page_insights", { from: "2026-09-10", to: "2026-09-12" }, "marketing"); assert.equal(pi.rows.length, 6);
-  await assert.rejects(exp("facebook_page_insights", {}, "sales"));
+  await assert.rejects(exp("facebook_page_insights", {}, "ae"));
   ok("Export: สรุปรายเดือน ก.ย. fb_page_viewers_sum 806,272 / fb_page_link_clicks 6,443 (คอลัมน์ต่อท้าย) · facebook_page_insights.csv กรองวันที่ได้ · Sales ไม่มีสิทธิ์");
 }
 console.log("16c) เป้าหมายรายเดือน + Dashboard เมื่อแท็บใหม่ยังไม่ถูกสร้าง (30/10/2026)");
@@ -803,7 +807,7 @@ ok(`ทุกไฟล์ส่งออก (${DATASETS.filter((d) => !d.route).
 assert.ok(dict.rows.find((r) => r.dataset_id === "google_ads_campaigns" && r.column_name === "cost_thb")!.column_type === "money_thb" && dict.rows.find((r) => r.dataset_id === "facebook_page_posts" && r.column_name === "publish_time")!.column_type === "datetime_local");
 assert.ok(dict.rows.every((r) => r.grain)); ok("data_dictionary ระบุ grain ทุกไฟล์ และชนิดตาม spec ของตัวนำเข้า (เช่น cost_thb = money_thb, publish_time = datetime_local)");
 const dm = await exp("data_dictionary", {}, "marketing"); assert.ok(!dm.rows.some((r) => ["deal_value_thb", "gross_profit_thb"].includes(r.column_name)) && !dm.rows.some((r) => r.dataset_id === "leads"));
-const ds_ = await exp("data_dictionary", {}, "sales"); assert.ok(!ds_.rows.some((r) => r.dataset_id === "facebook_ads")); ok("data_dictionary ตามสิทธิ์: Marketing ไม่เห็นไฟล์ Leads/คอลัมน์การเงิน · Sales ไม่เห็นไฟล์โฆษณา");
+const ds_ = await exp("data_dictionary", {}, "ae"); assert.ok(!ds_.rows.some((r) => r.dataset_id === "facebook_ads")); ok("data_dictionary ตามสิทธิ์: Marketing ไม่เห็นไฟล์ Leads/คอลัมน์การเงิน · Sales ไม่เห็นไฟล์โฆษณา");
 
 for (const t of ["FB_PAGE_POSTS", "META_ADS", "GOOGLE_ADS_CAMPAIGNS", "LEADS"]) { const d = DATASETS.find((x) => x.tab === t)!; const old = TABS10.find((x) => x.name === t)!.headers.filter((h) => !["record_id", "row_key", "raw_json", "source_batch_id"].includes(h)); assert.deepEqual(d.columns, old); }
 const sm17 = await exp("marketing_monthly_summary", {}, "admin"); assert.deepEqual(sm17.headers.slice(0, OLD_SUMMARY.length), OLD_SUMMARY);
@@ -824,7 +828,7 @@ const pfx = await exp("marketing_performance_kpis", { from: "2026-09-01", to: "2
 const byK = Object.fromEntries(pfx.rows.map((r) => [r.kpi_key, r]));
 assert.equal(Number(byK.g_spend.value), 28814.82); assert.equal(Number(byK.g_clicks.value), 31513); assert.equal(byK.g_spend.yoy_period_from, "2025-09-01"); assert.equal(byK.g_spend.yoy_status, "missing"); assert.equal(byK.g_spend.yoy_change_pct, "");
 assert.equal(byK.w_users.value, "17443"); assert.equal(byK.w_users.yoy_status, "missing"); assert.equal(byK.s_clicks.state, "pending"); assert.equal(byK.s_clicks.value, ""); assert.equal(byK.s_clicks.yoy_status, "current_unavailable"); assert.equal(byK.g_spend.kind, "Paid"); assert.equal(byK.f_eng.kind, "Organic");
-await assert.rejects(exportDataset("marketing_performance_kpis", {}, "sales", "u@x.com"), isExp("FORBIDDEN"));
+await assert.rejects(exportDataset("marketing_performance_kpis", {}, "ae", "u@x.com"), isExp("FORBIDDEN"));
 ok("marketing_performance_kpis.csv: หนึ่งแถวต่อ KPI ค่าเดียวกับหน้า Performance (Spend 28,814.82) · ปีก่อนไม่มีข้อมูล → yoy_status = missing · Website Users 17,443 (Snapshot) · Search Console ก.ย. ไม่มี → ว่าง (pending) ไม่ใช่ 0 · Paid/Organic แยกคอลัมน์ kind · Sales ไม่มีสิทธิ์");
 
 const ln = await exp("leads", { need: "ขาย" }, "admin"); assert.ok(ln.rows.length > 0 && ln.rows.every((r) => r.need === "ขาย"));
@@ -836,6 +840,49 @@ assert.equal(le.received_at, normalizeExportValue("date", "46266")); assert.matc
 leadT.rows[1][ri] = keep17[0]; leadT.rows[1][ci] = keep17[1];
 assert.equal(columnType("LEADS", "received_at"), "date"); assert.equal(normalizeExportValue("date", "2026-09-01"), "2026-09-01"); assert.equal(normalizeExportValue("text", "46266"), "46266");
 ok(`วันที่ที่ถูกแก้มือใน Sheet จนเป็นเลขลำดับวัน (46266) → ส่งออกเป็น ${normalizeExportValue("date", "46266")} · true → TRUE · คอลัมน์ข้อความไม่ถูกแปลง`);
+console.log("17) Lead: URL ทรัพย์ (nayoo.co) + สถานะต่อทรัพย์ · ฝั่งละ 1 Lead (4/11/2026)");
+{
+  const { deleteLead: delL } = await import("../src/lib/leads-service");
+  const isL = (code: string) => (x: unknown) => x instanceof LeadError && x.code === code;
+  const b0 = { received_at: "2026-10-01", source_channel: "Facebook Ads", service_category: "Product" };
+  const nP = rowsOf("LEAD_PROPERTIES"), nL = rowsOf("LEADS");
+  await assert.rejects(saveLead({ ...b0, customer_name: "ทรัพย์ผิด", phone: "0861110000", need: "ซื้อ", properties: [{ url: "https://evil.com/x", status: "สนใจ" }, { url: "nayoo.co.evil.com/a" }] }, "s@x.com"),
+    (x: unknown) => isL("VALIDATION")(x) && !!(x as InstanceType<typeof LeadError>).extra.fields!.property_0 && !!(x as InstanceType<typeof LeadError>).extra.fields!.property_1);
+  await assert.rejects(saveLead({ ...b0, customer_name: "ทรัพย์ผิด", phone: "0861110000", need: "ซื้อ", properties: [{ url: "https://nayoo.co/p/1", status: "สนใจขาย" }] }, "s@x.com"), isL("VALIDATION"));
+  await assert.rejects(saveLead({ ...b0, customer_name: "ทรัพย์ผิด", phone: "0861110000", need: "ซื้อ", properties: [{ url: "https://nayoo.co/p/1" }, { url: "nayoo.co/p/1/" }] }, "s@x.com"), isL("VALIDATION"));
+  assert.equal(rowsOf("LEADS"), nL); assert.equal(rowsOf("LEAD_PROPERTIES"), nP);
+  ok("URL ต้องเป็น nayoo.co (โดเมนปลอมแบบ nayoo.co.evil.com ไม่ผ่าน) · สถานะต้องตรงฝั่ง · URL ซ้ำใน Lead เดียวกันไม่ได้ → ไม่เขียนอะไรเลย");
+  const buy = (await saveLead({ ...b0, customer_name: "คุณทรัพย์", phone: "0861110000", need: "ซื้อ", properties: [{ url: "https://nayoo.co/property/111", status: "สนใจ" }, { url: "www.nayoo.co/property/222", status: "เข้าชมแล้ว" }] }, "s@x.com")).lead;
+  assert.equal(rowsOf("LEAD_PROPERTIES"), nP + 2);
+  let L = await listLeads(); assert.equal(L.propertiesReady, true); let mine = L.properties[buy.lead_id];
+  assert.deepEqual(mine.map((p) => [p.url, p.status]), [["https://nayoo.co/property/111", "สนใจ"], ["https://www.nayoo.co/property/222", "เข้าชมแล้ว"]]);
+  ok("Lead ซื้อ + 2 URL: บันทึกลงแท็บ LEAD_PROPERTIES (เติม https:// ให้) และอ่านกลับพร้อม Lead");
+  const sell = (await saveLead({ ...b0, customer_name: "คุณทรัพย์", phone: "086-111-0000", need: "ขาย", properties: [{ url: "https://nayoo.co/property/333", status: "สัญญาเปิด" }] }, "s@x.com")).lead;
+  assert.notEqual(sell.lead_id, buy.lead_id); await assert.rejects(saveLead({ ...b0, customer_name: "คุณทรัพย์", phone: "0861110000", need: "ขาย" }, "s@x.com"), isL("DUPLICATE_SAME_SIDE"));
+  ok("คนเดียวกัน (ชื่อ + เบอร์เดียวกัน) มี Lead ซื้อ 1 + ขาย 1 ได้ · ฝั่งขายรายการที่ 2 → บล็อก · สถานะฝั่งขาย สัญญาเปิด บันทึกได้");
+  const cur0 = (await listLeads()).rows.find((r) => r.lead_id === buy.lead_id)!;
+  const keepOne = [{ property_id: mine[0].property_id, url: mine[0].url, status: "ซื้อ" }, { url: "https://nayoo.co/property/444", status: "สนใจ" }];
+  await assert.rejects(saveLead({ ...cur0, lead_id: buy.lead_id, updated_at_seen: cur0.updated_at, properties: keepOne }, "a@x.com", "admin"), isL("FORBIDDEN_DELETE"));
+  assert.equal(rowsOf("LEAD_PROPERTIES"), nP + 3); assert.equal((await listLeads()).rows.find((r) => r.lead_id === buy.lead_id)!.updated_at, cur0.updated_at);
+  ok("Admin เอาทรัพย์ที่บันทึกแล้วออก → ปฏิเสธก่อนเขียน (Lead และทรัพย์ไม่เปลี่ยน)");
+  await new Promise((r) => setTimeout(r, 5));
+  const up = await saveLead({ ...cur0, lead_id: buy.lead_id, updated_at_seen: cur0.updated_at, properties: [...keepOne, { property_id: mine[1].property_id, url: mine[1].url, status: "ยกเลิก" }] }, "a@x.com", "admin");
+  L = await listLeads(); mine = L.properties[buy.lead_id];
+  assert.deepEqual(mine.map((p) => p.status).sort(), ["ซื้อ", "ยกเลิก", "สนใจ"]); assert.equal(rowsOf("LEAD_PROPERTIES"), nP + 4);
+  assert.equal(L.rows.find((r) => r.lead_id === buy.lead_id)!.call_status, cur0.call_status); // สถานะทรัพย์แยกจากสถานะ Lead
+  ok("Admin เพิ่ม URL + เปลี่ยนสถานะทรัพย์ได้ (ซื้อ / ยกเลิก) · ไม่กระทบ Call Status ของ Lead");
+  await new Promise((r) => setTimeout(r, 5));
+  await saveLead({ ...up.lead, updated_at_seen: up.lead.updated_at, properties: mine.filter((p) => p.status !== "ยกเลิก").map((p) => ({ property_id: p.property_id, url: p.url, status: p.status })) }, "s@x.com", "ae");
+  assert.equal((await listLeads()).properties[buy.lead_id].length, 2); assert.equal(rowsOf("LEAD_PROPERTIES"), nP + 3);
+  await assert.rejects(saveLead({ ...up.lead, updated_at_seen: "เก่า", properties: [] }, "s@x.com", "ae"), isL("STALE"));
+  ok("AE เอาทรัพย์ออกได้ (ลบแถวในแท็บ) · แก้จากข้อมูลเก่า → ปฏิเสธ");
+  const fresh = (await listLeads()).rows.find((r) => r.lead_id === buy.lead_id)!;
+  await delL(buy.lead_id, fresh.updated_at, "s@x.com"); await delL(sell.lead_id, sell.updated_at, "s@x.com");
+  assert.equal(rowsOf("LEAD_PROPERTIES"), nP); assert.equal(rowsOf("LEADS"), nL);
+  ok("ลบ Lead → ทรัพย์ของ Lead นั้นถูกลบด้วย (ไม่เหลือแถวกำพร้า)");
+  const auditP = tabs.get("AUDIT_LOG")!.rows.map((r) => r.join("|")); assert.ok(auditP.some((r) => r.includes("ทรัพย์ +2")) && auditP.some((r) => r.includes("ลบทรัพย์ 1")));
+  ok("Audit Log บันทึกการเพิ่ม/แก้/ลบทรัพย์");
+}
 void fbLifeRows;
 void periodsFromFilename;
 console.log(`\nผ่านทั้งหมด ${pass} รายการ (Sheets API calls จำลอง: ${apiCalls})`);

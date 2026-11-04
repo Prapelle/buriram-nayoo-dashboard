@@ -55,6 +55,7 @@ export const TABS: TabDef[] = [
     "need","buy_status","sell_status","property_type","property_condition","price_range","call_status","staff",
     // 30/10/2026: ต่อท้าย
     "line_id","interest"] },
+  { name: "LEAD_PROPERTIES", group: "manual", headers: ["property_id","lead_id","url","status","created_by","created_at","updated_by","updated_at"] }, // URL ทรัพย์ (nayoo.co) ต่อ Lead + สถานะ (4/11/2026)
   { name: "SALES", group: "manual", headers: ["sale_id","sale_code","lead_id","closing_date","revenue_date","customer_name","company_name","service_category","package_name","deal_value_thb","company_revenue_thb","direct_cost_thb","payment_status","source_channel","campaign_name","owner_email","notes","created_by","created_at","updated_by","updated_at","invoice_no"] },
   { name: "SALES_TRANSACTIONS", group: "manual", headers: SALES_TX_COLUMNS },
   { name: "SALES_IMPORT_LOG", group: "system", headers: SALES_LOG_COLUMNS },

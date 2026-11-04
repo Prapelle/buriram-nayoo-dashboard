@@ -1,8 +1,7 @@
+import { requirePage } from "@/lib/page-guard";
 import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
 import { logError } from "@/lib/log";
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { auth } from "@/auth";
 import { DataTable } from "@/components/DataTable";
 import { num } from "@/lib/dashboard";
 import { SPECS } from "@/lib/import/specs";
@@ -14,8 +13,7 @@ const HIDE = ["record_id", "raw_json", "row_key", "source_batch_id", "imported_a
 const TYPES = SPECS.filter((s) => s.source === "google_ads");
 
 export default async function GoogleAdsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const role = (await auth())?.user?.role;
-  if (role !== "admin" && role !== "marketing") redirect("/home");
+  const role = await requirePage("/google-ads");
   const sp = await searchParams;
   const spec = TYPES.find((s) => s.id === one(sp.type)) ?? TYPES[0];
   const q = one(sp.q);

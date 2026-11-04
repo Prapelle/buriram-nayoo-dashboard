@@ -8,9 +8,9 @@ import { readColumns } from "@/lib/tabdata";
 
 export const dynamic = "force-dynamic";
 
-// ข้อมูลการเงิน/ลูกค้า: เฉพาะ Admin และ Sales และบันทึก Audit Log ทุกครั้งที่ส่งออก
+// ข้อมูลการเงิน/ลูกค้า: เฉพาะ Admin และ AE และบันทึก Audit Log ทุกครั้งที่ส่งออก
 export async function GET(req: Request) {
-  const g = await requireRole(["admin", "sales"]);
+  const g = await requireRole(["admin"]);
   if (!g.ok) return g.res;
   const sp = new URL(req.url).searchParams;
   const iso = (v: string | null) => (v && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);

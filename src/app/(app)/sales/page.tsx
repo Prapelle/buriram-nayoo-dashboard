@@ -1,11 +1,10 @@
+import { requirePage } from "@/lib/page-guard";
 import { RangeFields } from "@/components/RangeFields";
 import { logError } from "@/lib/log";
 import { rangeOf } from "@/lib/range-memory";
 import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
 import Link from "next/link";
 import { Note } from "@/components/Note";
-import { redirect } from "next/navigation";
-import { auth } from "@/auth";
 import { BarList, LineChart, Pending } from "@/components/charts";
 import { DataTable } from "@/components/DataTable";
 import { computeSales, type SalesFilters, type TxRow } from "@/lib/sales/dashboard";
@@ -19,8 +18,7 @@ const LABELS: Record<string, string> = { company_name: "บริษัทผู
 const MONEY = new Set(["gross_sales", "discount_amount", "net_value", "vat_amount", "total_net", "sales_inc_vat", "discount_before_vat", "discount_doc"]);
 
 export default async function SalesDashboardPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const role = (await auth())?.user?.role;
-  if (role !== "admin" && role !== "sales") redirect("/home");
+  const role = await requirePage("/sales");
   const sp = await searchParams;
   const rg = await rangeOf(sp);
   const f: SalesFilters = { from: rg.from, to: rg.to, period: one(sp.period) || undefined, project: one(sp.project) || undefined, salesperson: one(sp.salesperson) || undefined, status: one(sp.status) || undefined, q: one(sp.q) || undefined };

@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 // ตัวเลขแจ้งเตือนบนเมนู (31/10/2026): Leads = เลยกำหนดติดตาม + ต้องติดตามวันนี้ · เฉพาะ Admin / Sales (ส่งเฉพาะจำนวน ไม่มีข้อมูลลูกค้า)
 export async function GET() {
-  const g = await requireRole(["admin", "sales"]);
+  const g = await requireRole(["admin", "ae"]);
   if (!g.ok) return g.res;
   try {
     const { rows } = await listLeads();

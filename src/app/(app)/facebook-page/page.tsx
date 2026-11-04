@@ -1,10 +1,9 @@
+import { requirePage } from "@/lib/page-guard";
 import { RangeFields } from "@/components/RangeFields";
 import { logError } from "@/lib/log";
 import { rangeOf } from "@/lib/range-memory";
 import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { auth } from "@/auth";
 import { DataTable } from "@/components/DataTable";
 import { DEFAULT_EXCLUDED_PAGES } from "@/lib/dashboard";
 import { excludePages, metricDateOf, pageMetric, perPost, summarizeFb, VIEWERS_REMARK } from "@/lib/fbmetrics";
@@ -32,8 +31,7 @@ const iso = (v: string) => (/^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
 const fmtN = (v: number | null) => (v === null ? "รอข้อมูล" : v.toLocaleString("en-US", { maximumFractionDigits: 2 }));
 
 export default async function FacebookPagePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const role = (await auth())?.user?.role;
-  if (role !== "admin" && role !== "marketing") redirect("/home");
+  const role = await requirePage("/facebook-page");
   const sp = await searchParams;
   const view = one(sp.view) === "daily" ? "daily" : one(sp.view) === "page" ? "page" : "posts";
   const rg = await rangeOf(sp); const from = rg.from, to = rg.to;

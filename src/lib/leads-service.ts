@@ -1,14 +1,43 @@
+import { normRole } from "./roles";
 import { canonChannel } from "./dashboard";
 import { dedupeCode, guardRow } from "./row-guard";
 import { writeAudit } from "./audit";
-import { CALL_DEFAULT, CALL_STATUS, normCall, SELL_DEFAULT, SELL_STATUS } from "./lead-options";
+import { CALL_DEFAULT, CALL_STATUS, isSellerLead, normCall, SELL_DEFAULT, SELL_STATUS } from "./lead-options";
 import { areaLabel, AREA_SUGGEST, contactableFor, findDuplicates, LEAD_COLUMNS, leadStatusOf, nextLeadCode, normalizeEmail, normalizeLine, normalizePhone, pipelineOf, resolveNeedStatus, stampStatus, statusFieldOf, todayBkk, validateLead, type DupMatch, type Lead } from "./leads";
-import { appendRows, batchUpdateValues, colLetter, deleteRow, listTabs, readTabs, toRow } from "./sheets";
+import { appendRows, batchUpdateValues, colLetter, deleteRow, listTabs, readTab, readTabs, toRow } from "./sheets";
 import { readColumns } from "./tabdata";
+import { diffProps, PROP_COLUMNS, validateProps, type LeadProperty } from "./lead-properties";
+import type { Role } from "./roles";
 
 export class LeadError extends Error {
   constructor(public status: number, message: string, public code: string, public extra: { fields?: Record<string, string>; matches?: DupMatch[]; conflict?: { field: string; value: string } } = {}) { super(message); }
 }
+
+/** แท็บ LEAD_PROPERTIES (เพิ่ม 4/11/2026) — ยังไม่กด เตรียม Google Sheet = ready false (หน้า Leads ยังใช้ได้ตามเดิม) */
+async function loadProps(): Promise<{ ready: boolean; headers: string[]; rows: LeadProperty[] }> {
+  try {
+    const t = await readTab("LEAD_PROPERTIES");
+    if (!t.headers.includes("property_id") || !t.headers.includes("lead_id")) return { ready: false, headers: [], rows: [] };
+    return { ready: true, headers: t.headers, rows: t.rows.filter((r) => r.property_id && r.lead_id).map((r) => Object.fromEntries(PROP_COLUMNS.map((c) => [c, r[c] ?? ""])) as LeadProperty) };
+  } catch { return { ready: false, headers: [], rows: [] }; }
+}
+type PropDiff = ReturnType<typeof diffProps>;
+/** เขียนทรัพย์ของ Lead หลังบันทึก Lead แล้ว: แก้ → ลบ (จากล่างขึ้นบน ยืนยันแถวก่อนลบ) → เพิ่ม */
+async function applyProps(leadId: string, d: PropDiff, actor: string, now: string) {
+  if (!d.add.length && !d.update.length && !d.remove.length) return;
+  const t = await readTab("LEAD_PROPERTIES"); const H = t.headers; const last = colLetter(H.length - 1);
+  const idxOf = (id: string) => t.rows.findIndex((r) => r.property_id === id);
+  const upd = d.update.map((u) => { const i = idxOf(u.property_id!); if (i < 0) throw new LeadError(409, "ทรัพย์บางรายการถูกแก้ไข/ลบโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่", "STALE"); return { range: `'LEAD_PROPERTIES'!A${i + 2}:${last}${i + 2}`, values: [toRow(H, { ...t.rows[i], url: u.url, status: u.status, updated_by: actor, updated_at: now })] }; });
+  if (upd.length) await batchUpdateValues(upd);
+  if (d.remove.length) {
+    const sheet = (await listTabs()).find((x) => x.title === "LEAD_PROPERTIES");
+    if (!sheet) throw new LeadError(409, "ไม่พบแท็บ LEAD_PROPERTIES กรุณากด เตรียม Google Sheet", "SHEET_NOT_READY");
+    const rows = d.remove.map((r) => ({ id: r.property_id, row: idxOf(r.property_id) + 2 })).filter((x) => x.row >= 2).sort((a, b) => b.row - a.row);
+    for (const r of rows) { const g = await guardRow("LEAD_PROPERTIES", H, "property_id", r.id, r.row); if ("row" in g) await deleteRow(sheet.sheetId, g.row); }
+  }
+  if (d.add.length) await appendRows("LEAD_PROPERTIES", d.add.map((a) => toRow(H, { property_id: crypto.randomUUID(), lead_id: leadId, url: a.url, status: a.status, created_by: actor, created_at: now, updated_by: actor, updated_at: now })));
+}
+const propSummary = (d: PropDiff | null) => d ? [d.add.length ? `ทรัพย์ +${d.add.length}` : "", d.update.length ? `แก้ทรัพย์ ${d.update.length}` : "", d.remove.length ? `ลบทรัพย์ ${d.remove.length}` : ""].filter(Boolean).join(" · ") : "";
 
 async function load() {
   try { return await readTabs(["LEADS", "APP_USERS", "APP_CONFIG"]); }
@@ -17,20 +46,23 @@ async function load() {
 const pick = (r: Record<string, string>): Lead => { const o: Lead = Object.fromEntries(LEAD_COLUMNS.map((c) => [c, r[c] ?? ""])); o.call_status = normCall(o.call_status); return o; };
 
 export async function listLeads() {
-  const t = await load();
+  const [t, props] = await Promise.all([load(), loadProps()]);
   const staff = [...new Set(t.LEADS.rows.map((r) => String(r.staff ?? "").trim()).filter(Boolean))].sort();
-  const owners = [...new Set(t.APP_USERS.rows.filter((u) => String(u.active).toUpperCase() === "TRUE" && ["admin", "sales"].includes(u.role)).map((u) => u.email))].sort();
+  const owners = [...new Set(t.APP_USERS.rows.filter((u) => String(u.active).toUpperCase() === "TRUE" && ["super_admin", "admin", "ae"].includes(normRole(u.role) ?? "")).map((u) => u.email))].sort();
   const rows = t.LEADS.rows.filter((r) => r.lead_id).map((r) => { const l = pick(r); l.source_channel = canonChannel(l.source_channel); return l; }) // ชื่อช่องทางเก่า → Unknown (แก้ใน Sheet เมื่อบันทึก Lead นั้น)
     .sort((a, b) => b.received_at.localeCompare(a.received_at) || b.lead_code.localeCompare(a.lead_code));
   // พื้นที่ที่เคยกรอก (ชื่อที่แสดง) ใช้เป็นตัวเลือกช่วยกรอกและตัวกรอง
   const areas = [...new Set([...AREA_SUGGEST, ...rows.map((r) => areaLabel(r.area)).filter(Boolean)])];
-  return { rows, owners, staff, areas };
+  const byLead: Record<string, LeadProperty[]> = {};
+  for (const p of props.rows) (byLead[p.lead_id] ??= []).push(p);
+  return { rows, owners, staff, areas, properties: byLead, propertiesReady: props.ready };
 }
 
 /** สร้าง/แก้ไข Lead: Lead Code สร้างฝั่ง Server, เตือนซ้ำจากเบอร์/อีเมลแต่ไม่ merge อัตโนมัติ */
-export async function saveLead(input: Record<string, unknown>, actor: string) {
+export async function saveLead(input: Record<string, unknown>, actor: string, role: Role = "ae") {
   const v = validateLead(input);
-  if (!v.ok) throw new LeadError(422, "ข้อมูลไม่ถูกต้อง กรุณาตรวจช่องที่ระบุ", "VALIDATION", { fields: v.errors });
+  const pv = input.properties === undefined ? null : validateProps(input.properties, String(input.need ?? ""));
+  if (!v.ok || (pv && !pv.ok)) throw new LeadError(422, "ข้อมูลไม่ถูกต้อง กรุณาตรวจช่องที่ระบุ", "VALIDATION", { fields: { ...(v.ok ? {} : v.errors), ...(pv && !pv.ok ? pv.errors : {}) } });
   const t = await load();
   const tab = t.LEADS;
   if (!tab.headers.includes("lead_id") || !tab.headers.includes("need")) throw new LeadError(409, "แท็บ LEADS ยังไม่พร้อม กรุณากด เตรียม Google Sheet", "SHEET_NOT_READY");
@@ -52,9 +84,23 @@ export async function saveLead(input: Record<string, unknown>, actor: string) {
   }
 
   const contactChanged = !prev || normalizePhone(prev.phone) !== normalizePhone(v.rec.phone) || normalizeEmail(prev.email) !== normalizeEmail(v.rec.email) || normalizeLine(prev.line_id) !== normalizeLine(v.rec.line_id);
-  if (contactChanged && input.confirmDuplicate !== true) {
-    const matches = findDuplicates(rows.map(pick), v.rec, leadId || undefined);
-    if (matches.length) throw new LeadError(409, "พบ Lead ที่เบอร์โทร / Line / อีเมลซ้ำกับรายการนี้ (ระบบไม่รวมข้อมูลให้อัตโนมัติ)", "DUPLICATE_WARNING", { matches });
+  // Lead ฝั่งเดียวกัน (ซื้อ/เช่า/สร้าง vs ขาย) ห้ามซ้ำเบอร์ / Line / อีเมล — คนเดียวกันมีได้ฝั่งละ 1 รายการ (4/11/2026)
+  const sideChanged = !!prev && isSellerLead(prev) !== isSellerLead(v.rec);
+  if (contactChanged || sideChanged) {
+    const sameSide = rows.map(pick).filter((r) => isSellerLead(r) === isSellerLead(v.rec));
+    const matches = findDuplicates(sameSide, v.rec, leadId || undefined);
+    if (matches.length) throw new LeadError(409, `มี Lead ฝั่ง${isSellerLead(v.rec) ? "ต้องการขาย" : "ต้องการซื้อ"}ที่เบอร์โทร / Line / อีเมลซ้ำอยู่แล้ว — คนเดียวกันมีได้ฝั่งละ 1 รายการ ให้แก้ไขที่รายการเดิมแทน`, "DUPLICATE_SAME_SIDE", { matches });
+  }
+
+  // ทรัพย์ของ Lead: ตรวจทั้งหมดก่อนเขียน Lead (ไม่เขียนครึ่งเดียว)
+  let pd: PropDiff | null = null;
+  if (pv?.ok) {
+    const props = await loadProps();
+    const mine = leadId ? props.rows.filter((p) => p.lead_id === leadId) : [];
+    pd = diffProps(mine, pv.rows);
+    if (!props.ready && (pd.add.length || pd.update.length || pd.remove.length)) throw new LeadError(409, "ยังไม่มีแท็บ LEAD_PROPERTIES — ให้ Super Admin กด ตั้งค่า → เตรียม Google Sheet ก่อนบันทึก URL ทรัพย์", "SHEET_NOT_READY");
+    if (pd.unknown.length) throw new LeadError(409, "ทรัพย์บางรายการถูกแก้ไข/ลบโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่", "STALE");
+    if (pd.remove.length && role === "admin") throw new LeadError(403, "Admin ลบรายการทรัพย์ไม่ได้ — เปลี่ยนสถานะเป็น ยกเลิก แทน", "FORBIDDEN_DELETE");
   }
 
   // Need เปลี่ยนกลุ่ม แล้วช่องสถานะของกลุ่มเดิมมีค่าใน Sheet → ห้ามล้างเงียบ ๆ ต้องยืนยันก่อน
@@ -80,15 +126,17 @@ export async function saveLead(input: Record<string, unknown>, actor: string) {
     };
     await appendRows("LEADS", [toRow(tab.headers, rec)]);
     rec.lead_code = await dedupeCode("LEADS", tab.headers, "lead_code", "lead_id", rec.lead_id, rec.lead_code, (codes) => nextLeadCode(codes, Number(today.slice(0, 4)), Number(t.APP_CONFIG.rows.find((r) => r.config_key === `lead_code_floor_${today.slice(0, 4)}`)?.config_value) || 0));
-    await writeAudit(actor, "lead_create", "lead", rec.lead_id, `สร้าง ${rec.lead_code} (${rec.source_channel}, ${rec.need}${leadStatusOf(rec) ? ` / ${leadStatusOf(rec)}` : ""})`);
+    if (pd) await applyProps(rec.lead_id, pd, actor, now);
+    await writeAudit(actor, "lead_create", "lead", rec.lead_id, `สร้าง ${rec.lead_code} (${rec.source_channel}, ${rec.need}${leadStatusOf(rec) ? ` / ${leadStatusOf(rec)}` : ""})${pd && propSummary(pd) ? ` · ${propSummary(pd)}` : ""}`);
     return { created: true, lead: rec };
   }
   const rec: Lead = { ...v.rec, ...stamps, lead_id: prev.lead_id, lead_code: prev.lead_code, created_by: prev.created_by, created_at: prev.created_at, updated_by: actor, updated_at: now };
   rowNo = await safeRow(tab.headers, prev.lead_id, rowNo, prev.updated_at);
   await batchUpdateValues([{ range: `'LEADS'!A${rowNo}:${colLetter(tab.headers.length - 1)}${rowNo}`, values: [toRow(tab.headers, rec)] }]);
+  if (pd) await applyProps(rec.lead_id, pd, actor, now);
   const ps = leadStatusOf(prev), cs = leadStatusOf(rec);
   const parts = [prev.need !== rec.need ? `Need ${prev.need || "(ว่าง)"} → ${rec.need}` : "", ps !== cs ? `สถานะ ${ps || "(ว่าง)"} → ${cs || "(ว่าง)"}` : "",
-    ns.conflict ? `ล้าง ${ns.conflict.field}="${ns.conflict.value}"` : "", prev.call_status !== rec.call_status ? `Call ${prev.call_status || "(ว่าง)"} → ${rec.call_status}` : ""].filter(Boolean);
+    ns.conflict ? `ล้าง ${ns.conflict.field}="${ns.conflict.value}"` : "", prev.call_status !== rec.call_status ? `Call ${prev.call_status || "(ว่าง)"} → ${rec.call_status}` : "", propSummary(pd)].filter(Boolean);
   await writeAudit(actor, ps !== cs || prev.need !== rec.need ? "lead_status_change" : "lead_update", "lead", rec.lead_id,
     parts.length ? `${rec.lead_code}: ${parts.join(" · ")}` : `แก้ไข ${rec.lead_code}`);
   return { created: false, lead: rec };
@@ -119,6 +167,8 @@ export async function deleteLead(leadId: string, updatedAtSeen: string, actor: s
   const tab = (await listTabs()).find((x) => x.title === "LEADS");
   if (!tab) throw new LeadError(409, "ไม่พบแท็บ LEADS", "SHEET_NOT_READY");
   await deleteRow(tab.sheetId, await safeRow(t.LEADS.headers, leadId, i + 2, row.updated_at));
+  const props = await loadProps(); const mine = props.rows.filter((p) => p.lead_id === leadId);
+  if (mine.length) await applyProps(leadId, { add: [], update: [], remove: mine, unknown: [] }, actor, new Date().toISOString()); // ทรัพย์ของ Lead ที่ลบ
   await writeAudit(actor, "lead_delete", "lead", leadId, `ลบ ${row.lead_code} (${row.source_channel}, ${row.status})`);
   return { deleted: true, lead_code: row.lead_code };
 }

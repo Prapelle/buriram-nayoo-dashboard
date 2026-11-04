@@ -30,7 +30,7 @@ const TEMPLATE = [["ชื่อบริษัท", "โครงการห�
   ["บริษัท ตัวอย่าง จำกัด", "หมู่บ้านตัวอย่าง", "", "", "คุณสมชาย", "0812345678", "@example", "A", "https://...", "พี่เอ", "เข้าร่วมแล้ว", "2026-10-01", "2026-11-05", "", ""]];
 
 /** หน้า Developer และ Home Builder ใช้ร่วมกัน (1/11/2026) · Home Builder ไม่มีช่องโครงการ */
-export function DevelopersManager({ kind = "developer" }: { kind?: DevKind }) {
+export function DevelopersManager({ kind = "developer", canDelete = true }: { kind?: DevKind; canDelete?: boolean }) {
   const L = KIND_LABEL[kind], hb = kind === "home_builder";
   const template = hb ? TEMPLATE.map((r) => r.filter((_, i) => i < 1 || i > 3)) : TEMPLATE;
   const [data, setData] = useState<Data | null>(null);
@@ -191,7 +191,7 @@ export function DevelopersManager({ kind = "developer" }: { kind?: DevKind }) {
           )}
           <div className="flex flex-wrap items-center gap-3">
             <button onClick={() => save()} disabled={busy} className="rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-40">{busy ? "กำลังบันทึก..." : "บันทึก"}</button>
-            {editing && !delAsk && <button onClick={() => setDelAsk(true)} className="text-sm text-red-700 underline">ลบรายการนี้</button>}
+            {canDelete && editing && !delAsk && <button onClick={() => setDelAsk(true)} className="text-sm text-red-700 underline">ลบรายการนี้</button>}
             {editing && delAsk && <span className="text-sm text-red-700">ลบ {editing.dev_code} และ Product ทั้งหมดของรายการนี้? <button onClick={del} disabled={busy} className="ml-2 rounded bg-red-700 px-2 py-1 text-white">ยืนยันลบ</button> <button onClick={() => setDelAsk(false)} className="ml-1 underline">ยกเลิก</button></span>}
           </div>
         </section>
@@ -215,7 +215,7 @@ export function DevelopersManager({ kind = "developer" }: { kind?: DevKind }) {
                   <span className="rounded bg-brand-50 px-1.5 text-xs text-brand-800">{categoryOf(p)}</span><b>{p.product}</b><span>{dmy(p.start_date)} – {dmy(p.end_date)}</span>{p.price_thb && <span className="tabular-nums">{thb(Number(p.price_thb))}</span>}
                   {!past && <span className={`rounded px-1.5 text-xs ${productState(p, data.today) === "future" ? "bg-slate-100" : "bg-green-100"}`}>{productState(p, data.today) === "future" ? "ยังไม่เริ่ม" : `เหลือ ${Math.round((Date.parse(p.end_date) - Date.parse(data.today)) / 864e5)} วัน`}</span>}
                   {p.notes && <span className="text-xs text-slate-500">{p.notes}</span>}
-                  <span className="ml-auto flex gap-3 text-xs"><button onClick={() => { setProd({ ...p }); setProdErr({}); }} className="underline">แก้ไข</button><button onClick={() => delProd(p)} className="text-red-700 underline">ลบ</button></span>
+                  <span className="ml-auto flex gap-3 text-xs"><button onClick={() => { setProd({ ...p }); setProdErr({}); }} className="underline">แก้ไข</button>{canDelete && <button onClick={() => delProd(p)} className="text-red-700 underline">ลบ</button>}</span>
                 </li>);
               return <>
                 {cur.length ? <ul>{cur.map((p) => line(p))}</ul> : <p className="text-sm text-slate-500">ยังไม่มี Product ที่ใช้อยู่</p>}

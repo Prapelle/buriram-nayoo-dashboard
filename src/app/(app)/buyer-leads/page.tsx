@@ -1,11 +1,8 @@
-import { redirect } from "next/navigation";
-import { auth } from "@/auth";
+import { requirePage } from "@/lib/page-guard";
 import { StatusBoard } from "@/components/StatusBoard";
 
 export default async function BuyerLeadsPage() {
-  const s = await auth();
-  const role = s?.user?.role;
-  if (role !== "admin" && role !== "sales") redirect("/home");
+  const role = await requirePage("/buyer-leads");
   return (
     <section className="space-y-4">
       <div>

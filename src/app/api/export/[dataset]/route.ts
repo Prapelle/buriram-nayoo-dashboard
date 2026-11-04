@@ -6,7 +6,7 @@ import { exportDataset, ExportError, parseFilters } from "@/lib/export/service";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request, ctx: { params: Promise<{ dataset: string }> }) {
-  const g = await requireRole(["admin", "marketing", "sales"]);
+  const g = await requireRole(["admin"]);
   if (!g.ok) return g.res;
   try {
     const { dataset } = await ctx.params;

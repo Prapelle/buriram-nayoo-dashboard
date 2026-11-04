@@ -12,13 +12,13 @@ function fail(e: unknown) {
 
 // เป้าหมายรายเดือน: ดูได้ทุก Role · แก้ไขได้เฉพาะ Admin / Marketing
 export async function GET() {
-  const g = await requireRole(["admin", "marketing", "sales"]);
+  const g = await requireRole(["admin", "marketing", "ae"]);
   if (!g.ok) return g.res;
   try { return NextResponse.json({ targets: await listTargets() }); } catch (e) { return fail(e); }
 }
 
 export async function POST(req: Request) {
-  const g = await requireRole(["admin", "marketing"]);
+  const g = await requireRole(["admin"]);
   if (!g.ok) return g.res;
   try { return NextResponse.json(await saveTarget((await req.json()) as SaveTargetInput, g.email)); } catch (e) { return fail(e); }
 }

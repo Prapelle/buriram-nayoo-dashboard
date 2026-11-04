@@ -6,7 +6,7 @@ import { listSalesImports, SalesError } from "@/lib/sales/service";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const g = await requireRole(["admin", "sales"]);
+  const g = await requireRole(["admin", "ae"]);
   if (!g.ok) return g.res;
   try { return NextResponse.json({ batches: await listSalesImports() }); }
   catch (e) {

@@ -1,10 +1,9 @@
+import { requirePage } from "@/lib/page-guard";
 import { RangeFields } from "@/components/RangeFields";
 import { logError } from "@/lib/log";
 import { rangeOf } from "@/lib/range-memory";
 import Link from "next/link";
 import { Note } from "@/components/Note";
-import { redirect } from "next/navigation";
-import { auth } from "@/auth";
 import { fetchDashboardData } from "@/lib/dashboard-data";
 import { dmyS } from "@/lib/dashboard";
 import { computePerformance, type Performance } from "@/lib/performance";
@@ -22,8 +21,7 @@ const Card = ({ title, children }: { title: string; children: React.ReactNode })
 );
 
 export default async function PerformancePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const role = (await auth())?.user?.role;
-  if (role !== "admin" && role !== "marketing") redirect("/home");
+  const role = await requirePage("/performance");
   const sp = await searchParams;
   const rg = await rangeOf(sp);
   const f = { from: rg.from, to: rg.to, compare: (one(sp.compare) === "yoy" ? "yoy" : one(sp.compare) === "prev" || one(sp.compare) === "1" ? "prev" : undefined) as "yoy" | "prev" | undefined, gran: (one(sp.gran) === "month" ? "month" : "day") as "day" | "month" , side: (one(sp.side) === "seller" ? "seller" : "buyer") as "buyer" | "seller" };

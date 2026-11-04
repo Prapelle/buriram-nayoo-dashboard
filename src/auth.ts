@@ -2,16 +2,16 @@ import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import { env } from "@/lib/env";
 import { readTab } from "@/lib/sheets";
-import { ROLES, type Role } from "@/lib/roles";
+import { normRole, type Role } from "@/lib/roles";
 
 /** คืน role ถ้าได้รับอนุญาต, null ถ้าไม่ได้รับอนุญาต, throw ถ้าอ่าน Sheet ไม่ได้ */
 export async function resolveRole(emailRaw: string): Promise<Role | null> {
   const email = emailRaw.trim().toLowerCase();
-  if (env.initialAdmin && email === env.initialAdmin) return "admin"; // bootstrap
+  if (env.initialAdmin && email === env.initialAdmin) return "super_admin"; // bootstrap
   const { rows } = await readTab("APP_USERS");
   const row = rows.find((r) => r.email.trim().toLowerCase() === email);
   if (!row || row.active.toUpperCase() !== "TRUE") return null;
-  return (ROLES as string[]).includes(row.role) ? (row.role as Role) : null;
+  return normRole(row.role); // "sales" (ชื่อเดิม) → ae
 }
 
 const RECHECK_MS = 5 * 60_000;
@@ -38,7 +38,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return token;
     },
     async session({ session, token }) {
-      session.user.role = (token.role as Role | null | undefined) ?? null;
+      session.user.role = normRole(token.role); // token เก่าที่ยังเป็น "sales" → ae
       return session;
     },
   },

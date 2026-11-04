@@ -59,7 +59,7 @@ const lq = computeDashboard(full, {}, "admin").charts.leadQualByChannel!; assert
 ok("Leads 4 / Qualified 2 / Qualified Leads 2 (Call Status = รอเข้าชม; ไม่สนใจ/ติดต่อไม่ได้ ไม่นับ) แยกช่องทาง: Facebook Ads 1, Google Ads 1, Referral 0");
 assert.equal(x.cpl.value, Math.round((66372.36 / 3) * 100) / 100); assert.equal(x.cplq.value, Math.round((66372.36 / 2) * 100) / 100); ok("CPL = ค่าโฆษณา ÷ Lead ช่องทางโฆษณา 3 ราย, Cost/Qualified ÷ 2");
 x = kv(computeDashboard(full, {}, "marketing")); assert.equal(x.leads.value, 4); assert.equal(x.qualified.value, 2); assert.ok(!Object.values(x).some((v) => v.state === "restricted")); ok("Marketing: นับ Lead / Qualified Leads ได้ (ไม่มีการ์ดการเงินแล้ว)");
-x = kv(computeDashboard(full, { service: "Project" }, "sales")); assert.equal(x.leads.value, 2); assert.equal(x.qualified.value, 1); ok("Service=Project: Leads 2, Qualified Leads 1");
+x = kv(computeDashboard(full, { service: "Project" }, "ae")); assert.equal(x.leads.value, 2); assert.equal(x.qualified.value, 1); ok("Service=Project: Leads 2, Qualified Leads 1");
 x = kv(computeDashboard(full, { channel: "Referral" }, "admin")); assert.equal(x.leads.value, 1); assert.equal(x.qualified.value, 0); assert.equal(x.qualified.state, "value"); assert.equal(x.paid.state, "pending"); ok("ช่องทาง Referral: Lead 1, Qualified Leads 0 (ค่าจริง ไม่ใช่ รอข้อมูล), ไม่มีค่าโฆษณา");
 const dup = computeDashboard({ ...base, meta: [...base.meta, { ...base.meta[0], report_start: "2026-09-15", report_end: "2026-10-15" }] }, {}, "admin");
 assert.ok(dup.warnings.some((w) => w.includes("ทับซ้อน"))); ok("นำเข้ารายงานช่วงทับกัน → เตือนว่าอาจนับซ้ำ");
