@@ -50,6 +50,18 @@ export default async function AccountSummaryPage() {
           </tbody>
         </table>
       </div>
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+        <h2 className="p-4 pb-1 text-sm font-semibold">สรุปยอดขายแยกตามผู้ขาย</h2>
+        <p className="px-4 pb-2 text-xs text-slate-500">ยอดขายรวม = ยอดสุทธิของงานที่ออกใบวางบิล/ใบแจ้งหนี้แล้ว (หรือใบเสนอราคาที่มีการชำระแล้ว) · ชำระแล้ว = ยอดที่ยืนยันรับเงินแล้ว · ไม่นับใบที่ยกเลิก</p>
+        <table className="w-full min-w-[640px] text-sm">
+          <thead className="bg-slate-50 text-left text-xs text-slate-600"><tr><th className="p-2 pl-4">ผู้ขาย</th><th className="text-right">จำนวนงาน</th><th className="text-right">ยอดขายรวม</th><th className="text-right">ชำระแล้ว</th><th className="pr-4 text-right">ค้างชำระ</th></tr></thead>
+          <tbody>
+            {!s.bySeller.length && <tr><td colSpan={5} className="p-6 text-center text-slate-500">ยังไม่มียอดขาย</td></tr>}
+            {s.bySeller.map((x) => <tr key={x.seller} className="border-t border-slate-100"><td className="p-2 pl-4">{x.seller}</td><td className="text-right tabular-nums">{x.count}</td><td className="text-right tabular-nums">{money(x.amount)}</td><td className="text-right tabular-nums text-green-700">{money(x.paid)}</td><td className="pr-4 text-right tabular-nums">{money(x.amount - x.paid)}</td></tr>)}
+            {s.bySeller.length > 0 && <tr className="border-t border-slate-300 font-semibold"><td className="p-2 pl-4">รวม</td><td className="text-right tabular-nums">{s.bySeller.reduce((n, x) => n + x.count, 0)}</td><td className="text-right tabular-nums">{money(s.bySeller.reduce((n, x) => n + x.amount, 0))}</td><td className="text-right tabular-nums text-green-700">{money(s.bySeller.reduce((n, x) => n + x.paid, 0))}</td><td className="pr-4 text-right tabular-nums">{money(s.bySeller.reduce((n, x) => n + x.amount - x.paid, 0))}</td></tr>}
+          </tbody>
+        </table>
+      </div>
       <p className="text-xs text-slate-500">ดูยอดขายตามรายงานบัญชีที่หน้า <Link href="/account/revenue" className="underline">Revenue</Link> · ยอดรับชำระจากระบบบัญชีรายเดือนอยู่ด้านบนของหน้านั้น</p>
     </section>
   );

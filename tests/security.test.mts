@@ -26,7 +26,7 @@ const EXPECT: Record<string, string[] | "public" | Record<string, string[]>> = {
   "src/app/api/export/[dataset]/route.ts": ["admin"], // สิทธิ์รายชุดข้อมูลบังคับใน service (ตรวจในข้อ 3)
   // ระบบบัญชี + Production (5/11/2026): AE ออก/แก้เอกสารได้ แต่ยืนยันชำระเงิน / เริ่มงาน / แนบไฟล์ / แก้ Job = Admin ขึ้นไป
   "src/app/api/account/route.ts": { GET: ["admin", "ae"], POST: ["admin", "ae"] }, "src/app/api/account/[id]/route.ts": { GET: ["admin", "ae"], DELETE: ["super_admin"] }, "src/app/api/account/pay/route.ts": ["admin"],
-  "src/app/api/account/files/route.ts": { GET: ["admin", "ae"], POST: ["admin"], DELETE: ["super_admin"] }, "src/app/api/production/route.ts": { GET: ["admin", "ae"], PATCH: ["admin"] },
+  "src/app/api/account/files/route.ts": { GET: ["admin", "ae"], POST: ["admin"], DELETE: ["super_admin"] }, "src/app/api/account/customers/route.ts": { GET: ["admin", "ae"], POST: ["admin", "ae"], DELETE: ["super_admin"] }, "src/app/api/account/products/route.ts": { GET: ["admin", "ae"], POST: ["admin"], PATCH: ["admin"], DELETE: ["admin"] }, "src/app/api/production/route.ts": { GET: ["admin", "ae"], PATCH: ["admin"] },
   "src/app/api/targets/route.ts": { GET: ["admin", "marketing", "ae"], POST: ["admin"] },
 };
 assert.deepEqual(routes.filter((r) => !(r in EXPECT)), [], "พบ API Route ใหม่ที่ยังไม่ได้กำหนดสิทธิ์ในเทสต์นี้ — ต้องตรวจสอบก่อน");

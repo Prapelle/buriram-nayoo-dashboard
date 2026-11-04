@@ -7,10 +7,11 @@
 import { writeAudit } from "./audit";
 import {
   calcTotals, checklistOf, payableOf, CUSTOMER_COLUMNS, DOC_COLUMNS, DOC_LABEL, FILE_COLUMNS, FILE_TYPES, JOB_COLUMNS, JOB_STATUS, LINE_COLUMNS, MANUAL_STATUS, MAX_FILE_BYTES, missingDates, nextDocNo, nextJobCode, NEXT_TYPES, parseSeller,
-  PAYMENT_COLUMNS, DOC_TYPES, round2, statusFromPaid, validateDoc, validatePayment, type Customer, type DocType, type Rec,
+  PAYMENT_COLUMNS, DOC_TYPES, addDays, DEFAULT_DUE_DAYS, validateCustomer, round2, statusFromPaid, validateDoc, validatePayment, type Customer, type DocType, type Rec,
 } from "./account";
-import { kindOf, PRODUCT_CATEGORIES, todayBkk, validateProduct } from "./developers";
-import { productTypesOf, saveProduct, DevError, addProductType } from "./developers-service";
+import { kindOf, PRODUCT_CATEGORIES, todayBkk, validateProduct, DEV_COLUMNS } from "./developers";
+import { normRole } from "./roles";
+import { productTypesOf, saveProduct, saveDeveloper, deleteDeveloper, DevError, addProductType } from "./developers-service";
 import { dedupeCode, guardRow } from "./row-guard";
 import { appendRows, batchUpdateValues, colLetter, deleteRow, listTabs, readTabs, toRow } from "./sheets";
 
@@ -18,7 +19,7 @@ export class AccError extends Error {
   constructor(public status: number, message: string, public code: string, public extra: { fields?: Record<string, string> } = {}) { super(message); }
 }
 type Tab = { headers: string[]; rows: Rec[] };
-const TABS = ["ACC_DOCS", "ACC_LINES", "ACC_PAYMENTS", "ACC_FILES", "PRODUCTION_JOBS", "DEVELOPERS", "DEVELOPER_PRODUCTS", "APP_CONFIG"];
+const TABS = ["ACC_DOCS", "ACC_LINES", "ACC_PAYMENTS", "ACC_FILES", "PRODUCTION_JOBS", "DEVELOPERS", "DEVELOPER_PRODUCTS", "APP_CONFIG", "APP_USERS"];
 const PROFILE_TAB = "ACC_CUSTOMERS"; // แท็บใหม่ — ถ้ายังไม่มี (ยังไม่กด เตรียม Google Sheet) ระบบบัญชียังใช้งานได้ แค่ยังไม่จำข้อมูลลูกค้า
 
 async function load(): Promise<Record<string, Tab>> {
@@ -42,12 +43,17 @@ const configOf = (t: Record<string, Tab>) => ({ types: productTypesOf(t.APP_CONF
 
 const chainOf = (t: Record<string, Tab>, rootId: string) => t.ACC_DOCS.rows.filter((d) => d.doc_id && (d.root_id || d.doc_id) === rootId);
 
-export async function listDocs() {
+/** ชื่อสมาชิกที่เป็นผู้ขายได้ (Super Admin / Admin / AE ที่เปิดใช้งาน) — ใช้ทำรายการเลือก "ผู้ขาย" */
+const membersOf = (t: Record<string, Tab>) => [...new Set(t.APP_USERS.rows.filter((u) => u.email && String(u.active).toUpperCase() === "TRUE" && ["super_admin", "admin", "ae"].includes(normRole(u.role) ?? ""))
+  .map((u) => (u.display_name || u.email.split("@")[0]).trim()))].sort((a, b) => a.localeCompare(b, "th"));
+const nameOfEmail = (t: Record<string, Tab>, email?: string) => { const u = t.APP_USERS.rows.find((x) => x.email.toLowerCase() === (email ?? "").toLowerCase()); return u ? (u.display_name || u.email.split("@")[0]).trim() : ""; };
+
+export async function listDocs(email?: string) {
   const t = await load();
   const started = new Set(t.ACC_DOCS.rows.filter((d) => d.work_started_at).map((d) => d.root_id || d.doc_id));
   const docs = t.ACC_DOCS.rows.filter((d) => d.doc_id).map((d): Rec => ({ ...pick(DOC_COLUMNS, d), work_started: started.has(d.root_id || d.doc_id) ? "1" : "" }))
     .sort((a, b) => (b.doc_date + b.doc_no).localeCompare(a.doc_date + a.doc_no));
-  return { docs, customers: customersOf(t), ...configOf(t), categories: PRODUCT_CATEGORIES, today: todayBkk() };
+  return { docs, customers: customersOf(t), members: membersOf(t), me: nameOfEmail(t, email), ...configOf(t), categories: PRODUCT_CATEGORIES, today: todayBkk() };
 }
 
 export async function getDoc(id: string) {
@@ -159,7 +165,7 @@ export async function convertDoc(id: string, to: DocType, actor: string) {
   if (existing) return { doc: pick(DOC_COLUMNS, existing), created: false };
   const now = new Date().toISOString(), docId = crypto.randomUUID(), date = todayBkk();
   const no = nextDocNo(to, t.ACC_DOCS.rows.map((d) => d.doc_no), date);
-  const rec: Rec = { ...pick(DOC_COLUMNS, src), doc_id: docId, doc_type: to, doc_no: no, doc_date: date, due_date: "", status: "draft", root_id: src.root_id || src.doc_id, parent_doc_id: id, paid_amount: "0", work_started_at: "", created_by: actor, created_at: now, updated_by: actor, updated_at: now };
+  const rec: Rec = { ...pick(DOC_COLUMNS, src), doc_id: docId, doc_type: to, doc_no: no, doc_date: date, due_date: addDays(date, DEFAULT_DUE_DAYS), status: "draft", root_id: src.root_id || src.doc_id, parent_doc_id: id, paid_amount: "0", work_started_at: "", created_by: actor, created_at: now, updated_by: actor, updated_at: now };
   await appendRows("ACC_DOCS", [toRow(t.ACC_DOCS.headers, rec)]);
   rec.doc_no = await dedupeCode("ACC_DOCS", t.ACC_DOCS.headers, "doc_no", "doc_id", docId, no, (codes) => nextDocNo(to, codes, date));
   const lines = t.ACC_LINES.rows.filter((l) => l.doc_id === id).map((l) => ({ ...pick(LINE_COLUMNS, l), line_id: crypto.randomUUID(), doc_id: docId, product_id: "", job_id: "", applied_at: "" }));
@@ -444,6 +450,103 @@ export async function updateJob(id: string, patch: { status?: string; done_idx?:
   await batchUpdateValues([{ range: rowRange("PRODUCTION_JOBS", t.PRODUCTION_JOBS.headers, g.row), values: [toRow(t.PRODUCTION_JOBS.headers, rec)] }]);
   await writeAudit(actor, "production_job_update", "production_job", id, `${prev.job_code}: ${prev.status} → ${rec.status}`);
   return { job: pick(JOB_COLUMNS, rec) };
+}
+
+// ── ลูกค้า (หน้ารายชื่อลูกค้า) ──
+// ลูกค้า = แถวใน DEVELOPERS (Developer / Home Builder) เดียวกับหน้าอื่น + ที่อยู่/เลขผู้เสียภาษีที่เก็บใน ACC_CUSTOMERS
+export async function listCustomers() {
+  const t = await load();
+  const docsOf = new Map<string, number>();
+  for (const d of t.ACC_DOCS.rows) if (d.doc_id && d.customer_id) docsOf.set(d.customer_id, (docsOf.get(d.customer_id) ?? 0) + 1);
+  const upd = new Map(t.DEVELOPERS.rows.map((r) => [r.developer_id, r.updated_at ?? ""]));
+  return { customers: customersOf(t).map((c) => ({ ...c, updated_at: upd.get(c.developer_id) ?? "", docs: docsOf.get(c.developer_id) ?? 0 })) };
+}
+/** เพิ่ม / แก้ไขลูกค้า: ชื่อ ผู้ติดต่อ เบอร์ ไปที่ DEVELOPERS (เห็นในหน้า Developer / Home Builder ด้วย) · ที่อยู่ + เลขผู้เสียภาษี + ผู้ติดต่อ/เบอร์ ที่ใช้ในเอกสาร ไปที่ ACC_CUSTOMERS */
+export async function saveCustomer(input: Record<string, unknown>, actor: string) {
+  const v = validateCustomer(input);
+  if (!v.ok) throw new AccError(422, "ข้อมูลลูกค้าไม่ถูกต้อง กรุณาตรวจช่องที่ระบุ", "VALIDATION", { fields: v.errors });
+  const t = await load();
+  const id = String(input.developer_id ?? "");
+  let base: Rec = {};
+  if (id) {
+    const row = t.DEVELOPERS.rows.find((r) => r.developer_id === id);
+    if (!row) throw new AccError(404, "ไม่พบลูกค้านี้ (อาจถูกลบไปแล้ว)", "NOT_FOUND");
+    base = pick(DEV_COLUMNS, row);
+  }
+  const kind = id ? kindOf(base) : (v.rec.kind as "developer" | "home_builder");
+  let dev;
+  try {
+    // แก้ไข: ส่งค่าเดิมของทุกช่องไปด้วย (หน้านี้แก้แค่ชื่อ/ผู้ติดต่อ/เบอร์) ไม่ให้ช่องอื่นของ Developer ถูกล้าง
+    dev = (await saveDeveloper({ ...base, company_name: v.rec.company_name, contact_name: v.rec.contact_name, phone: v.rec.phone, ...(id ? { developer_id: id, updated_at_seen: String(input.updated_at_seen ?? "") } : { project_main: kind === "developer" ? v.rec.company_name : "" }), confirmDuplicate: input.confirmDuplicate === true }, actor, kind)).dev;
+  } catch (e) { return sheetErr(e); }
+  // ข้อมูลที่ใช้ในเอกสารเก็บตามที่กรอกตรง ๆ (ช่องว่าง = ล้างค่า ต่างจากการจำอัตโนมัติจากเอกสาร)
+  if (!t[PROFILE_TAB].headers.includes("developer_id")) throw new AccError(409, "บันทึกชื่อ/ผู้ติดต่อ/เบอร์แล้ว แต่ยังเก็บที่อยู่และเลขผู้เสียภาษีไม่ได้ — ให้ Super Admin กด เตรียม Google Sheet แล้วบันทึกอีกครั้ง", "SHEET_NOT_READY");
+  const i = t[PROFILE_TAB].rows.findIndex((r) => r.developer_id === dev.developer_id);
+  const rec: Rec = { developer_id: dev.developer_id, contact_name: v.rec.contact_name, phone: v.rec.phone, address: v.rec.address, tax_id: v.rec.tax_id, updated_by: actor, updated_at: new Date().toISOString() };
+  if (i >= 0) { const g = await guardRow(PROFILE_TAB, t[PROFILE_TAB].headers, "developer_id", dev.developer_id, i + 2); if ("row" in g) await batchUpdateValues([{ range: rowRange(PROFILE_TAB, t[PROFILE_TAB].headers, g.row), values: [toRow(t[PROFILE_TAB].headers, rec)] }]); else await appendRows(PROFILE_TAB, [toRow(t[PROFILE_TAB].headers, rec)]); }
+  else await appendRows(PROFILE_TAB, [toRow(t[PROFILE_TAB].headers, rec)]);
+  await writeAudit(actor, id ? "account_customer_update" : "account_customer_create", "account_customer", dev.developer_id, `${dev.dev_code} ${dev.company_name}`);
+  return { customer: { developer_id: dev.developer_id, code: dev.dev_code, name: dev.company_name || dev.project_main }, created: !id };
+}
+/** ลบลูกค้า (Super Admin เท่านั้น — ตรวจที่ API) · ลบไม่ได้ถ้ามีเอกสารบัญชีของลูกค้านี้ · ลบแล้ว Product ของลูกค้าในหน้า Developer / Home Builder หายด้วย */
+export async function deleteCustomer(id: string, updatedAtSeen: string, actor: string) {
+  const t = await load();
+  if (!t.DEVELOPERS.rows.some((r) => r.developer_id === id)) throw new AccError(404, "ไม่พบลูกค้านี้", "NOT_FOUND");
+  const n = t.ACC_DOCS.rows.filter((d) => d.doc_id && d.customer_id === id).length;
+  if (n) throw new AccError(409, `ลูกค้านี้มีเอกสารบัญชี ${n} ใบ — ลบเอกสารเหล่านั้นก่อน`, "LOCKED");
+  try { await deleteDeveloper(id, updatedAtSeen, actor); } catch (e) { return sheetErr(e); }
+  await deleteRowsBy(t, PROFILE_TAB, "developer_id", [id]);
+  return { deleted: id };
+}
+
+// ── Product (ชนิด Product กลาง: ใช้ทั้งใบเอกสารและ Developer / Home Builder) ──
+const TYPE_KEY = "developer_products";
+async function writeTypes(t: Record<string, Tab>, next: string[]) {
+  const i = t.APP_CONFIG.rows.findIndex((r) => r.config_key === TYPE_KEY);
+  const row = { config_key: TYPE_KEY, config_value: next.join("|"), description: "ชนิด Product ที่ขายให้ Developer (คั่นด้วย |)", updated_at: new Date().toISOString() };
+  if (i >= 0) await batchUpdateValues([{ range: rowRange("APP_CONFIG", t.APP_CONFIG.headers, i + 2), values: [toRow(t.APP_CONFIG.headers, row)] }]);
+  else await appendRows("APP_CONFIG", [toRow(t.APP_CONFIG.headers, row)]);
+}
+const usage = (t: Record<string, Tab>, name: string) => ({ developers: t.DEVELOPER_PRODUCTS.rows.filter((r) => r.product_id && r.product === name).length, docs: t.ACC_LINES.rows.filter((r) => r.line_id && r.product === name).length });
+export async function listProducts() {
+  const t = await load();
+  return { products: productTypesOf(t.APP_CONFIG.rows).map((name) => ({ name, ...usage(t, name) })) };
+}
+const cleanName = (v: unknown) => { const n = String(v ?? "").trim().replace(/\s+/g, " "); if (!n || n.length > 60 || n.includes("|")) throw new AccError(422, "ชื่อ Product ต้องมี 1–60 ตัวอักษร และไม่มีเครื่องหมาย |  เช่น Top ads", "VALIDATION", { fields: { name: "ชื่อ Product ต้องมี 1–60 ตัวอักษร และไม่มีเครื่องหมาย |" } }); return n; };
+export async function addProduct(name: unknown, actor: string) {
+  const n = cleanName(name), t = await load(), types = productTypesOf(t.APP_CONFIG.rows);
+  if (types.some((x) => x.toLowerCase() === n.toLowerCase())) throw new AccError(409, `มี Product "${n}" อยู่แล้ว`, "DUPLICATE", { fields: { name: "ชื่อนี้มีอยู่แล้ว" } });
+  await writeTypes(t, [...types, n]);
+  await writeAudit(actor, "developer_product_type", "config", TYPE_KEY, `เพิ่ม ${n}`);
+  return { products: [...types, n].map((x) => ({ name: x, ...usage(t, x) })) };
+}
+/** เปลี่ยนชื่อ Product: แก้ในรายการ + ทุกที่ที่ใช้ชื่อเดิม (Product ของ Developer / Home Builder · รายการในเอกสาร · งาน Production) */
+export async function renameProduct(from: unknown, to: unknown, actor: string) {
+  const old = String(from ?? ""), n = cleanName(to), t = await load(), types = productTypesOf(t.APP_CONFIG.rows);
+  if (!types.includes(old)) throw new AccError(404, "ไม่พบ Product นี้ (อาจถูกเปลี่ยนชื่อหรือลบไปแล้ว) กรุณาโหลดใหม่", "NOT_FOUND");
+  if (types.some((x) => x !== old && x.toLowerCase() === n.toLowerCase())) throw new AccError(409, `มี Product "${n}" อยู่แล้ว`, "DUPLICATE", { fields: { name: "ชื่อนี้มีอยู่แล้ว" } });
+  if (n === old) return { products: types.map((x) => ({ name: x, ...usage(t, x) })), updated: 0 };
+  const updates: { range: string; values: string[][] }[] = [];
+  for (const [tab, col] of [["DEVELOPER_PRODUCTS", "product"], ["ACC_LINES", "product"], ["PRODUCTION_JOBS", "product"]] as const) {
+    const h = t[tab].headers, c = h.indexOf(col); if (c < 0) continue;
+    t[tab].rows.forEach((r, k) => { if (r[col] === old) updates.push({ range: `'${tab}'!${colLetter(c)}${k + 2}`, values: [[n]] }); });
+  }
+  await writeTypes(t, types.map((x) => (x === old ? n : x)));
+  if (updates.length) await batchUpdateValues(updates);
+  await writeAudit(actor, "developer_product_type", "config", TYPE_KEY, `เปลี่ยนชื่อ ${old} → ${n} (แก้ ${updates.length} รายการที่ใช้อยู่)`);
+  const t2 = await load();
+  return { products: productTypesOf(t2.APP_CONFIG.rows).map((x) => ({ name: x, ...usage(t2, x) })), updated: updates.length };
+}
+/** ลบ Product: ลบไม่ได้ถ้ายังมี Developer / Home Builder หรือเอกสารใช้อยู่ (ให้เปลี่ยนชื่อแทน) และต้องเหลืออย่างน้อย 1 รายการ */
+export async function deleteProduct(name: unknown, actor: string) {
+  const old = String(name ?? ""), t = await load(), types = productTypesOf(t.APP_CONFIG.rows);
+  if (!types.includes(old)) throw new AccError(404, "ไม่พบ Product นี้ (อาจถูกลบไปแล้ว) กรุณาโหลดใหม่", "NOT_FOUND");
+  const u = usage(t, old);
+  if (u.developers || u.docs) throw new AccError(409, `ลบ "${old}" ไม่ได้ — ยังถูกใช้อยู่ที่ Developer / Home Builder ${u.developers} รายการ และในเอกสาร ${u.docs} รายการ (ถ้าต้องการเปลี่ยนชื่อ ใช้ปุ่มแก้ไข)`, "IN_USE");
+  if (types.length <= 1) throw new AccError(409, "ต้องเหลือ Product อย่างน้อย 1 รายการ", "LOCKED");
+  await writeTypes(t, types.filter((x) => x !== old));
+  await writeAudit(actor, "developer_product_type", "config", TYPE_KEY, `ลบ ${old}`);
+  return { products: types.filter((x) => x !== old).map((x) => ({ name: x, ...usage(t, x) })) };
 }
 
 export { addProductType };

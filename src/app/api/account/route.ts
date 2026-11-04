@@ -15,7 +15,7 @@ function fail(e: unknown) {
 export async function GET() {
   const g = await requireRole(["admin", "ae"]);
   if (!g.ok) return g.res;
-  try { return NextResponse.json(await listDocs()); } catch (e) { return fail(e); }
+  try { return NextResponse.json(await listDocs(g.email)); } catch (e) { return fail(e); }
 }
 
 /** action: save (ค่าเริ่มต้น) · convert · status · product_type */

@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { calcTotals, payableOf, DOC_LABEL, NEXT_TYPES, DOC_TYPES, PAY_METHODS, STATUS_LABEL, money, round2, thaiDate, validateDoc, MAX_FILE_BYTES, FILE_TYPES, type Customer, type DocStatus, type DocType, type Rec } from "@/lib/account";
+import { calcTotals, payableOf, DOC_LABEL, NEXT_TYPES, DOC_TYPES, PAY_METHODS, STATUS_LABEL, money, round2, thaiDate, validateDoc, addDays, DEFAULT_DUE_DAYS, MAX_FILE_BYTES, FILE_TYPES, type Customer, type DocStatus, type DocType, type Rec } from "@/lib/account";
 import { Notice, type Msg } from "./Toast";
 import { btn, PageHeader } from "./PageHeader";
 
@@ -18,7 +18,7 @@ async function api(url: string, init?: RequestInit) { const r = await fetch(url,
 export function DocPage({ docType = "quotation", docId, canPay, isSuper = false }: { docType?: DocType; docId?: string; canPay: boolean; isSuper?: boolean }) {
   const router = useRouter();
   const [msg, setMsg] = useState<Msg>(null); const [errs, setErrs] = useState<Record<string, string>>({}); const [busy, setBusy] = useState(false);
-  const [customers, setCustomers] = useState<Customer[]>([]); const [types, setTypes] = useState<string[]>([]); const [cats, setCats] = useState<string[]>(["Product", "Service", "Event"]); const [today, setToday] = useState("");
+  const [customers, setCustomers] = useState<Customer[]>([]); const [types, setTypes] = useState<string[]>([]); const [cats, setCats] = useState<string[]>(["Product", "Service", "Event"]); const [today, setToday] = useState(""); const [members, setMembers] = useState<string[]>([]);
   const [d, setD] = useState<Detail | null>(null); const [loaded, setLoaded] = useState(false);
   const [f, setF] = useState<Record<string, string>>({ doc_type: docType, doc_date: "", due_date: "", customer_id: "", job_title: "", contact_name: "", contact_phone: "", seller_name: "", customer_address: "", customer_tax_id: "", discount: "0", vat_rate: "0", wht_rate: "0", note: "" });
   const [lines, setLines] = useState<Line[]>([blankLine()]);
@@ -28,13 +28,13 @@ export function DocPage({ docType = "quotation", docId, canPay, isSuper = false 
 
   const load = useCallback(async () => {
     try {
-      const l = await api("/api/account"); setCustomers(l.customers); setTypes(l.types); setCats(l.categories); setToday(l.today);
+      const l = await api("/api/account"); setCustomers(l.customers); setTypes(l.types); setCats(l.categories); setToday(l.today); setMembers(l.members ?? []);
       if (docId) {
         const j: Detail = await api(`/api/account/${docId}`); setD(j);
         const x = j.doc; setF({ doc_type: x.doc_type, doc_date: x.doc_date, due_date: x.due_date, customer_id: x.customer_id, job_title: x.job_title, contact_name: x.contact_name, contact_phone: x.contact_phone, seller_name: x.seller_name, customer_address: x.customer_address, customer_tax_id: x.customer_tax_id, discount: x.discount || "0", vat_rate: x.vat_rate || "0", wht_rate: x.wht_rate || "0", note: x.note });
         setLines(j.lines.map((y) => ({ product: y.product, category: y.category || "Product", description: y.description, qty: y.qty, unit_price: y.unit_price, start_date: y.start_date, end_date: y.end_date })));
         setPay((p) => ({ ...p, amount: String(round2(payableOf(x) - Number(x.paid_amount))), paid_at: l.today }));
-      } else setF((p) => ({ ...p, doc_date: p.doc_date || l.today }));
+      } else setF((p) => { const d = p.doc_date || l.today; return { ...p, doc_date: d, due_date: p.due_date || addDays(d, DEFAULT_DUE_DAYS), seller_name: p.seller_name || l.me || "" }; });
     } catch (e) { setMsg({ type: "error", text: e instanceof Error ? e.message : "โหลดไม่สำเร็จ" }); } finally { setLoaded(true); }
   }, [docId]);
   useEffect(() => { void load(); }, [load]);
@@ -42,7 +42,8 @@ export function DocPage({ docType = "quotation", docId, canPay, isSuper = false 
   const totals = useMemo(() => calcTotals(lines.map((l) => ({ qty: Number(l.qty) || 0, unit_price: Number(l.unit_price) || 0 })), Number(f.discount) || 0, Number(f.vat_rate) || 0, Number(f.wht_rate) || 0), [lines, f.discount, f.vat_rate, f.wht_rate]);
   const doc = d?.doc, isNew = !docId, editable = !docId || !!d?.editable, canType = isNew || (editable && edit), cancelled = doc?.status === "cancelled";
   const paid = Number(doc?.paid_amount ?? 0), payable = doc ? payableOf(doc) : 0, remain = round2(payable - paid), started = !!d?.work_started_at;
-  const set = (k: string, v: string) => setF((p) => ({ ...p, [k]: v })); const setL = (i: number, k: keyof Line, v: string) => setLines((p) => p.map((l, j) => (j === i ? { ...l, [k]: v } : l)));
+  // เปลี่ยนวันที่เอกสาร: ถ้าครบกำหนดยังเป็นค่าอัตโนมัติ (ว่าง หรือ = วันที่เดิม + 7) ให้เลื่อนตามเป็นวันที่ใหม่ + 7
+  const set = (k: string, v: string) => setF((p) => ({ ...p, [k]: v, ...(k === "doc_date" && /^\d{4}-\d{2}-\d{2}$/.test(v) && (!p.due_date || (/^\d{4}-\d{2}-\d{2}$/.test(p.doc_date) && p.due_date === addDays(p.doc_date, DEFAULT_DUE_DAYS))) ? { due_date: addDays(v, DEFAULT_DUE_DAYS) } : {}) })); const setL = (i: number, k: keyof Line, v: string) => setLines((p) => p.map((l, j) => (j === i ? { ...l, [k]: v } : l)));
   const e = (k: string) => errs[k] ? <span role="alert" className="mt-0.5 block text-xs font-medium text-red-600">⚠ {errs[k]}</span> : null;
   const ic = (k: string) => (errs[k] ? inpErr : inp);
   const nErr = Object.keys(errs).length;
@@ -131,8 +132,8 @@ export function DocPage({ docType = "quotation", docId, canPay, isSuper = false 
             <label className="text-sm sm:col-span-2">ที่อยู่ลูกค้า (แสดงบนเอกสาร)<input value={f.customer_address} onChange={(e2) => set("customer_address", e2.target.value)} placeholder="เช่น 99 ถ.หลักเมือง ต.ในเมือง อ.เมือง จ.บุรีรัมย์ 31000" className={ic("customer_address")} />{e("customer_address")}</label>
             <label className="text-sm">เลขประจำตัวผู้เสียภาษี (13 หลัก)<input inputMode="numeric" value={f.customer_tax_id} onChange={(e2) => set("customer_tax_id", e2.target.value)} placeholder="เช่น 0325566000476" className={ic("customer_tax_id")} />{e("customer_tax_id")}</label>
             <label className="text-sm">วันที่ (จำเป็น)<input type="date" value={f.doc_date} onChange={(e2) => set("doc_date", e2.target.value)} className={ic("doc_date")} />{e("doc_date")}</label>
-            <label className="text-sm">ครบกำหนด / ใช้ได้ถึง<input type="date" value={f.due_date} onChange={(e2) => set("due_date", e2.target.value)} className={ic("due_date")} />{e("due_date")}</label>
-            <label className="text-sm">ผู้ขาย (ชื่อเซลส์)<input value={f.seller_name} onChange={(e2) => set("seller_name", e2.target.value)} placeholder="เช่น คุณบี" className={ic("seller_name")} />{e("seller_name")}</label>
+            <label className="text-sm">ครบกำหนด / ใช้ได้ถึง <span className="text-slate-400">(ไม่ใส่ = {DEFAULT_DUE_DAYS} วันหลังวันที่เอกสาร)</span><input type="date" value={f.due_date} onChange={(e2) => set("due_date", e2.target.value)} className={ic("due_date")} />{e("due_date")}</label>
+            <label className="text-sm">ผู้ขาย (เลือกจากชื่อสมาชิก)<select value={f.seller_name} onChange={(e2) => set("seller_name", e2.target.value)} className={ic("seller_name")}><option value="">— เลือกผู้ขาย —</option>{[...new Set([...members, ...(f.seller_name ? [f.seller_name] : [])])].map((m) => <option key={m} value={m}>{m}</option>)}</select>{e("seller_name")}</label>
           </div>
         </div>
 

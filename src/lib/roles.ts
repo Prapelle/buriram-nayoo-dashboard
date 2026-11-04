@@ -56,6 +56,8 @@ export const NAV: NavItem[] = [
   // ระบบบัญชี + Production (5/11/2026): ดู/ออกเอกสาร = Super Admin, Admin, AE · ยืนยันชำระเงิน/เริ่มงาน/แก้ Job = Super Admin, Admin (ตรวจที่ API)
   { href: "/account/summary", label: "สรุปบัญชี", roles: SALES, icon: "report", system: "account" },
   { href: "/account", label: "เอกสารบัญชี", roles: SALES, icon: "money", system: "account" },
+  { href: "/account/customers", label: "รายชื่อลูกค้า", roles: SALES, icon: "users", system: "account" },
+  { href: "/account/products", label: "Product", roles: SALES, icon: "board", system: "account" },
   { href: "/production", label: "งาน Production", roles: SALES, icon: "board", system: "production" },
   { href: "/dashboard/import", label: "นำเข้า CSV", roles: DATA, group: "ข้อมูล", icon: "upload", system: "dashboard" },
   { href: "/dashboard/export", label: "ส่งออกข้อมูล", roles: DATA, group: "ข้อมูล", icon: "download", system: "dashboard" },

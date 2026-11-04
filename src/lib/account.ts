@@ -63,18 +63,46 @@ export function summarize(docs: Rec[], today: string) {
   const receipts = live.filter((d) => d.doc_type === "receipt");
   const byMonth = new Map<string, number>();
   for (const r of receipts) byMonth.set(r.doc_date.slice(0, 7), round2((byMonth.get(r.doc_date.slice(0, 7)) ?? 0) + Number(r.paid_amount || 0)));
+  // ยอดขายแยกตามผู้ขาย: นับเฉพาะงานที่เป็นยอดขายแล้ว (ใบล่าสุดเป็นวางบิล/แจ้งหนี้ หรือใบเสนอราคาที่มีการชำระแล้ว) · ชำระแล้วไม่เกินยอดสุทธิ
+  const sellers = new Map<string, { seller: string; count: number; amount: number; paid: number }>();
+  for (const ds of chains.values()) {
+    const latest = [...ds].sort((a, b) => DOC_TYPES.indexOf(b.doc_type as DocType) - DOC_TYPES.indexOf(a.doc_type as DocType) || b.doc_no.localeCompare(a.doc_no))[0];
+    const paid = round2(ds.reduce((s, d) => s + Number(d.paid_amount || 0), 0));
+    if (latest.doc_type === "quotation" && !(paid > 0)) continue;
+    const name = (latest.seller_name || "").trim() || "(ไม่ระบุผู้ขาย)", amount = payableOf(latest), cur = sellers.get(name) ?? { seller: name, count: 0, amount: 0, paid: 0 };
+    sellers.set(name, { seller: name, count: cur.count + 1, amount: round2(cur.amount + amount), paid: round2(cur.paid + Math.min(paid, amount)) });
+  }
   return {
-    counts, cancelled, stages, overdue,
+    counts, cancelled, stages, overdue, bySeller: [...sellers.values()].sort((a, b) => b.amount - a.amount),
     outstanding: round2(stages.quotation.outstanding + stages.billing.outstanding + stages.invoice.outstanding),
     received: round2(receipts.reduce((s, r) => s + Number(r.paid_amount || 0), 0)),
     months: [...byMonth.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([month, amount]) => ({ month, amount })),
   };
 }
 
+/** ตรวจฟอร์มลูกค้า (หน้ารายชื่อลูกค้า) · เลขประจำตัวผู้เสียภาษี 13 หลัก (ไม่บังคับ) */
+export function validateCustomer(input: Record<string, unknown>) {
+  const errors: Record<string, string> = {};
+  const s = (k: string) => String(input[k] ?? "").trim();
+  const rec = { kind: s("kind") === "home_builder" ? "home_builder" : "developer", company_name: s("company_name"), contact_name: s("contact_name"), phone: s("phone"), address: s("address"), tax_id: s("tax_id").replace(/[\s-]/g, "") };
+  if (!rec.company_name) errors.company_name = "กรอกชื่อลูกค้า / บริษัท เช่น บริษัท ซีเจ เออเบิ้ล โฮม จำกัด";
+  if (rec.company_name.length > 150) errors.company_name = "ชื่อยาวเกิน 150 ตัวอักษร";
+  if (rec.contact_name.length > 150) errors.contact_name = "ผู้ติดต่อยาวเกิน 150 ตัวอักษร";
+  if (rec.phone && rec.phone.replace(/\D/g, "").length < 9) errors.phone = "เบอร์โทรไม่ถูกต้อง เช่น 0833651355";
+  if (rec.address.length > 300) errors.address = "ที่อยู่ยาวเกิน 300 ตัวอักษร";
+  if (rec.tax_id && !/^\d{13}$/.test(rec.tax_id)) errors.tax_id = "เลขประจำตัวผู้เสียภาษีต้องเป็นตัวเลข 13 หลัก";
+  return Object.keys(errors).length ? { ok: false as const, errors } : { ok: true as const, rec };
+}
+
 /** ข้อมูลผู้ขาย (ค่าเริ่มต้นตามใบเสนอราคาต้นแบบ — แก้ได้ที่ APP_CONFIG: account_seller เป็น JSON) */
 export type Seller = { name: string; address: string; tax_id: string; phone: string };
 export const DEFAULT_SELLER: Seller = { name: "บริษัท แฟค ดิจิตอล จำกัด (สำนักงานใหญ่)", address: "83 ถนนหลักเมือง ตำบลในเมือง อำเภอเมืองสุรินทร์ จังหวัดสุรินทร์ 32000", tax_id: "0325566000476", phone: "0909720100" };
 export const parseSeller = (json: string | undefined): Seller => { try { const o = JSON.parse(json || "{}"); return { ...DEFAULT_SELLER, ...Object.fromEntries(Object.entries(o).filter(([k, v]) => k in DEFAULT_SELLER && typeof v === "string" && v)) }; } catch { return DEFAULT_SELLER; } };
+
+/** บวกวัน (วันที่ ISO yyyy-mm-dd) */
+export const addDays = (iso: string, n: number) => new Date(Date.parse(iso + "T00:00:00Z") + n * 86400000).toISOString().slice(0, 10);
+/** ไม่ใส่วันครบกำหนด / ใช้ได้ถึง → 7 วันหลังวันที่เอกสาร */
+export const DEFAULT_DUE_DAYS = 7;
 
 const isIso = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s) && new Date(s + "T00:00:00Z").toISOString().slice(0, 10) === s;
 export const round2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -107,6 +135,8 @@ export function validateDoc(input: Record<string, unknown>, types: string[], cat
     seller_name: s("seller_name"), note: s("note"), customer_address: s("customer_address"), customer_tax_id: s("customer_tax_id").replace(/[\s-]/g, "") };
   if (!isIso(doc.doc_date)) errors.doc_date = "ใส่วันที่เอกสาร";
   if (doc.due_date && !isIso(doc.due_date)) errors.due_date = "วันที่ไม่ถูกต้อง";
+  else if (!doc.due_date && isIso(doc.doc_date)) doc.due_date = addDays(doc.doc_date, DEFAULT_DUE_DAYS);
+  else if (doc.due_date && isIso(doc.doc_date) && doc.due_date < doc.doc_date) errors.due_date = "ครบกำหนดต้องไม่ก่อนวันที่เอกสาร";
   if (!doc.customer_id) errors.customer_id = "เลือกลูกค้าจากรายชื่อ Developer / Home Builder";
   for (const [k, n] of [["job_title", 200], ["contact_name", 150], ["contact_phone", 40], ["seller_name", 150], ["note", 2000], ["customer_address", 300]] as const) if (doc[k].length > n) errors[k] = `ยาวเกิน ${n} ตัวอักษร`;
   if (doc.customer_tax_id && !/^\d{13}$/.test(doc.customer_tax_id)) errors.customer_tax_id = "เลขประจำตัวผู้เสียภาษีต้องเป็นตัวเลข 13 หลัก";

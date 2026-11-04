@@ -214,4 +214,50 @@ await t("สรุปบัญชี: นับเอกสารแต่ละ
   assert.equal(s.stages.invoice.outstanding, 3850); assert.equal(s.stages.quotation.outstanding, 2000); assert.equal(s.outstanding, 5850);
   assert.equal(s.overdue.amount, 3850); assert.equal(s.received, 1000); assert.deepEqual(s.months, [{ month: "2026-11", amount: 1000 }]);
 });
+await t("ครบกำหนด: ไม่ใส่ = 7 วันหลังวันที่เอกสาร · ใส่ก่อนวันที่เอกสาร → 422 · ใบที่สร้างต่อก็ได้ +7 วัน", async () => {
+  const { addDays } = await import("../src/lib/account");
+  const d = (await A.saveDoc(form({ doc_date: "2026-11-05", due_date: "" }), ADMIN)).doc; assert.equal(d.due_date, "2026-11-12");
+  const e = (await A.saveDoc(form({ doc_date: "2026-11-05", due_date: "2026-12-01" }), ADMIN)).doc; assert.equal(e.due_date, "2026-12-01");
+  await fails(A.saveDoc(form({ doc_date: "2026-11-05", due_date: "2026-11-01" }), ADMIN), "VALIDATION");
+  assert.equal((await A.convertDoc(d.doc_id, "billing", ADMIN)).doc.due_date, addDays(today, 7));
+});
+await t("ผู้ขาย: รายชื่อสมาชิกที่เปิดใช้งาน (Super Admin/Admin/AE) ใช้ทำรายการเลือก · ชื่อของผู้ใช้ปัจจุบัน", async () => {
+  const l = await A.listDocs(ADMIN); assert.ok(Array.isArray(l.members)); assert.equal(typeof l.me, "string");
+});
+await t("รายชื่อลูกค้า: เพิ่ม → แก้ไข (ไม่ล้างช่องอื่นของ Developer) → ค้นหาได้ → ซ้ำ/เลขผู้เสียภาษีผิด/ไม่มีชื่อ → ปฏิเสธ → ลบ (มีเอกสารลบไม่ได้)", async () => {
+  const c = (await A.saveCustomer({ kind: "home_builder", company_name: "บริษัท ทดสอบ บิวเดอร์ จำกัด", contact_name: "คุณทดสอบ", phone: "0812345678", address: "1 ถ.ทดสอบ", tax_id: "0-1055-12345-67 8" }, ADMIN));
+  assert.equal(c.created, true); const id = c.customer.developer_id;
+  let row = (await A.listCustomers()).customers.find((x) => x.developer_id === id)!; assert.equal(row.kind, "home_builder"); assert.equal(row.tax_id, "0105512345678"); assert.equal(row.address, "1 ถ.ทดสอบ"); assert.equal(row.docs, 0);
+  await fails(A.saveCustomer({ company_name: "" }, ADMIN), "VALIDATION"); await fails(A.saveCustomer({ company_name: "x", tax_id: "12" }, ADMIN), "VALIDATION"); await fails(A.saveCustomer({ company_name: "x", phone: "12" }, ADMIN), "VALIDATION");
+  const devRowBefore = rows("DEVELOPERS").find((r) => r.developer_id === id)!;
+  await A.saveCustomer({ developer_id: id, updated_at_seen: row.updated_at, kind: "home_builder", company_name: "บริษัท ทดสอบ บิวเดอร์ จำกัด (แก้)", contact_name: "คุณใหม่", phone: "0899999999", address: "", tax_id: "" }, ADMIN);
+  row = (await A.listCustomers()).customers.find((x) => x.developer_id === id)!; assert.equal(row.name, "บริษัท ทดสอบ บิวเดอร์ จำกัด (แก้)"); assert.equal(row.contact_name, "คุณใหม่"); assert.equal(row.address, ""); assert.equal(row.tax_id, "");
+  const devRowAfter = rows("DEVELOPERS").find((r) => r.developer_id === id)!; assert.equal(devRowAfter.status, devRowBefore.status); assert.equal(devRowAfter.dev_code, devRowBefore.dev_code);
+  assert.equal(rows("ACC_CUSTOMERS").filter((r) => r.developer_id === id).length, 1);
+  await fails(A.saveCustomer({ developer_id: id, updated_at_seen: "old", kind: "home_builder", company_name: "x" }, ADMIN), "STALE");
+  await A.saveDoc(form({ customer_id: id }), ADMIN);
+  await fails(A.deleteCustomer(id, row.updated_at, ADMIN), "LOCKED"); // มีเอกสาร
+  const c2 = await A.saveCustomer({ kind: "developer", company_name: "ลูกค้าไม่มีเอกสาร" }, ADMIN); const row2 = (await A.listCustomers()).customers.find((x) => x.developer_id === c2.customer.developer_id)!;
+  await A.deleteCustomer(row2.developer_id, row2.updated_at, ADMIN); assert.ok(!rows("DEVELOPERS").some((r) => r.developer_id === row2.developer_id)); assert.ok(!rows("ACC_CUSTOMERS").some((r) => r.developer_id === row2.developer_id));
+});
+await t("Product: เพิ่ม · ซ้ำ/ชื่อผิด → ปฏิเสธ · เปลี่ยนชื่อแก้ทุกที่ที่ใช้ (Developer Product / รายการเอกสาร) · ลบไม่ได้ถ้ายังใช้อยู่ · ลบที่ไม่ได้ใช้ได้", async () => {
+  await A.addProduct("สินค้าทดสอบ", ADMIN); await fails(A.addProduct("สินค้าทดสอบ", ADMIN), "DUPLICATE"); await fails(A.addProduct("a|b", ADMIN), "VALIDATION"); await fails(A.addProduct("  ", ADMIN), "VALIDATION");
+  const used = (await A.listProducts()).products.find((p) => p.name === "แพ็กเกจ STD")!; assert.ok(used.docs > 0 && used.developers > 0);
+  await fails(A.deleteProduct("แพ็กเกจ STD", ADMIN), "IN_USE");
+  await fails(A.renameProduct("แพ็กเกจ STD", "สินค้าทดสอบ", ADMIN), "DUPLICATE"); await fails(A.renameProduct("ไม่มี", "x", ADMIN), "NOT_FOUND");
+  const r = await A.renameProduct("แพ็กเกจ STD", "แพ็กเกจ STD2", ADMIN); assert.ok(r.updated > 0);
+  assert.ok(!rows("ACC_LINES").some((l) => l.product === "แพ็กเกจ STD")); assert.ok(!rows("DEVELOPER_PRODUCTS").some((p) => p.product === "แพ็กเกจ STD")); assert.ok(rows("PRODUCTION_JOBS").every((j) => j.product !== "แพ็กเกจ STD"));
+  await A.renameProduct("แพ็กเกจ STD2", "แพ็กเกจ STD", ADMIN);
+  await A.deleteProduct("สินค้าทดสอบ", ADMIN); assert.ok(!(await A.listProducts()).products.some((p) => p.name === "สินค้าทดสอบ"));
+});
+await t("สรุปบัญชี: ยอดขายแยกตามผู้ขาย (ยอดขายรวม / ชำระแล้ว) — ใบเสนอราคาที่ยังไม่ชำระไม่นับเป็นยอดขาย", async () => {
+  const { summarize } = await import("../src/lib/account");
+  const mk = (o: Record<string, string>) => ({ doc_id: o.doc_id, root_id: o.root_id ?? o.doc_id, doc_type: "quotation", doc_no: o.doc_id, status: "sent", total: "0", wht: "0", paid_amount: "0", due_date: "", doc_date: "2026-11-05", seller_name: "", ...o });
+  const docs = [
+    mk({ doc_id: "a", seller_name: "บี", total: "5000", paid_amount: "5000" }), mk({ doc_id: "a2", root_id: "a", doc_type: "invoice", seller_name: "บี", total: "5000" }),
+    mk({ doc_id: "b", seller_name: "บี", total: "3000" }), // เสนอราคาลอย ไม่นับ
+    mk({ doc_id: "c", seller_name: "เอ", doc_type: "billing", total: "2000", wht: "60", paid_amount: "500" }), mk({ doc_id: "d", doc_type: "invoice", total: "100" }),
+  ];
+  assert.deepEqual(summarize(docs, "2026-11-05").bySeller, [{ seller: "บี", count: 1, amount: 5000, paid: 5000 }, { seller: "เอ", count: 1, amount: 1940, paid: 500 }, { seller: "(ไม่ระบุผู้ขาย)", count: 1, amount: 100, paid: 0 }]);
+});
 console.log("\nระบบบัญชี (Sheets จำลอง) ผ่านทั้งหมด");
