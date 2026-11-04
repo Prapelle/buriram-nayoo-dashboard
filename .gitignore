@@ -9,3 +9,6 @@ node_modules
 *service-account*.json
 next-env.d.ts
 tsconfig.tsbuildinfo
+
+# ไฟล์ทดสอบที่สคริปต์สร้างให้ใหม่ทุกครั้ง (tests/run-all.sh)
+tests/fixtures/synthetic_SalesReport.xlsx
