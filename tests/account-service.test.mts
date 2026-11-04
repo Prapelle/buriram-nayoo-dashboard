@@ -23,6 +23,10 @@ const DESC = "สิ่งที่โครงการได้รับ\n- Co
 const form = (o: Record<string, unknown> = {}) => ({ doc_type: "quotation", doc_date: today, customer_id: dev.developer_id, job_title: "บุรีรัมย์น่าอยู่ (แคมเปญ TopDeal)", contact_name: "คุณ ปริญญาพร บุญประสพ", contact_phone: "0833651355",
   lines: [{ product: "แพ็กเกจ STD", category: "Product", description: DESC, qty: 1, unit_price: 5000, start_date: "2026-11-01", end_date: "2027-04-30" }], ...o });
 
+const SLIP = { name: "slip.png", type: "image/png", data: new ArrayBuffer(16) };
+const kv0 = new Map<string, ArrayBuffer>();
+A.setFileStoreForTest({ put: async (k: string, v: ArrayBuffer) => { kv0.set(k, v); }, get: async () => null, delete: async (k: string) => { kv0.delete(k); } });
+const payNow = (id: string, input: Record<string, unknown>, actor: string, file: typeof SLIP | undefined = SLIP) => A.confirmPayment(id, input, actor, file);
 let qt = (await A.saveDoc(form(), ADMIN)).doc;
 await t("ออกใบเสนอราคา: เลขที่ QT+ปีเดือน+ลำดับ · ยอดรวม · ผูกลูกค้าตามรายชื่อ", async () => {
   assert.match(qt.doc_no, /^QT\d{6}0001$/); assert.equal(qt.total, "5000"); assert.equal(qt.customer_name, "ซีเจ เออเบิ้ล โฮม"); assert.equal(qt.status, "draft"); assert.equal(rows("ACC_LINES").length, 1);
@@ -49,14 +53,14 @@ await t("ใบแจ้งหนี้ต่อจากใบวางบิ�
 });
 
 await t("ชำระมัดจำ: บันทึกชำระ + สถานะชำระบางส่วน · ยังไม่เพิ่ม Product / ไม่สร้าง Job · มีปุ่มเริ่มงาน", async () => {
-  const r = await A.confirmPayment(iv.doc_id, { amount: 2000, paid_at: today, method: "โอนเงิน", ref: "สลิป 001", updated_at_seen: iv.updated_at }, ADMIN);
+  const r = await payNow(iv.doc_id, { amount: 2000, paid_at: today, method: "โอนเงิน", ref: "สลิป 001", updated_at_seen: iv.updated_at }, ADMIN);
   assert.equal(r.full, false); assert.equal(r.started, null); assert.equal(r.canStart, true); assert.equal(r.doc.status, "paid_partial"); assert.equal(r.doc.paid_amount, "2000");
   assert.equal(rows("DEVELOPER_PRODUCTS").length, 0); assert.equal(rows("PRODUCTION_JOBS").length, 0);
   Object.assign(iv, r.doc);
 });
 await t("เกินยอดคงเหลือ / ข้อมูลเก่า → ปฏิเสธ ไม่บันทึกชำระ", async () => {
-  await fails(A.confirmPayment(iv.doc_id, { amount: 3000.01, paid_at: today, method: "โอนเงิน", updated_at_seen: iv.updated_at }, ADMIN), "VALIDATION");
-  await fails(A.confirmPayment(iv.doc_id, { amount: 100, paid_at: today, method: "โอนเงิน", updated_at_seen: "2000-01-01T00:00:00.000Z" }, ADMIN), "STALE");
+  await fails(payNow(iv.doc_id, { amount: 3000.01, paid_at: today, method: "โอนเงิน", updated_at_seen: iv.updated_at }, ADMIN), "VALIDATION");
+  await fails(payNow(iv.doc_id, { amount: 100, paid_at: today, method: "โอนเงิน", updated_at_seen: "2000-01-01T00:00:00.000Z" }, ADMIN), "STALE");
   assert.equal(rows("ACC_PAYMENTS").length, 1);
 });
 await t("กดเริ่มงาน: เพิ่ม Product ให้ Developer (ราคา วันเริ่ม–สิ้นสุด) + สถานะลูกค้าเปลี่ยนเอง + สร้าง Job พร้อมเช็กลิสต์", async () => {
@@ -69,7 +73,7 @@ await t("กดเริ่มงาน: เพิ่ม Product ให้ Devel
 await t("เริ่มงานซ้ำไม่ได้ (ไม่เพิ่ม Product / Job ซ้ำ)", async () => { await fails(A.startWork(iv.doc_id, ADMIN), "ALREADY_STARTED"); assert.equal(rows("DEVELOPER_PRODUCTS").length, 1); assert.equal(rows("PRODUCTION_JOBS").length, 1); });
 await t("ชำระส่วนที่เหลือ → ชำระแล้ว · ไม่เริ่มงานซ้ำ", async () => {
   const cur = rows("ACC_DOCS").find((d) => d.doc_id === iv.doc_id)!;
-  const r = await A.confirmPayment(iv.doc_id, { amount: 3000, paid_at: today, method: "เงินสด", updated_at_seen: cur.updated_at }, ADMIN);
+  const r = await payNow(iv.doc_id, { amount: 3000, paid_at: today, method: "เงินสด", updated_at_seen: cur.updated_at }, ADMIN);
   assert.equal(r.doc.status, "paid"); assert.equal(r.full, true); assert.equal(r.started, null); assert.equal(rows("PRODUCTION_JOBS").length, 1); assert.equal(rows("ACC_PAYMENTS").length, 2);
 });
 
@@ -78,7 +82,7 @@ const dev2 = (await saveDeveloper({ company_name: "บ้านดี จำก�
 const q2 = (await A.saveDoc(form({ customer_id: dev2.developer_id, lines: [{ product: "Top ads", category: "Product", description: "", qty: 2, unit_price: 1500, start_date: "2026-11-01", end_date: "2026-12-31" }, { product: "แพ็กเกจ STD", category: "Service", description: "- งานติดตั้ง", qty: 1, unit_price: 800, start_date: "2026-11-01", end_date: "2026-11-30" }] }), ADMIN)).doc;
 await t("ชำระเต็มที่ใบเสนอราคาเลย → เริ่มงานอัตโนมัติ: Product 2 รายการ + Job 2 รายการ (หนึ่งรายการสินค้าต่อหนึ่ง Job)", async () => {
   assert.equal(q2.total, "3800");
-  const r = await A.confirmPayment(q2.doc_id, { amount: 3800, paid_at: today, method: "โอนเงิน", updated_at_seen: q2.updated_at }, ADMIN);
+  const r = await payNow(q2.doc_id, { amount: 3800, paid_at: today, method: "โอนเงิน", updated_at_seen: q2.updated_at }, ADMIN);
   assert.equal(r.full, true); assert.equal(r.started!.products, 2); assert.equal(r.startError, ""); assert.equal(r.doc.status, "paid");
   const p = rows("DEVELOPER_PRODUCTS").filter((x) => x.developer_id === dev2.developer_id); assert.deepEqual(p.map((x) => x.product).sort(), ["Top ads", "แพ็กเกจ STD"]); assert.equal(p.find((x) => x.product === "Top ads")!.price_thb, "3000");
   assert.equal(p.find((x) => x.product === "แพ็กเกจ STD")!.category, "Service");
@@ -86,27 +90,27 @@ await t("ชำระเต็มที่ใบเสนอราคาเล�
 });
 await t("ขาดวันเริ่ม–สิ้นสุด → ชำระเต็มถูกปฏิเสธก่อนบันทึก (ไม่มีเงินเข้าแต่ไม่มีงาน) · ชำระมัดจำได้", async () => {
   const q3 = (await A.saveDoc(form({ lines: [{ product: "Top ads", category: "Product", qty: 1, unit_price: 1000 }] }), ADMIN)).doc; const n = rows("ACC_PAYMENTS").length;
-  await fails(A.confirmPayment(q3.doc_id, { amount: 1000, paid_at: today, method: "โอนเงิน", updated_at_seen: q3.updated_at }, ADMIN), "VALIDATION"); assert.equal(rows("ACC_PAYMENTS").length, n);
-  const r = await A.confirmPayment(q3.doc_id, { amount: 300, paid_at: today, method: "โอนเงิน", updated_at_seen: q3.updated_at }, ADMIN); assert.equal(r.canStart, true);
+  await fails(payNow(q3.doc_id, { amount: 1000, paid_at: today, method: "โอนเงิน", updated_at_seen: q3.updated_at }, ADMIN), "VALIDATION"); assert.equal(rows("ACC_PAYMENTS").length, n);
+  const r = await payNow(q3.doc_id, { amount: 300, paid_at: today, method: "โอนเงิน", updated_at_seen: q3.updated_at }, ADMIN); assert.equal(r.canStart, true);
   await fails(A.startWork(q3.doc_id, ADMIN), "VALIDATION");
 });
 await t("ยังไม่ชำระ → เริ่มงานไม่ได้ · ใบที่ยกเลิกแล้วชำระไม่ได้ · ใบที่ชำระแล้วเปลี่ยนสถานะเองไม่ได้", async () => {
   const q4 = (await A.saveDoc(form(), ADMIN)).doc; await fails(A.startWork(q4.doc_id, ADMIN), "NOT_PAID");
   const c = (await A.setDocStatus(q4.doc_id, "cancelled", ADMIN)).doc; assert.equal(c.status, "cancelled");
-  await fails(A.confirmPayment(q4.doc_id, { amount: 100, paid_at: today, method: "โอนเงิน", updated_at_seen: c.updated_at }, ADMIN), "LOCKED");
+  await fails(payNow(q4.doc_id, { amount: 100, paid_at: today, method: "โอนเงิน", updated_at_seen: c.updated_at }, ADMIN), "LOCKED");
   await fails(A.setDocStatus(q2.doc_id, "sent", ADMIN), "LOCKED"); await fails(A.setDocStatus(q4.doc_id, "paid", ADMIN), "VALIDATION");
 });
 await t("หัก ณ ที่จ่าย 3%: ยอดที่ต้องชำระ = ยอดรวม − หัก · ชำระเต็มตามยอดสุทธิ = เริ่มงานอัตโนมัติ · ชำระเกินยอดสุทธิถูกปฏิเสธ", async () => {
   const q = (await A.saveDoc(form({ wht_rate: 3, lines: [{ product: "Top ads", category: "Product", description: "- ลงโฆษณา", qty: 1, unit_price: 5000, start_date: "2026-11-01", end_date: "2026-12-31" }] }), ADMIN)).doc;
   assert.equal(q.total, "5000"); assert.equal(q.wht, "150"); assert.equal(q.wht_rate, "3");
-  await fails(A.confirmPayment(q.doc_id, { amount: 5000, paid_at: today, method: "โอนเงิน", updated_at_seen: q.updated_at }, ADMIN), "VALIDATION");
-  const r = await A.confirmPayment(q.doc_id, { amount: 4850, paid_at: today, method: "โอนเงิน", updated_at_seen: q.updated_at }, ADMIN);
+  await fails(payNow(q.doc_id, { amount: 5000, paid_at: today, method: "โอนเงิน", updated_at_seen: q.updated_at }, ADMIN), "VALIDATION");
+  const r = await payNow(q.doc_id, { amount: 4850, paid_at: today, method: "โอนเงิน", updated_at_seen: q.updated_at }, ADMIN);
   assert.equal(r.full, true); assert.equal(r.doc.status, "paid"); assert.ok(r.started); assert.equal(rows("DEVELOPER_PRODUCTS").find((p) => p.notes.includes(q.doc_no))!.price_thb, "5000"); // Product บันทึกราคาเต็ม ไม่ใช่ยอดหลังหัก
   const c = await A.convertDoc(q.doc_id, "invoice", ADMIN); assert.equal(c.doc.wht, "150");
 });
 await t("ลูกค้าถูกลบก่อนเริ่มงาน → เริ่มงานไม่ได้ (CUSTOMER_GONE) และไม่สร้าง Product/Job", async () => {
   const q5 = (await A.saveDoc(form({ customer_id: dev2.developer_id }), ADMIN)).doc;
-  await A.confirmPayment(q5.doc_id, { amount: 100, paid_at: today, method: "เงินสด", updated_at_seen: q5.updated_at }, ADMIN);
+  await payNow(q5.doc_id, { amount: 100, paid_at: today, method: "เงินสด", updated_at_seen: q5.updated_at }, ADMIN);
   const dt = tabs.get("DEVELOPERS")!.rows as string[][]; const idCol = dt[0].indexOf("developer_id"); const k = dt.findIndex((r, i) => i > 0 && r[idCol] === dev2.developer_id); dt.splice(k, 1);
   const before = rows("PRODUCTION_JOBS").length; await fails(A.startWork(q5.doc_id, ADMIN), "CUSTOMER_GONE"); assert.equal(rows("PRODUCTION_JOBS").length, before);
 });
@@ -118,17 +122,19 @@ await t("Job: เปลี่ยนสถานะ · ติ๊กเช็ก�
 await t("แนบไฟล์: ยังไม่ผูก R2 → แจ้งให้เปิดที่เก็บไฟล์ · ชนิด/ขนาดไฟล์ผิด → 422", async () => {
   await fails(A.attachFile(qt.doc_id, "", { name: "a.exe", type: "application/x-msdownload", data: new ArrayBuffer(10) }, ADMIN), "VALIDATION");
   await fails(A.attachFile(qt.doc_id, "", { name: "a.pdf", type: "application/pdf", data: new ArrayBuffer(11 * 1024 * 1024) }, ADMIN), "VALIDATION");
+  A.setFileStoreForTest(null);
   await fails(A.attachFile(qt.doc_id, "", { name: "slip.pdf", type: "application/pdf", data: new ArrayBuffer(10) }, ADMIN), "STORAGE_NOT_READY");
 });
 await t("แนบไฟล์ผ่าน KV จำลอง: บันทึกไฟล์ + แถวใน ACC_FILES · เปิดไฟล์กลับมาได้ครบ · ไฟล์ที่ไม่มีในที่เก็บ → 404", async () => {
   const kv = new Map<string, ArrayBuffer>();
-  A.setFileStoreForTest({ put: async (k, v) => { kv.set(k, v); }, get: async (k) => { const v = kv.get(k); return v ? new Response(v).body : null; } });
+  A.setFileStoreForTest({ put: async (k, v) => { kv.set(k, v); }, get: async (k) => { const v = kv.get(k); return v ? new Response(v).body : null; }, delete: async (k) => { kv.delete(k); } });
+  const before = rows("ACC_FILES").length;
   const bytes = new TextEncoder().encode("%PDF-slip").buffer as ArrayBuffer;
   const r = await A.attachFile(qt.doc_id, "", { name: "สลิป 001.pdf", type: "application/pdf", data: bytes }, ADMIN);
-  assert.equal(rows("ACC_FILES").length, 1); assert.equal(rows("ACC_FILES")[0].doc_id, qt.doc_id); assert.equal(kv.size, 1);
+  assert.equal(rows("ACC_FILES").length, before + 1); assert.equal(rows("ACC_FILES").find((x) => x.file_id === r.file.file_id)!.doc_id, qt.doc_id); assert.equal(kv.size, 1);
   const f = await A.openFile(r.file.file_id); assert.equal(f.mime, "application/pdf"); assert.equal(await new Response(f.body).text(), "%PDF-slip");
   kv.clear(); await fails(A.openFile(r.file.file_id), "NOT_FOUND"); await fails(A.openFile("nope"), "NOT_FOUND");
-  A.setFileStoreForTest(null);
+  A.setFileStoreForTest({ put: async (k: string, v: ArrayBuffer) => { kv0.set(k, v); }, get: async () => null, delete: async (k: string) => { kv0.delete(k); } });
 });
 await t("รายการ/รายละเอียดเอกสาร: สายเอกสาร · ยอดชำระ · งานที่สร้าง · ลูกค้า", async () => {
   const l = await A.listDocs(); assert.ok(l.docs.length >= 5); assert.ok(l.docs.find((d) => d.doc_id === iv.doc_id)!.work_started);
@@ -141,12 +147,12 @@ await t("ใบเสร็จ: ยืนยันชำระแล้วออ
   assert.equal(rc.find((d) => d.doc_id === pays[0].receipt_doc_id)!.paid_amount, pays[0].amount);
   const again = await A.issueReceipt(pays[0].payment_id, ADMIN); assert.equal(again.created, false); assert.equal(again.receipt.doc_id, pays[0].receipt_doc_id);
   const det = await A.getDoc(pays[0].receipt_doc_id); assert.equal(det.receipt_payment!.payment_id, pays[0].payment_id); assert.equal(det.parent_no, iv.doc_no);
-  await fails(A.confirmPayment(pays[0].receipt_doc_id, { amount: 1, paid_at: today, method: "เงินสด", updated_at_seen: det.doc.updated_at }, ADMIN), "BAD_FLOW");
+  await fails(payNow(pays[0].receipt_doc_id, { amount: 1, paid_at: today, method: "เงินสด", updated_at_seen: det.doc.updated_at }, ADMIN), "BAD_FLOW");
   await fails(A.startWork(pays[0].receipt_doc_id, ADMIN), "BAD_FLOW");
 });
 await t("ใบเสร็จของการชำระเต็มครั้งเดียว: คัดลอกรายการ/ยอดจากเอกสาร (รวมหัก ณ ที่จ่าย) · รับจริง = ยอดสุทธิ", async () => {
   const q = (await A.saveDoc(form({ wht_rate: 3 }), ADMIN)).doc;
-  const r = await A.confirmPayment(q.doc_id, { amount: 4850, paid_at: today, method: "โอนเงิน", updated_at_seen: q.updated_at }, ADMIN);
+  const r = await payNow(q.doc_id, { amount: 4850, paid_at: today, method: "โอนเงิน", updated_at_seen: q.updated_at }, ADMIN);
   assert.ok(r.receipt && !r.receiptError); assert.equal(r.receipt!.total, "5000"); assert.equal(r.receipt!.wht, "150"); assert.equal(r.receipt!.paid_amount, "4850");
   assert.equal(rows("ACC_LINES").filter((l) => l.doc_id === r.receipt!.doc_id).length, 1);
 });
@@ -159,5 +165,50 @@ await t("จำข้อมูลลูกค้า: ผู้ติดต่อ
   assert.equal(rows("ACC_CUSTOMERS").filter((x) => x.developer_id === dev.developer_id).length, 1); // หนึ่งลูกค้า = หนึ่งแถว
   await fails(A.saveDoc(form({ customer_tax_id: "123" }), ADMIN), "VALIDATION");
   const d = await A.getDoc((await A.saveDoc(form({ customer_address: "ที่อยู่ใหม่" }), ADMIN)).doc.doc_id); assert.equal(d.doc.customer_address, "ที่อยู่ใหม่"); assert.equal(d.doc.customer_tax_id, "0315560000476" === d.doc.customer_tax_id ? d.doc.customer_tax_id : "");
+});
+await t("ยืนยันชำระต้องแนบเอกสารทุกครั้ง: ไม่แนบ/ชนิดผิด/ใหญ่เกิน/ไม่มีที่เก็บไฟล์ → ปฏิเสธก่อนบันทึกชำระ (ไม่มีเงินเข้าโดยไม่มีหลักฐาน)", async () => {
+  const q = (await A.saveDoc(form(), ADMIN)).doc, n0 = rows("ACC_PAYMENTS").length, inp = { amount: 1000, paid_at: today, method: "โอนเงิน", updated_at_seen: q.updated_at };
+  await fails(A.confirmPayment(q.doc_id, inp, ADMIN), "VALIDATION");
+  await fails(payNow(q.doc_id, inp, ADMIN, { name: "x.exe", type: "application/x-msdownload", data: new ArrayBuffer(4) }), "VALIDATION");
+  await fails(payNow(q.doc_id, inp, ADMIN, { name: "big.pdf", type: "application/pdf", data: new ArrayBuffer(10 * 1024 * 1024 + 1) }), "VALIDATION");
+  A.setFileStoreForTest(null); await fails(payNow(q.doc_id, inp, ADMIN), "STORAGE_NOT_READY");
+  A.setFileStoreForTest({ put: async (k: string, v: ArrayBuffer) => { kv0.set(k, v); }, get: async () => null, delete: async (k: string) => { kv0.delete(k); } });
+  assert.equal(rows("ACC_PAYMENTS").length, n0);
+  const r = await payNow(q.doc_id, inp, ADMIN); assert.equal(r.fileError, "");
+  assert.ok(rows("ACC_FILES").some((x) => x.payment_id === r.payment.payment_id && x.doc_id === q.doc_id));
+});
+await t("ลบไฟล์แนบ: ลบแถว + ตัวไฟล์ใน KV · ไม่พบ → 404", async () => {
+  const f = rows("ACC_FILES").find((x) => x.payment_id)!, n = rows("ACC_FILES").length, k = kv0.size;
+  await A.deleteFile(f.file_id, ADMIN); assert.equal(rows("ACC_FILES").length, n - 1); assert.ok(!rows("ACC_FILES").some((x) => x.file_id === f.file_id)); assert.equal(kv0.size, k - 1);
+  await fails(A.deleteFile(f.file_id, ADMIN), "NOT_FOUND");
+});
+await t("ลบเอกสาร: มีใบถัดไป/มีงาน Production → ลบไม่ได้ · ลบใบเสนอราคาที่มีชำระ = ลบรายการ ชำระ ไฟล์ ใบเสร็จ ด้วย · ลบใบเสร็จใบเดียว → ออกใหม่ได้", async () => {
+  const q = (await A.saveDoc(form(), ADMIN)).doc;
+  const b = (await A.convertDoc(q.doc_id, "billing", ADMIN)).doc;
+  await fails(A.deleteDoc(q.doc_id, ADMIN), "LOCKED"); // มีใบวางบิลต่อแล้ว
+  const jobsDoc = rows("PRODUCTION_JOBS")[0].doc_id; await fails(A.deleteDoc(jobsDoc, ADMIN), "LOCKED"); // สร้างงานไปแล้ว
+  const r = await payNow(b.doc_id, { amount: 1000, paid_at: today, method: "เงินสด", updated_at_seen: b.updated_at }, ADMIN);
+  const rc = r.receipt!.doc_id; await A.deleteDoc(rc, ADMIN);
+  assert.ok(!rows("ACC_DOCS").some((d) => d.doc_id === rc)); assert.equal(rows("ACC_PAYMENTS").find((p) => p.payment_id === r.payment.payment_id)!.receipt_doc_id, "");
+  const again = await A.issueReceipt(r.payment.payment_id, ADMIN); assert.equal(again.created, true);
+  const nLines = rows("ACC_LINES").length, nFiles = rows("ACC_FILES").length;
+  const res = await A.deleteDoc(b.doc_id, ADMIN); assert.equal(res.receipts, 1);
+  for (const id of [b.doc_id, again.receipt.doc_id]) { assert.ok(!rows("ACC_DOCS").some((d) => d.doc_id === id)); assert.ok(!rows("ACC_LINES").some((l) => l.doc_id === id)); assert.ok(!rows("ACC_PAYMENTS").some((p) => p.doc_id === id)); }
+  assert.equal(rows("ACC_FILES").length, nFiles - 1); assert.equal(rows("ACC_LINES").length, nLines - 2);
+  await fails(A.deleteDoc(b.doc_id, ADMIN), "NOT_FOUND");
+  await A.deleteDoc(q.doc_id, ADMIN); // ใบเสนอราคาลบได้แล้วเมื่อใบวางบิลถูกลบ
+});
+await t("สรุปบัญชี: นับเอกสารแต่ละชนิด · หนึ่งสายนับหนึ่งงาน (ใบล่าสุด) · รอเรียกเก็บ = สุทธิ − ที่ชำระ · ยอดรับจากใบเสร็จ · เกินกำหนด", async () => {
+  const { summarize } = await import("../src/lib/account");
+  const mk = (o: Record<string, string>) => ({ doc_id: o.doc_id, root_id: o.root_id ?? o.doc_id, doc_type: "quotation", doc_no: o.doc_id, status: "sent", total: "0", wht: "0", paid_amount: "0", due_date: "", doc_date: "2026-11-05", ...o });
+  const docs = [
+    mk({ doc_id: "a", total: "5000", wht: "150", paid_amount: "1000" }), mk({ doc_id: "a2", root_id: "a", doc_type: "invoice", total: "5000", wht: "150", due_date: "2026-11-01" }), // สาย a: ล่าสุดแจ้งหนี้ 4850 ชำระแล้ว 1000 → ค้าง 3850 เกินกำหนด
+    mk({ doc_id: "b", total: "2000" }), mk({ doc_id: "c", total: "9999", status: "cancelled" }),
+    mk({ doc_id: "r1", root_id: "a", doc_type: "receipt", status: "paid", paid_amount: "1000" }),
+  ];
+  const s = summarize(docs, "2026-11-05");
+  assert.deepEqual(s.counts, { quotation: 2, billing: 0, invoice: 1, receipt: 1 }); assert.equal(s.cancelled, 1);
+  assert.equal(s.stages.invoice.outstanding, 3850); assert.equal(s.stages.quotation.outstanding, 2000); assert.equal(s.outstanding, 5850);
+  assert.equal(s.overdue.amount, 3850); assert.equal(s.received, 1000); assert.deepEqual(s.months, [{ month: "2026-11", amount: 1000 }]);
 });
 console.log("\nระบบบัญชี (Sheets จำลอง) ผ่านทั้งหมด");

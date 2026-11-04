@@ -52,8 +52,9 @@ export const NAV: NavItem[] = [
   { href: "/work/sale-developer", label: "Sale developer", roles: SALES, group: "Project", icon: "board", system: "work" },
   { href: "/work/home-builders", label: "Home Builder", roles: SALES, group: "Project", icon: "building", system: "work" }, // 1/11/2026
   { href: "/work/sale-home-builder", label: "Sale home builder", roles: SALES, group: "Project", icon: "board", system: "work" },
-  { href: "/work/sales", label: "Revenue", roles: SALES, group: "Project", icon: "money", system: "work" }, // ยอดขาย FlowAccount (มาจากโครงการหมู่บ้าน) — เปลี่ยนชื่อจาก Sales 31/10/2026
+  { href: "/account/revenue", label: "Revenue", roles: SALES, icon: "chart", system: "account" }, // ย้ายมาอยู่ในระบบบัญชี 5/11/2026 (เดิม /work/sales) — // ยอดขาย FlowAccount (มาจากโครงการหมู่บ้าน) — เปลี่ยนชื่อจาก Sales 31/10/2026
   // ระบบบัญชี + Production (5/11/2026): ดู/ออกเอกสาร = Super Admin, Admin, AE · ยืนยันชำระเงิน/เริ่มงาน/แก้ Job = Super Admin, Admin (ตรวจที่ API)
+  { href: "/account/summary", label: "สรุปบัญชี", roles: SALES, icon: "report", system: "account" },
   { href: "/account", label: "เอกสารบัญชี", roles: SALES, icon: "money", system: "account" },
   { href: "/production", label: "งาน Production", roles: SALES, icon: "board", system: "production" },
   { href: "/dashboard/import", label: "นำเข้า CSV", roles: DATA, group: "ข้อมูล", icon: "upload", system: "dashboard" },
@@ -80,8 +81,8 @@ export type SystemDef = { id: SystemId; label: string; desc: string; href: strin
 /** ระบบย่อยทั้งหมด (ปุ่มแถบด้านบน + หน้าเลือกระบบ "/") · href = หน้าแรกของระบบ (หน้าที่โหลดเบา) */
 export const SYSTEMS: SystemDef[] = [
   { id: "dashboard", label: "Dashboard", desc: "การตลาด · Facebook / Google / LINE OA / Website · นำเข้า-ส่งออกข้อมูล", href: "/dashboard/facebook-ads", prefix: "/dashboard", roles: MKT },
-  { id: "work", label: "ติดตามงาน", desc: "Leads คนต้องการซื้อ / ขาย · Developer · Home Builder · Revenue", href: "/work/leads", prefix: "/work", roles: SALES },
-  { id: "account", label: "บัญชี", desc: "ใบเสนอราคา · ใบวางบิล · ใบแจ้งหนี้ · ยืนยันชำระเงิน → เพิ่ม Product ให้ลูกค้า", href: "/account", prefix: "/account", roles: SALES },
+  { id: "work", label: "ติดตามงาน", desc: "Leads คนต้องการซื้อ / ขาย · Developer · Home Builder", href: "/work/leads", prefix: "/work", roles: SALES },
+  { id: "account", label: "บัญชี", desc: "ใบเสนอราคา · ใบวางบิล · ใบแจ้งหนี้ · ใบเสร็จ · สรุปยอดรอเรียกเก็บ · Revenue", href: "/account", prefix: "/account", roles: SALES },
   { id: "production", label: "Production", desc: "งานผลิตที่สร้างอัตโนมัติจากการชำระเงิน · เช็กลิสต์ตามรายละเอียดแพ็กเกจ", href: "/production", prefix: "/production", roles: SALES },
 ];
 export const systemsFor = (role: Role) => SYSTEMS.filter((x) => !x.soon && x.roles.includes(role));
@@ -97,7 +98,7 @@ export const navOfSystem = (items: NavItem[], sys: SystemId | null) => items.fil
 export const homeFor = (_role?: string) => "/";
 
 /** สิทธิ์เข้าหน้า (ใช้ NAV เป็นที่เดียว) · หน้าย่อยใช้สิทธิ์ของเมนูที่ยาวที่สุดที่ตรงกัน เช่น /settings/metrics/x → /settings/metrics · /sales/import = นำเข้า (DATA) */
-const EXTRA: Record<string, Role[]> = { "/work/sales/import": DATA, "/": ALL };
+const EXTRA: Record<string, Role[]> = { "/account/revenue/import": DATA, "/": ALL };
 export function canAccess(role: Role | null | undefined, path: string): boolean {
   if (!role) return false;
   if (EXTRA[path]) return EXTRA[path].includes(role);

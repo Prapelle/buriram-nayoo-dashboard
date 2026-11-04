@@ -40,6 +40,37 @@ export const FILE_COLUMNS = ["file_id", "doc_id", "payment_id", "file_name", "mi
 export const JOB_COLUMNS = ["job_id", "job_code", "doc_id", "doc_no", "line_id", "developer_id", "customer_name", "job_title", "product", "category", "start_date", "end_date",
   "checklist", "done_idx", "status", "owner", "note", "created_by", "created_at", "updated_by", "updated_at"];
 
+/**
+ * สรุปบัญชี: จำนวนเอกสารแต่ละชนิด · ยอดรอเรียกเก็บ · ยอดรับแล้ว (จากใบเสร็จ)
+ * หนึ่งสายเอกสาร (root_id เดียวกัน) นับเป็นหนึ่งงาน ใช้ใบล่าสุดที่ไม่ยกเลิก (แจ้งหนี้ > วางบิล > เสนอราคา) เป็นยอดที่ต้องเก็บ
+ * ยอดรอเรียกเก็บ = ยอดสุทธิ (หลังหัก ณ ที่จ่าย) − ที่ชำระแล้วทุกใบในสายเดียวกัน (ไม่ติดลบ) · เกินกำหนด = ใบวางบิล/แจ้งหนี้ที่ครบกำหนดแล้วยังค้าง
+ */
+export type Stage = { count: number; amount: number; outstanding: number };
+export function summarize(docs: Rec[], today: string) {
+  const live = docs.filter((d) => d.status !== "cancelled");
+  const counts = Object.fromEntries(DOC_TYPES.map((t) => [t, live.filter((d) => d.doc_type === t).length])) as Record<DocType, number>;
+  const cancelled = docs.length - live.length;
+  const stages: Record<"quotation" | "billing" | "invoice", Stage> = { quotation: { count: 0, amount: 0, outstanding: 0 }, billing: { count: 0, amount: 0, outstanding: 0 }, invoice: { count: 0, amount: 0, outstanding: 0 } };
+  const chains = new Map<string, Rec[]>();
+  for (const d of live) if (d.doc_type !== "receipt") { const k = d.root_id || d.doc_id; chains.set(k, [...(chains.get(k) ?? []), d]); }
+  let overdue = { count: 0, amount: 0 };
+  for (const ds of chains.values()) {
+    const latest = [...ds].sort((a, b) => DOC_TYPES.indexOf(b.doc_type as DocType) - DOC_TYPES.indexOf(a.doc_type as DocType) || b.doc_no.localeCompare(a.doc_no))[0];
+    const paid = round2(ds.reduce((s, d) => s + Number(d.paid_amount || 0), 0)), amount = payableOf(latest), out = Math.max(0, round2(amount - paid));
+    const st = stages[latest.doc_type as keyof typeof stages]; st.count++; st.amount = round2(st.amount + amount); st.outstanding = round2(st.outstanding + out);
+    if (out > 0 && latest.doc_type !== "quotation" && latest.due_date && latest.due_date < today) overdue = { count: overdue.count + 1, amount: round2(overdue.amount + out) };
+  }
+  const receipts = live.filter((d) => d.doc_type === "receipt");
+  const byMonth = new Map<string, number>();
+  for (const r of receipts) byMonth.set(r.doc_date.slice(0, 7), round2((byMonth.get(r.doc_date.slice(0, 7)) ?? 0) + Number(r.paid_amount || 0)));
+  return {
+    counts, cancelled, stages, overdue,
+    outstanding: round2(stages.quotation.outstanding + stages.billing.outstanding + stages.invoice.outstanding),
+    received: round2(receipts.reduce((s, r) => s + Number(r.paid_amount || 0), 0)),
+    months: [...byMonth.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([month, amount]) => ({ month, amount })),
+  };
+}
+
 /** ข้อมูลผู้ขาย (ค่าเริ่มต้นตามใบเสนอราคาต้นแบบ — แก้ได้ที่ APP_CONFIG: account_seller เป็น JSON) */
 export type Seller = { name: string; address: string; tax_id: string; phone: string };
 export const DEFAULT_SELLER: Seller = { name: "บริษัท แฟค ดิจิตอล จำกัด (สำนักงานใหญ่)", address: "83 ถนนหลักเมือง ตำบลในเมือง อำเภอเมืองสุรินทร์ จังหวัดสุรินทร์ 32000", tax_id: "0325566000476", phone: "0909720100" };

@@ -7,6 +7,8 @@ import Link from "next/link";
 import { Note } from "@/components/Note";
 import { BarList, LineChart, Pending } from "@/components/charts";
 import { DataTable } from "@/components/DataTable";
+import { listDocs } from "@/lib/account-service";
+import { money, summarize } from "@/lib/account";
 import { computeSales, type SalesFilters, type TxRow } from "@/lib/sales/dashboard";
 import { readColumns } from "@/lib/tabdata";
 import { applyView, fmtCell, href, one, type Col } from "@/lib/tableview";
@@ -18,7 +20,7 @@ const LABELS: Record<string, string> = { company_name: "บริษัทผู
 const MONEY = new Set(["gross_sales", "discount_amount", "net_value", "vat_amount", "total_net", "sales_inc_vat", "discount_before_vat", "discount_doc"]);
 
 export default async function SalesDashboardPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const role = await requirePage("/work/sales");
+  const role = await requirePage("/account/revenue");
   const sp = await searchParams;
   const rg = await rangeOf(sp);
   const f: SalesFilters = { from: rg.from, to: rg.to, period: one(sp.period) || undefined, project: one(sp.project) || undefined, salesperson: one(sp.salesperson) || undefined, status: one(sp.status) || undefined, q: one(sp.q) || undefined };
@@ -30,11 +32,13 @@ export default async function SalesDashboardPage({ searchParams }: { searchParam
     return <section><h1 className="mb-4 text-[26px] font-bold tracking-tight">Revenue</h1><p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">โหลดข้อมูลไม่สำเร็จ: {e instanceof Error ? e.message.slice(0, 200) : "ไม่ทราบสาเหตุ"} — ลอง <Link href="/settings" className="underline">ตั้งค่า → เตรียม Google Sheet</Link></p></section>;
   }
   const v = computeSales(all, f);
+  // ยอดจากระบบบัญชี (ใบเสร็จที่ออกเมื่อยืนยันชำระเงิน) — ถ้าอ่านไม่ได้ (ยังไม่เตรียม Sheet) ข้ามส่วนนี้ ไม่ให้หน้า Revenue เดิมล่ม
+  const acc = await listDocs().then((d) => summarize(d.docs, d.today)).catch(() => null);
   const sort = one(sp.sort) || "invoice_date", dir = (one(sp.dir) || "desc") as "asc" | "desc";
   const params: Record<string, string | undefined> = { from: f.from, to: f.to, period: f.period, project: f.project, salesperson: f.salesperson, status: f.status, q: f.q };
   const view = applyView(v.rows, { sort, dir, page: Number(one(sp.page)) || 1, size: 25 });
   const cols: Col[] = [
-    { key: "invoice_date", label: "วันที่", kind: "date" }, { key: "invoice_no", label: "เลขที่เอกสาร", href: (r) => href("/work/sales", { ...params, doc: r.invoice_no }) },
+    { key: "invoice_date", label: "วันที่", kind: "date" }, { key: "invoice_no", label: "เลขที่เอกสาร", href: (r) => href("/account/revenue", { ...params, doc: r.invoice_no }) },
     { key: "customer_name", label: "ลูกค้า", kind: "clip" }, { key: "project_name", label: "โปรเจ็ค", kind: "clip" }, { key: "salesperson", label: "พนักงานขาย" },
     { key: "total_net", label: "ยอดสุทธิ", kind: "thb" }, { key: "payment_status", label: "สถานะ" },
   ];
@@ -56,20 +60,32 @@ export default async function SalesDashboardPage({ searchParams }: { searchParam
           <p className="text-sm text-slate-500">อัปเดตล่าสุด: {last ? thDateTime(last) : "ยังไม่มีข้อมูล"}</p>
         </div>
         <div className="flex gap-2 text-sm">
-          <Link href="/work/sales/import" className="rounded-lg bg-brand-600 px-4 py-1.5 font-medium text-white hover:bg-brand-700">นำเข้ารายงานยอดขาย</Link>
+          <Link href="/account/revenue/import" className="rounded-lg bg-brand-600 px-4 py-1.5 font-medium text-white hover:bg-brand-700">นำเข้ารายงานยอดขาย</Link>
           {all.length > 0 && <a href={exportUrl} className="rounded-md border border-slate-300 px-4 py-1.5">Export CSV{Object.values(f).some(Boolean) ? " (ตามตัวกรอง)" : ""}</a>}
         </div>
       </div>
 
-      <form method="get" action="/work/sales" className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm">
+      {acc && (
+        <div className="space-y-3 rounded-xl border border-brand-200 bg-brand-50/40 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-semibold">ยอดจากระบบบัญชี (ใบเสร็จ)</h2><Link href="/account/summary" className="text-sm text-brand-700 underline">ดูสรุปบัญชีทั้งหมด</Link></div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="rounded-lg bg-white p-3"><div className="text-xs text-slate-500">รับชำระแล้ว</div><div className="text-xl font-bold tabular-nums text-green-700">฿{money(acc.received)}</div><div className="text-xs text-slate-500">{acc.counts.receipt} ใบเสร็จ</div></div>
+            <div className="rounded-lg bg-white p-3"><div className="text-xs text-slate-500">รอเรียกเก็บ</div><div className="text-xl font-bold tabular-nums text-brand-700">฿{money(acc.outstanding)}</div><div className="text-xs text-slate-500">เกินกำหนด ฿{money(acc.overdue.amount)}</div></div>
+            <div className="rounded-lg bg-white p-3"><div className="text-xs text-slate-500">เอกสารที่ออก (ไม่รวมยกเลิก)</div><div className="text-sm tabular-nums">เสนอราคา {acc.counts.quotation} · วางบิล {acc.counts.billing} · แจ้งหนี้ {acc.counts.invoice}</div></div>
+          </div>
+          {acc.months.length > 0 && <BarList title="รับชำระรายเดือน (ระบบบัญชี)" unit="฿" items={acc.months.map((m) => ({ label: thMonth(m.month), value: m.amount }))} />}
+          <p className="text-xs text-slate-500">ตัวเลขชุดนี้มาจากใบเสร็จของระบบบัญชีใหม่ ส่วนด้านล่างเป็นยอดขายจากรายงานที่นำเข้า (FlowAccount) — สองแหล่งแยกกัน ไม่บวกรวมกัน</p>
+        </div>)}
+
+      <form method="get" action="/account/revenue" className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm">
         <RangeFields from={f.from} to={f.to} className={inp} remembered={rg.remembered} />
         {sel("period", "ช่วงรายงาน", f.period, v.options.periods)}{sel("project", "โปรเจ็ค", f.project, v.options.projects)}{sel("salesperson", "พนักงานขาย", f.salesperson, v.options.people)}{sel("status", "สถานะ", f.status, v.options.statuses)}
         <label><span className="mb-1 block text-xs text-slate-500">ค้นหา</span><input name="q" defaultValue={f.q} placeholder="เลขที่เอกสาร / ลูกค้า" className={inp} /></label>
         <button className="rounded-lg bg-brand-600 px-4 py-1.5 font-medium text-white">ใช้ตัวกรอง</button>
-        {Object.values(f).some(Boolean) && <Link href="/work/sales?range=all" className="py-1.5 underline">ล้าง</Link>}
+        {Object.values(f).some(Boolean) && <Link href="/account/revenue?range=all" className="py-1.5 underline">ล้าง</Link>}
       </form>
 
-      {all.length === 0 && <div className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-slate-600">ยังไม่มีข้อมูลยอดขาย — เริ่มจาก <Link href="/work/sales/import" className="underline">นำเข้ารายงานยอดขาย (Excel)</Link></div>}
+      {all.length === 0 && <div className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-slate-600">ยังไม่มีข้อมูลยอดขาย — เริ่มจาก <Link href="/account/revenue/import" className="underline">นำเข้ารายงานยอดขาย (Excel)</Link></div>}
       {all.length > 0 && v.rows.length === 0 && <p className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-center text-slate-500">ไม่มีเอกสารที่ตรงกับตัวกรอง</p>}
       {v.warnings.map((w, i) => <p key={i} className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">⚠ {w}</p>)}
 
@@ -101,7 +117,7 @@ export default async function SalesDashboardPage({ searchParams }: { searchParam
 
       {detail && (
         <div className="rounded-lg border border-slate-300 bg-white p-4">
-          <div className="mb-2 flex items-center justify-between"><h3 className="font-semibold">รายละเอียดเอกสาร {detail.invoice_no}</h3><Link href={href("/work/sales", params)} className="text-sm underline">ปิด</Link></div>
+          <div className="mb-2 flex items-center justify-between"><h3 className="font-semibold">รายละเอียดเอกสาร {detail.invoice_no}</h3><Link href={href("/account/revenue", params)} className="text-sm underline">ปิด</Link></div>
           <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2 lg:grid-cols-3">
             {Object.keys(LABELS).filter((k) => (detail[k] ?? "") !== "").map((k) => (
               <div key={k} className="flex gap-2"><dt className="shrink-0 text-slate-500">{LABELS[k]}:</dt><dd className="break-words">{MONEY.has(k) ? thb(Number(detail[k])) : k === "invoice_date" ? fmtCell("date", detail[k]) : detail[k]}</dd></div>
@@ -110,7 +126,7 @@ export default async function SalesDashboardPage({ searchParams }: { searchParam
         </div>
       )}
 
-      {all.length > 0 && <DataTable cols={cols} rows={view.rows} base="/work/sales" params={params} sort={sort} dir={dir} page={view.page} pages={view.pages} total={view.total} />}
+      {all.length > 0 && <DataTable cols={cols} rows={view.rows} base="/account/revenue" params={params} sort={sort} dir={dir} page={view.page} pages={view.pages} total={view.total} />}
       <Note className="" href="/settings/metrics/sales">• ยอดสุทธิ = ผลรวมยอดรวมสุทธิ · ก่อนส่วนลด = ขายแยกภาษี · ส่วนลดใช้ส่วนลดตามเอกสาร (ถ้าว่างใช้ส่วนลดก่อน VAT) ไม่บวกรวมกัน · ตัวเลขทุกส่วนคำนวณจากตัวกรองเดียวกัน</Note>
     </section>
   );

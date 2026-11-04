@@ -25,8 +25,8 @@ const EXPECT: Record<string, string[] | "public" | Record<string, string[]>> = {
   "src/app/api/export/sales-transactions/route.ts": ["admin"],
   "src/app/api/export/[dataset]/route.ts": ["admin"], // สิทธิ์รายชุดข้อมูลบังคับใน service (ตรวจในข้อ 3)
   // ระบบบัญชี + Production (5/11/2026): AE ออก/แก้เอกสารได้ แต่ยืนยันชำระเงิน / เริ่มงาน / แนบไฟล์ / แก้ Job = Admin ขึ้นไป
-  "src/app/api/account/route.ts": { GET: ["admin", "ae"], POST: ["admin", "ae"] }, "src/app/api/account/[id]/route.ts": ["admin", "ae"], "src/app/api/account/pay/route.ts": ["admin"],
-  "src/app/api/account/files/route.ts": { GET: ["admin", "ae"], POST: ["admin"] }, "src/app/api/production/route.ts": { GET: ["admin", "ae"], PATCH: ["admin"] },
+  "src/app/api/account/route.ts": { GET: ["admin", "ae"], POST: ["admin", "ae"] }, "src/app/api/account/[id]/route.ts": { GET: ["admin", "ae"], DELETE: ["super_admin"] }, "src/app/api/account/pay/route.ts": ["admin"],
+  "src/app/api/account/files/route.ts": { GET: ["admin", "ae"], POST: ["admin"], DELETE: ["super_admin"] }, "src/app/api/production/route.ts": { GET: ["admin", "ae"], PATCH: ["admin"] },
   "src/app/api/targets/route.ts": { GET: ["admin", "marketing", "ae"], POST: ["admin"] },
 };
 assert.deepEqual(routes.filter((r) => !(r in EXPECT)), [], "พบ API Route ใหม่ที่ยังไม่ได้กำหนดสิทธิ์ในเทสต์นี้ — ต้องตรวจสอบก่อน");
@@ -54,11 +54,11 @@ for (const f of pageFiles) {
 }
 const pg = read("src/lib/page-guard.ts"); assert.ok(pg.includes('redirect("/login")') && pg.includes('redirect("/")') && pg.includes("canAccess(role, path)"));
 const can = (r: string, p: string) => canAccess(normRole(r)!, p);
-for (const p of ["/work/leads", "/work/buyer-leads", "/work/seller-leads", "/lead-report", "/work/developers", "/work/sale-developer", "/work/home-builders", "/work/sale-home-builder", "/work/sales"]) assert.ok(can("ae", p), `AE ต้องเข้า ${p} ได้`);
-for (const p of ["/dashboard", "/dashboard/facebook-ads", "/dashboard/performance", "/dashboard/import", "/dashboard/export", "/settings", "/settings/metrics", "/settings/targets", "/work/sales/import"]) assert.ok(!can("ae", p), `AE ต้องเข้า ${p} ไม่ได้`);
+for (const p of ["/work/leads", "/work/buyer-leads", "/work/seller-leads", "/lead-report", "/work/developers", "/work/sale-developer", "/work/home-builders", "/work/sale-home-builder", "/account/revenue"]) assert.ok(can("ae", p), `AE ต้องเข้า ${p} ได้`);
+for (const p of ["/dashboard", "/dashboard/facebook-ads", "/dashboard/performance", "/dashboard/import", "/dashboard/export", "/settings", "/settings/metrics", "/settings/targets", "/account/revenue/import"]) assert.ok(!can("ae", p), `AE ต้องเข้า ${p} ไม่ได้`);
 for (const p of ["/dashboard", "/dashboard/facebook-ads", "/dashboard/facebook-page", "/dashboard/google-ads", "/dashboard/line-oa", "/dashboard/website", "/dashboard/performance", "/lead-report", "/settings/metrics"]) assert.ok(can("marketing", p), `Marketing ต้องเข้า ${p} ได้`);
-for (const p of ["/work/leads", "/work/buyer-leads", "/work/developers", "/work/sales", "/dashboard/import", "/dashboard/export", "/settings", "/settings/targets", "/settings/import-guide"]) assert.ok(!can("marketing", p), `Marketing ต้องเข้า ${p} ไม่ได้`);
-for (const p of ["/dashboard", "/work/leads", "/work/developers", "/work/sales", "/work/sales/import", "/dashboard/import", "/dashboard/export", "/settings/targets", "/settings/metrics", "/dashboard/facebook-ads"]) assert.ok(can("admin", p), `Admin ต้องเข้า ${p} ได้`);
+for (const p of ["/work/leads", "/work/buyer-leads", "/work/developers", "/account/revenue", "/dashboard/import", "/dashboard/export", "/settings", "/settings/targets", "/settings/import-guide"]) assert.ok(!can("marketing", p), `Marketing ต้องเข้า ${p} ไม่ได้`);
+for (const p of ["/dashboard", "/work/leads", "/work/developers", "/account/revenue", "/account/revenue/import", "/dashboard/import", "/dashboard/export", "/settings/targets", "/settings/metrics", "/dashboard/facebook-ads"]) assert.ok(can("admin", p), `Admin ต้องเข้า ${p} ได้`);
 assert.ok(!can("admin", "/settings"), "Admin ต้องเข้าตั้งค่าระบบไม่ได้");
 for (const n of NAV.flatMap((x) => ("children" in x && x.children ? x.children : [x]) as { href: string }[])) assert.ok(can("super_admin", n.href), `Super Admin ต้องเข้า ${n.href} ได้`);
 assert.equal(normRole("sales"), "ae"); assert.equal(normRole("Admin"), "admin"); assert.equal(normRole("x"), null); assert.equal(homeFor("marketing"), "/"); assert.equal(homeFor("ae"), "/");
@@ -66,7 +66,7 @@ for (const r of ["super_admin", "admin", "ae", "marketing"] as const) assert.ok(
 assert.deepEqual(systemsFor("marketing").map((x) => x.id), ["dashboard"]); assert.deepEqual(systemsFor("ae").map((x) => x.id), ["work", "account", "production"]); assert.deepEqual(systemsFor("admin").map((x) => x.id), ["dashboard", "work", "account", "production"]);
 for (const p of ["/account", "/account/new", "/account/abc", "/production"]) { assert.ok(can("ae", p) && can("admin", p), `AE/Admin ต้องเข้า ${p} ได้`); assert.ok(!can("marketing", p), `Marketing ต้องเข้า ${p} ไม่ได้`); }
 assert.equal(systemOf("/account/abc"), "account"); assert.equal(systemOf("/production"), "production");
-assert.equal(systemOf("/dashboard"), "dashboard"); assert.equal(systemOf("/work/sales/import"), "work"); assert.equal(systemOf("/lead-report"), null); assert.equal(systemOf("/settings"), null);
+assert.equal(systemOf("/dashboard"), "dashboard"); assert.equal(systemOf("/account/revenue/import"), "account"); assert.equal(systemOf("/lead-report"), null); assert.equal(systemOf("/settings"), null);
 const hrefs = (sys: "dashboard" | "work", r: "super_admin" | "ae" | "marketing") => navOfSystem(navFor(r), sys).flatMap((n) => n.children ?? [n]).map((n) => n.href);
 const sd = hrefs("dashboard", "super_admin"), sw = hrefs("work", "super_admin");
 assert.ok(sd.every((h) => !h.startsWith("/work")) && sw.every((h) => !h.startsWith("/dashboard")), "เมนูแต่ละระบบต้องไม่มีหน้าของอีกระบบ");

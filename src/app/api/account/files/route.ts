@@ -1,7 +1,7 @@
 import { logError } from "@/lib/log";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/guard";
-import { AccError, attachFile, openFile } from "@/lib/account-service";
+import { AccError, attachFile, deleteFile, openFile } from "@/lib/account-service";
 import { MAX_FILE_BYTES } from "@/lib/account";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +19,13 @@ export async function GET(req: Request) {
     const f = await openFile(new URL(req.url).searchParams.get("id") ?? "");
     return new Response(f.body, { headers: { "content-type": f.mime, "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(f.name)}`, "x-content-type-options": "nosniff", "cache-control": "private, no-store" } });
   } catch (e) { return fail(e); }
+}
+
+/** ลบไฟล์แนบ: DELETE ?id=file_id — เฉพาะ Super Admin */
+export async function DELETE(req: Request) {
+  const g = await requireRole(["super_admin"]);
+  if (!g.ok) return g.res;
+  try { return NextResponse.json(await deleteFile(new URL(req.url).searchParams.get("id") ?? "", g.email)); } catch (e) { return fail(e); }
 }
 
 /** แนบไฟล์ (multipart: doc_id, payment_id (ไม่บังคับ), file) — Super Admin / Admin */

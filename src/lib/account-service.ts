@@ -222,7 +222,9 @@ async function applyWork(t: Record<string, Tab>, doc: Rec, actor: string) {
   return { products: lines.length, jobs: made.map((j) => ({ job_id: j.job_id, job_code: j.job_code, product: j.product })) };
 }
 
-export async function confirmPayment(id: string, input: Record<string, unknown>, actor: string) {
+export type Upload = { name: string; type: string; data: ArrayBuffer };
+/** ต้องแนบเอกสารยืนยันการชำระเงิน (สลิป / PDF) ทุกครั้ง — ตรวจและเช็กที่เก็บไฟล์ก่อนบันทึกชำระ จะได้ไม่มีเงินเข้าแต่ไม่มีหลักฐาน */
+export async function confirmPayment(id: string, input: Record<string, unknown>, actor: string, file?: Upload) {
   const t = await load();
   const i = t.ACC_DOCS.rows.findIndex((d) => d.doc_id === id);
   if (i < 0) throw new AccError(404, "ไม่พบเอกสาร", "NOT_FOUND");
@@ -233,6 +235,10 @@ export async function confirmPayment(id: string, input: Record<string, unknown>,
   const paid = round2(t.ACC_PAYMENTS.rows.filter((p) => p.doc_id === id).reduce((s, p) => s + Number(p.amount || 0), 0));
   const p = validatePayment(input, payableOf(doc), paid, todayBkk()); // ยอดที่ต้องชำระ = ยอดรวม − หัก ณ ที่จ่าย
   if (!p.ok) throw new AccError(422, "ข้อมูลการชำระเงินไม่ถูกต้อง", "VALIDATION", { fields: p.errors });
+  if (!file || !file.data.byteLength) throw new AccError(422, "ต้องแนบเอกสารยืนยันการชำระเงิน (สลิป / PDF) ทุกครั้งก่อนยืนยัน", "VALIDATION", { fields: { slip: "แนบสลิปหรือเอกสารยืนยันการชำระเงิน (PDF / PNG / JPG ไม่เกิน 10 MB)" } });
+  if (!FILE_TYPES.includes(file.type)) throw new AccError(422, "เอกสารยืนยันการชำระเงินแนบได้เฉพาะ PDF / PNG / JPG", "VALIDATION", { fields: { slip: "ชนิดไฟล์ต้องเป็น PDF / PNG / JPG" } });
+  if (file.data.byteLength > MAX_FILE_BYTES) throw new AccError(422, "ไฟล์ใหญ่เกิน 10 MB", "VALIDATION", { fields: { slip: "ไฟล์ใหญ่เกิน 10 MB" } });
+  if (!(await fileStore())) throw new AccError(409, "ยังไม่ได้เปิดที่เก็บไฟล์ (Cloudflare KV) จึงแนบเอกสารยืนยันไม่ได้ — ดูขั้นตอนใน SETUP.md", "STORAGE_NOT_READY");
   // เต็มจำนวน แต่ยังเริ่มงานไม่ได้ (ขาดวันที่/ลูกค้า) → ปฏิเสธก่อนบันทึกชำระ จะได้ไม่มีเงินเข้าแต่ไม่มีงาน
   const root = t.ACC_DOCS.rows.find((d) => d.doc_id === (doc.root_id || doc.doc_id)) ?? doc;
   const willStart = p.full && !root.work_started_at;
@@ -254,9 +260,11 @@ export async function confirmPayment(id: string, input: Record<string, unknown>,
   // บันทึกชำระแล้ว แต่เริ่มงานล้มเหลว (เช่น Sheets ขัดข้อง) → ไม่ให้ทั้งคำขอล้ม: แจ้งเหตุผล และให้กดปุ่ม "เริ่มงาน" ซ้ำได้ (applyWork ตรวจก่อนเขียน)
   let receipt: Rec | null = null, receiptError = "";
   try { receipt = await createReceipt(t, rec, pay, paid === 0 && p.full, actor); } catch (e) { receiptError = e instanceof Error ? e.message : "ออกใบเสร็จไม่สำเร็จ"; }
+  let fileError = "";
+  try { await attachFile(id, pid, file, actor); } catch (e) { fileError = e instanceof Error ? e.message : "แนบไฟล์ไม่สำเร็จ"; }
   let started: Awaited<ReturnType<typeof applyWork>> | null = null, startError = "";
   if (willStart) { try { started = await applyWork(t, rec, actor); } catch (e) { startError = e instanceof Error ? e.message : "เริ่มงานไม่สำเร็จ"; } }
-  return { payment: pay, doc: pick(DOC_COLUMNS, rec), receipt: receipt ? pick(DOC_COLUMNS, receipt) : null, receiptError, full: p.full, started, startError, canStart: !started && !root.work_started_at };
+  return { payment: pay, doc: pick(DOC_COLUMNS, rec), receipt: receipt ? pick(DOC_COLUMNS, receipt) : null, receiptError, fileError, full: p.full, started, startError, canStart: !started && !root.work_started_at };
 }
 
 /**
@@ -317,7 +325,7 @@ export async function startWork(id: string, actor: string) {
 }
 
 // ── ไฟล์แนบ (เก็บใน Cloudflare KV ผ่าน binding ACC_FILES — แผนฟรี ไม่ต้องผูกบัตร: 1 GB, ไฟล์ละไม่เกิน 25 MiB — ดู SETUP.md) ──
-export type FileStore = { put(key: string, value: ArrayBuffer): Promise<unknown>; get(key: string, type: "stream"): Promise<ReadableStream | null> };
+export type FileStore = { put(key: string, value: ArrayBuffer): Promise<unknown>; delete?(key: string): Promise<unknown>; get(key: string, type: "stream"): Promise<ReadableStream | null> };
 let storeOverride: FileStore | null = null;
 /** ใช้ในเทสต์เท่านั้น: แทนที่ที่เก็บไฟล์ด้วยตัวจำลอง */
 export const setFileStoreForTest = (s: FileStore | null) => { storeOverride = s; };
@@ -348,6 +356,55 @@ export async function openFile(fileId: string) {
   const store = await fileStore(); const body = store ? await store.get(f.storage_key, "stream") : null;
   if (!body) throw new AccError(404, "ไม่พบไฟล์ในที่เก็บ", "NOT_FOUND");
   return { body, name: f.file_name, mime: f.mime };
+}
+
+/** ลบไฟล์แนบ (Super Admin เท่านั้น — ตรวจที่ API) · ลบแถวใน ACC_FILES แล้วลบตัวไฟล์ใน KV */
+export async function deleteFile(fileId: string, actor: string) {
+  const t = await load();
+  const i = t.ACC_FILES.rows.findIndex((x) => x.file_id === fileId);
+  if (i < 0) throw new AccError(404, "ไม่พบไฟล์", "NOT_FOUND");
+  const f = t.ACC_FILES.rows[i];
+  await deleteRowsBy(t, "ACC_FILES", "file_id", [fileId]);
+  try { const store = await fileStore(); await store?.delete?.(f.storage_key); } catch { /* แถวถูกลบแล้ว ตัวไฟล์ที่ค้างไม่มีใครเข้าถึงได้ */ }
+  await writeAudit(actor, "account_file_delete", "account_doc", f.doc_id, `${f.file_name}`);
+  return { deleted: fileId };
+}
+
+/** ลบแถวตามค่าคีย์ (ตรวจแถวก่อนลบทุกแถว · ลบจากล่างขึ้นบน) */
+async function deleteRowsBy(t: Record<string, Tab>, tab: string, idCol: string, ids: string[]) {
+  const set = new Set(ids);
+  const idx = t[tab].rows.map((r, k) => (set.has(r[idCol]) ? k + 2 : 0)).filter(Boolean).sort((a, b) => b - a);
+  if (!idx.length) return;
+  const sid = (await listTabs()).find((m) => m.title === tab)!.sheetId;
+  for (const r of idx) { const g = await guardRow(tab, t[tab].headers, idCol, t[tab].rows[r - 2][idCol], r); if ("row" in g) await deleteRow(sid, g.row); }
+}
+
+/**
+ * ลบเอกสาร (Super Admin เท่านั้น — ตรวจที่ API) พร้อมรายการสินค้า รายการชำระ ไฟล์แนบ และใบเสร็จของใบนั้น
+ * ลบไม่ได้ถ้ามีใบถัดไปที่สร้างต่อแล้ว (ลบใบถัดไปก่อน) หรือมีงาน Production ที่สร้างจากใบนี้แล้ว (ไปยกเลิกงานที่หน้า Production)
+ * ลบ "ใบเสร็จ" ใบเดียว = ล้างลิงก์ที่รายการชำระ แล้วกด ออกใบเสร็จ ใหม่ได้
+ */
+export async function deleteDoc(id: string, actor: string) {
+  const t = await load();
+  const doc = t.ACC_DOCS.rows.find((d) => d.doc_id === id);
+  if (!doc) throw new AccError(404, "ไม่พบเอกสาร", "NOT_FOUND");
+  if (t.ACC_DOCS.rows.some((d) => d.parent_doc_id === id && d.doc_type !== "receipt")) throw new AccError(409, "มีใบถัดไปที่สร้างต่อจากใบนี้แล้ว — ลบใบถัดไปก่อน", "LOCKED");
+  if (t.PRODUCTION_JOBS.rows.some((j) => j.job_id && j.doc_id === id)) throw new AccError(409, "ใบนี้เริ่มงานและสร้างงาน Production ไปแล้ว — ลบไม่ได้ (ถ้าไม่ใช้แล้วให้ยกเลิกเอกสาร / ยกเลิก Job)", "LOCKED");
+  const receipts = t.ACC_DOCS.rows.filter((d) => d.parent_doc_id === id && d.doc_type === "receipt").map((d) => d.doc_id);
+  const gone = [id, ...receipts], goneSet = new Set(gone);
+  const files = t.ACC_FILES.rows.filter((f) => f.file_id && goneSet.has(f.doc_id));
+  await deleteRowsBy(t, "ACC_LINES", "doc_id", gone);
+  await deleteRowsBy(t, "ACC_PAYMENTS", "doc_id", gone);
+  await deleteRowsBy(t, "ACC_FILES", "doc_id", gone);
+  if (doc.doc_type === "receipt") {
+    const pi = t.ACC_PAYMENTS.rows.findIndex((p) => p.receipt_doc_id === id);
+    if (pi >= 0) { const g = await guardRow("ACC_PAYMENTS", t.ACC_PAYMENTS.headers, "payment_id", t.ACC_PAYMENTS.rows[pi].payment_id, pi + 2); if ("row" in g) await batchUpdateValues([{ range: rowRange("ACC_PAYMENTS", t.ACC_PAYMENTS.headers, g.row), values: [toRow(t.ACC_PAYMENTS.headers, { ...t.ACC_PAYMENTS.rows[pi], receipt_doc_id: "" })] }]); }
+  }
+  await deleteRowsBy(t, "ACC_DOCS", "doc_id", gone);
+  const store = await fileStore();
+  for (const f of files) { try { await store?.delete?.(f.storage_key); } catch { /* ignore */ } }
+  await writeAudit(actor, "account_doc_delete", "account_doc", id, `${doc.doc_no} (${DOC_LABEL[doc.doc_type as DocType]}) ${doc.customer_name} รวม ${doc.total} · ลบพร้อมใบเสร็จ ${receipts.length} · ไฟล์ ${files.length}`);
+  return { deleted: id, receipts: receipts.length };
 }
 
 // ── Production Job ──

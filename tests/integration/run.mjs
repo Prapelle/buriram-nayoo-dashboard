@@ -104,7 +104,7 @@ try {
   r = await call("/work/leads", { as: SALES }); assert.equal(r.status, 200); assert.ok(!r.html.includes('href="/dashboard/performance"') && !r.html.includes('href="/dashboard/import"') && !r.html.includes('href="/dashboard/facebook-ads"'));
   for (const p of ["/dashboard/import", "/dashboard/export", "/work/leads", "/work/developers", "/settings/targets"]) { r = await call(p, { as: MKT }); assert.ok(redirectedTo(r, "/"), `${p} as MKT → ${r.status}`); }
   for (const p of ["/dashboard/facebook-ads", "/dashboard/line-oa", "/dashboard/website", "/settings/metrics", "/lead-report"]) { r = await call(p, { as: MKT }); assert.equal(r.status, 200, `${p} as MKT`); }
-  for (const p of ["/dashboard", "/dashboard/import", "/dashboard/export", "/work/leads", "/work/sales", "/work/sales/import", "/settings/targets"]) { r = await call(p, { as: IMP }); assert.equal(r.status, 200, `${p} as IMP`); }
+  for (const p of ["/dashboard", "/dashboard/import", "/dashboard/export", "/work/leads", "/account/revenue", "/account/revenue/import", "/settings/targets"]) { r = await call(p, { as: IMP }); assert.equal(r.status, 200, `${p} as IMP`); }
   ok("Login", "AE: เข้าเฉพาะ ฝ่ายขาย + Project (ภาพรวมการตลาดถูกพาออก) · Marketing: การตลาด + รายงาน Lead + คำอธิบายตัวเลข (นำเข้า/ส่งออก/เป้าหมาย/Lead ถูกพาออก) · Admin: นำเข้า / ส่งออก / ฝ่ายขาย / Project ได้");
   ok("Login", "หน้าเว็บตามสิทธิ์: Marketing → /leads ถูกพาออก · Sales → /performance, /import, /settings, /facebook-ads ถูกพาออก (ไม่แสดงเนื้อหา) · เมนูของ Sales ไม่มี Performance/นำเข้า");
   assert.equal((await call("/api/leads", { as: ADMIN, method: "POST", body: {}, headers: { "sec-fetch-site": "cross-site" } })).status, 403);
