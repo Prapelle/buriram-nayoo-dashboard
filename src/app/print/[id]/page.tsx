@@ -12,9 +12,9 @@ export default async function PrintPage({ params }: { params: Promise<{ id: stri
   await requirePage("/account");
   let d: Awaited<ReturnType<typeof getDoc>>;
   try { d = await getDoc((await params).id); } catch (e) { if (e instanceof AccError && e.status === 404) notFound(); throw e; }
-  const doc = d.doc, seller = d.seller ?? DEFAULT_SELLER, title = DOC_LABEL[doc.doc_type as DocType];
-  const meta: [string, string][] = [["เลขที่", doc.doc_no], ["วันที่", thaiDate(doc.doc_date)], ...(doc.due_date ? [[doc.doc_type === "quotation" ? "ใช้ได้ถึง" : "ครบกำหนด", thaiDate(doc.due_date)] as [string, string]] : []), ["ผู้ขาย", doc.seller_name]];
-  const meta2: [string, string][] = [["ชื่องาน", doc.job_title], ["ผู้ติดต่อ", doc.contact_name], ["เบอร์โทร", doc.contact_phone]];
+  const doc = d.doc, rc = doc.doc_type === "receipt", pay = d.receipt_payment, seller = d.seller ?? DEFAULT_SELLER, title = DOC_LABEL[doc.doc_type as DocType];
+  const meta: [string, string][] = [["เลขที่", doc.doc_no], ["วันที่", thaiDate(doc.doc_date)], ...(doc.due_date ? [[doc.doc_type === "quotation" ? "ใช้ได้ถึง" : "ครบกำหนด", thaiDate(doc.due_date)] as [string, string]] : []), ...(rc && d.parent_no ? [["อ้างอิงเอกสาร", d.parent_no] as [string, string]] : []), ["ผู้ขาย", doc.seller_name]];
+  const meta2: [string, string][] = [["ชื่องาน", doc.job_title], ["ผู้ติดต่อ", doc.contact_name], ["เบอร์โทร", doc.contact_phone], ...(rc && pay ? [["วิธีชำระ", `${pay.method}${pay.ref ? ` (${pay.ref})` : ""}`] as [string, string]] : [])];
   return (
     <main className="mx-auto bg-white text-[13px] text-slate-900" style={{ width: "210mm", minHeight: "297mm", padding: "14mm 14mm 12mm", position: "relative", fontFamily: "'IBM Plex Sans Thai', sans-serif" }}>
       <style>{`@page{size:A4;margin:0}@media print{body{background:#fff!important}}`}</style>
@@ -50,14 +50,15 @@ export default async function PrintPage({ params }: { params: Promise<{ id: stri
         {Number(doc.vat) > 0 && <Tot k={`ภาษีมูลค่าเพิ่ม ${Number(doc.vat_rate)}%`} v={`${money(doc.vat)} บาท`} />}
         <Tot k="จำนวนเงินรวมทั้งสิ้น" v={`${money(doc.total)} บาท`} />
         {Number(doc.wht) > 0 && <><Tot k={`หัก ณ ที่จ่าย ${Number(doc.wht_rate)}%`} v={`-${money(doc.wht)} บาท`} /><Tot k="ยอดชำระสุทธิ" v={`${money(payableOf(doc))} บาท`} /></>}
+        {rc && <Tot k="ได้รับชำระเงินแล้ว" v={`${money(doc.paid_amount)} บาท`} />}
       </div>
-      <div className="mt-1">({bahtText(payableOf(doc))})</div>
+      <div className="mt-1">({bahtText(rc ? Number(doc.paid_amount) : payableOf(doc))})</div>
       {doc.note && <div className="mt-4 whitespace-pre-wrap text-slate-700">หมายเหตุ: {doc.note}</div>}
       <div className="absolute left-[14mm] right-[14mm] bottom-[12mm] space-y-10">
         <div className="flex justify-between"><span>ในนาม {doc.contact_name || doc.customer_name}</span><span>ในนาม {seller.name.replace(/\s*\(.*\)$/, "")}</span></div>
         <div className="flex justify-between text-center">
-          <div className="flex w-[48%] gap-4"><Sign t="ผู้สั่งซื้อสินค้า" /><Sign t="วันที่" /></div>
-          <div className="flex w-[48%] gap-4"><Sign t="ผู้อนุมัติ" /><Sign t="วันที่" /></div>
+          <div className="flex w-[48%] gap-4"><Sign t={rc ? "ผู้ชำระเงิน" : "ผู้สั่งซื้อสินค้า"} /><Sign t="วันที่" /></div>
+          <div className="flex w-[48%] gap-4"><Sign t={rc ? "ผู้รับเงิน" : "ผู้อนุมัติ"} /><Sign t="วันที่" /></div>
         </div>
       </div>
     </main>

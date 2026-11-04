@@ -132,6 +132,32 @@ await t("แนบไฟล์ผ่าน KV จำลอง: บันทึ�
 });
 await t("รายการ/รายละเอียดเอกสาร: สายเอกสาร · ยอดชำระ · งานที่สร้าง · ลูกค้า", async () => {
   const l = await A.listDocs(); assert.ok(l.docs.length >= 5); assert.ok(l.docs.find((d) => d.doc_id === iv.doc_id)!.work_started);
-  const d = await A.getDoc(iv.doc_id); assert.deepEqual(d.chain.map((c) => c.doc_type), ["billing", "invoice", "quotation"].sort((a, b) => 0)); assert.equal(d.payments.length, 2); assert.equal(d.jobs.length, 1); assert.equal(d.customer!.name, "ซีเจ เออเบิ้ล โฮม");
+  const d = await A.getDoc(iv.doc_id); assert.deepEqual(d.chain.map((c) => c.doc_type), ["quotation", "billing", "invoice", "receipt", "receipt"]); // เรียงตามขั้น: เสนอราคา → วางบิล → แจ้งหนี้ → ใบเสร็จ (หนึ่งใบต่อการชำระหนึ่งครั้ง) assert.equal(d.payments.length, 2); assert.equal(d.jobs.length, 1); assert.equal(d.customer!.name, "ซีเจ เออเบิ้ล โฮม");
+});
+await t("ใบเสร็จ: ยืนยันชำระแล้วออกอัตโนมัติ (RC+ปีเดือน+ลำดับ) · มัดจำ/ส่วนที่เหลือเป็นคนละใบ · ผูกกับรายการชำระ · ออกซ้ำไม่ได้", async () => {
+  const rc = rows("ACC_DOCS").filter((d) => d.doc_type === "receipt"); assert.ok(rc.length >= 2);
+  assert.match(rc[0].doc_no, /^RC\d{6}0001$/); assert.equal(rc[0].status, "paid"); assert.equal(rc[0].parent_doc_id, iv.doc_id);
+  const pays = rows("ACC_PAYMENTS").filter((p) => p.doc_id === iv.doc_id); assert.ok(pays.every((p) => p.receipt_doc_id));
+  assert.equal(rc.find((d) => d.doc_id === pays[0].receipt_doc_id)!.paid_amount, pays[0].amount);
+  const again = await A.issueReceipt(pays[0].payment_id, ADMIN); assert.equal(again.created, false); assert.equal(again.receipt.doc_id, pays[0].receipt_doc_id);
+  const det = await A.getDoc(pays[0].receipt_doc_id); assert.equal(det.receipt_payment!.payment_id, pays[0].payment_id); assert.equal(det.parent_no, iv.doc_no);
+  await fails(A.confirmPayment(pays[0].receipt_doc_id, { amount: 1, paid_at: today, method: "เงินสด", updated_at_seen: det.doc.updated_at }, ADMIN), "BAD_FLOW");
+  await fails(A.startWork(pays[0].receipt_doc_id, ADMIN), "BAD_FLOW");
+});
+await t("ใบเสร็จของการชำระเต็มครั้งเดียว: คัดลอกรายการ/ยอดจากเอกสาร (รวมหัก ณ ที่จ่าย) · รับจริง = ยอดสุทธิ", async () => {
+  const q = (await A.saveDoc(form({ wht_rate: 3 }), ADMIN)).doc;
+  const r = await A.confirmPayment(q.doc_id, { amount: 4850, paid_at: today, method: "โอนเงิน", updated_at_seen: q.updated_at }, ADMIN);
+  assert.ok(r.receipt && !r.receiptError); assert.equal(r.receipt!.total, "5000"); assert.equal(r.receipt!.wht, "150"); assert.equal(r.receipt!.paid_amount, "4850");
+  assert.equal(rows("ACC_LINES").filter((l) => l.doc_id === r.receipt!.doc_id).length, 1);
+});
+await t("จำข้อมูลลูกค้า: ผู้ติดต่อ/เบอร์/ที่อยู่/เลขผู้เสียภาษี ตามลูกค้า · ออกใบใหม่ได้ค่าเดิม · ช่องว่างไม่ลบค่าที่จำ · เลขผู้เสียภาษีผิด → 422", async () => {
+  await A.saveDoc(form({ customer_address: "99 ถ.หลักเมือง อ.เมือง จ.บุรีรัมย์ 31000", customer_tax_id: "0-3155-60000-47 6", contact_name: "คุณสมชาย", contact_phone: "0811112222" }), ADMIN);
+  let c = (await A.listDocs()).customers.find((x) => x.developer_id === dev.developer_id)!;
+  assert.equal(c.address, "99 ถ.หลักเมือง อ.เมือง จ.บุรีรัมย์ 31000"); assert.equal(c.tax_id, "0315560000476"); assert.equal(c.contact_name, "คุณสมชาย"); assert.equal(c.phone, "0811112222");
+  await A.saveDoc(form({ customer_address: "", customer_tax_id: "", contact_name: "", contact_phone: "" }), ADMIN);
+  c = (await A.listDocs()).customers.find((x) => x.developer_id === dev.developer_id)!; assert.equal(c.address, "99 ถ.หลักเมือง อ.เมือง จ.บุรีรัมย์ 31000"); assert.equal(c.tax_id, "0315560000476");
+  assert.equal(rows("ACC_CUSTOMERS").filter((x) => x.developer_id === dev.developer_id).length, 1); // หนึ่งลูกค้า = หนึ่งแถว
+  await fails(A.saveDoc(form({ customer_tax_id: "123" }), ADMIN), "VALIDATION");
+  const d = await A.getDoc((await A.saveDoc(form({ customer_address: "ที่อยู่ใหม่" }), ADMIN)).doc.doc_id); assert.equal(d.doc.customer_address, "ที่อยู่ใหม่"); assert.equal(d.doc.customer_tax_id, "0315560000476" === d.doc.customer_tax_id ? d.doc.customer_tax_id : "");
 });
 console.log("\nระบบบัญชี (Sheets จำลอง) ผ่านทั้งหมด");

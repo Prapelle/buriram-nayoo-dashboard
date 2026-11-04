@@ -6,15 +6,17 @@
  */
 export type Rec = Record<string, string>;
 /** ลูกค้าที่เลือกในเอกสาร = แถวใน DEVELOPERS (Developer / Home Builder) */
-export type Customer = { developer_id: string; code: string; kind: string; name: string; project: string; contact_name: string; phone: string };
+export type Customer = { developer_id: string; code: string; kind: string; name: string; project: string; contact_name: string; phone: string; address: string; tax_id: string };
 
-export const DOC_TYPES = ["quotation", "billing", "invoice"] as const;
+/** receipt = ใบเสร็จรับเงิน ออกอัตโนมัติเมื่อยืนยันชำระเงิน (ออกเองตรง ๆ ไม่ได้) */
+export const DOC_TYPES = ["quotation", "billing", "invoice", "receipt"] as const;
+export const CREATABLE = ["quotation", "billing", "invoice"] as const;
 export type DocType = (typeof DOC_TYPES)[number];
-export const DOC_LABEL: Record<DocType, string> = { quotation: "ใบเสนอราคา", billing: "ใบวางบิล", invoice: "ใบแจ้งหนี้" };
-export const DOC_PREFIX: Record<DocType, string> = { quotation: "QT", billing: "BL", invoice: "IV" };
-export const parseDocType = (v: unknown): DocType => (DOC_TYPES as readonly string[]).includes(String(v)) ? (String(v) as DocType) : "quotation";
+export const DOC_LABEL: Record<DocType, string> = { quotation: "ใบเสนอราคา", billing: "ใบวางบิล", invoice: "ใบแจ้งหนี้", receipt: "ใบเสร็จรับเงิน" };
+export const DOC_PREFIX: Record<DocType, string> = { quotation: "QT", billing: "BL", invoice: "IV", receipt: "RC" };
+export const parseDocType = (v: unknown): DocType => (CREATABLE as readonly string[]).includes(String(v)) ? (String(v) as DocType) : "quotation";
 /** ใบถัดไปที่สร้างต่อได้ (ข้ามได้: ใบเสนอราคา → ใบแจ้งหนี้ ตรง ๆ) */
-export const NEXT_TYPES: Record<DocType, DocType[]> = { quotation: ["billing", "invoice"], billing: ["invoice"], invoice: [] };
+export const NEXT_TYPES: Record<DocType, DocType[]> = { quotation: ["billing", "invoice"], billing: ["invoice"], invoice: [], receipt: [] };
 
 export const DOC_STATUS = ["draft", "sent", "approved", "paid_partial", "paid", "cancelled"] as const;
 export type DocStatus = (typeof DOC_STATUS)[number];
@@ -31,7 +33,9 @@ export const DOC_COLUMNS = ["doc_id", "doc_type", "doc_no", "doc_date", "due_dat
   "subtotal", "discount", "vat_rate", "vat", "total", "paid_amount", "work_started_at", "note", "created_by", "created_at", "updated_by", "updated_at",
   "wht_rate", "wht"]; // ต่อท้าย 5/11/2026: หัก ณ ที่จ่าย (% และจำนวนเงิน)
 export const LINE_COLUMNS = ["line_id", "doc_id", "line_no", "product", "category", "description", "qty", "unit_price", "amount", "start_date", "end_date", "product_id", "job_id", "applied_at"];
-export const PAYMENT_COLUMNS = ["payment_id", "doc_id", "root_id", "amount", "paid_at", "method", "ref", "note", "confirmed_by", "confirmed_at"];
+export const PAYMENT_COLUMNS = ["payment_id", "doc_id", "root_id", "amount", "paid_at", "method", "ref", "note", "confirmed_by", "confirmed_at", "receipt_doc_id"]; // receipt_doc_id ต่อท้าย 5/11/2026: ใบเสร็จของการชำระครั้งนี้
+/** ข้อมูลลูกค้าที่ระบบจำ (ผู้ติดต่อ เบอร์ ที่อยู่ เลขผู้เสียภาษี) ผูกกับลูกค้าใน Developer / Home Builder ผ่าน developer_id */
+export const CUSTOMER_COLUMNS = ["developer_id", "contact_name", "phone", "address", "tax_id", "updated_by", "updated_at"];
 export const FILE_COLUMNS = ["file_id", "doc_id", "payment_id", "file_name", "mime", "size", "storage_key", "uploaded_by", "uploaded_at"];
 export const JOB_COLUMNS = ["job_id", "job_code", "doc_id", "doc_no", "line_id", "developer_id", "customer_name", "job_title", "product", "category", "start_date", "end_date",
   "checklist", "done_idx", "status", "owner", "note", "created_by", "created_at", "updated_by", "updated_at"];
@@ -69,11 +73,12 @@ export function validateDoc(input: Record<string, unknown>, types: string[], cat
   const errors: Record<string, string> = {};
   const s = (k: string) => String(input[k] ?? "").trim();
   const doc: Rec = { doc_type: parseDocType(input.doc_type), doc_date: s("doc_date"), due_date: s("due_date"), customer_id: s("customer_id"), job_title: s("job_title"), contact_name: s("contact_name"), contact_phone: s("contact_phone"),
-    seller_name: s("seller_name"), note: s("note") };
+    seller_name: s("seller_name"), note: s("note"), customer_address: s("customer_address"), customer_tax_id: s("customer_tax_id").replace(/[\s-]/g, "") };
   if (!isIso(doc.doc_date)) errors.doc_date = "ใส่วันที่เอกสาร";
   if (doc.due_date && !isIso(doc.due_date)) errors.due_date = "วันที่ไม่ถูกต้อง";
   if (!doc.customer_id) errors.customer_id = "เลือกลูกค้าจากรายชื่อ Developer / Home Builder";
-  for (const [k, n] of [["job_title", 200], ["contact_name", 150], ["contact_phone", 40], ["seller_name", 150], ["note", 2000]] as const) if (doc[k].length > n) errors[k] = `ยาวเกิน ${n} ตัวอักษร`;
+  for (const [k, n] of [["job_title", 200], ["contact_name", 150], ["contact_phone", 40], ["seller_name", 150], ["note", 2000], ["customer_address", 300]] as const) if (doc[k].length > n) errors[k] = `ยาวเกิน ${n} ตัวอักษร`;
+  if (doc.customer_tax_id && !/^\d{13}$/.test(doc.customer_tax_id)) errors.customer_tax_id = "เลขประจำตัวผู้เสียภาษีต้องเป็นตัวเลข 13 หลัก";
   const raw = Array.isArray(input.lines) ? (input.lines as Record<string, unknown>[]) : [];
   const lines: LineInput[] = [];
   if (!raw.length) errors.lines = "ต้องมีรายการสินค้าอย่างน้อย 1 รายการ";

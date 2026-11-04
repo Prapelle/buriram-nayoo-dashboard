@@ -6,8 +6,8 @@
  */
 import { writeAudit } from "./audit";
 import {
-  calcTotals, checklistOf, payableOf, DOC_COLUMNS, DOC_LABEL, FILE_COLUMNS, FILE_TYPES, JOB_COLUMNS, JOB_STATUS, LINE_COLUMNS, MANUAL_STATUS, MAX_FILE_BYTES, missingDates, nextDocNo, nextJobCode, NEXT_TYPES, parseSeller,
-  PAYMENT_COLUMNS, round2, statusFromPaid, validateDoc, validatePayment, type Customer, type DocType, type Rec,
+  calcTotals, checklistOf, payableOf, CUSTOMER_COLUMNS, DOC_COLUMNS, DOC_LABEL, FILE_COLUMNS, FILE_TYPES, JOB_COLUMNS, JOB_STATUS, LINE_COLUMNS, MANUAL_STATUS, MAX_FILE_BYTES, missingDates, nextDocNo, nextJobCode, NEXT_TYPES, parseSeller,
+  PAYMENT_COLUMNS, DOC_TYPES, round2, statusFromPaid, validateDoc, validatePayment, type Customer, type DocType, type Rec,
 } from "./account";
 import { kindOf, PRODUCT_CATEGORIES, todayBkk, validateProduct } from "./developers";
 import { productTypesOf, saveProduct, DevError, addProductType } from "./developers-service";
@@ -19,10 +19,12 @@ export class AccError extends Error {
 }
 type Tab = { headers: string[]; rows: Rec[] };
 const TABS = ["ACC_DOCS", "ACC_LINES", "ACC_PAYMENTS", "ACC_FILES", "PRODUCTION_JOBS", "DEVELOPERS", "DEVELOPER_PRODUCTS", "APP_CONFIG"];
+const PROFILE_TAB = "ACC_CUSTOMERS"; // แท็บใหม่ — ถ้ายังไม่มี (ยังไม่กด เตรียม Google Sheet) ระบบบัญชียังใช้งานได้ แค่ยังไม่จำข้อมูลลูกค้า
 
 async function load(): Promise<Record<string, Tab>> {
   let t: Record<string, Tab>;
-  try { t = await readTabs(TABS); } catch { throw new AccError(409, "ยังไม่มีแท็บระบบบัญชี — ให้ Super Admin กด ตั้งค่า → ตั้งค่าระบบ → เตรียม Google Sheet", "SHEET_NOT_READY"); }
+  try { t = await readTabs([...TABS, PROFILE_TAB]); } catch { try { t = await readTabs(TABS); t[PROFILE_TAB] = { headers: [], rows: [] }; } catch { t = null as never; } }
+  if (!t) { throw new AccError(409, "ยังไม่มีแท็บระบบบัญชี — ให้ Super Admin กด ตั้งค่า → ตั้งค่าระบบ → เตรียม Google Sheet", "SHEET_NOT_READY"); }
   if (!t.ACC_DOCS.headers.includes("doc_id") || !t.ACC_LINES.headers.includes("line_id") || !t.ACC_PAYMENTS.headers.includes("payment_id") || !t.PRODUCTION_JOBS.headers.includes("job_id"))
     throw new AccError(409, "แท็บระบบบัญชียังไม่พร้อม — ให้ Super Admin กด เตรียม Google Sheet", "SHEET_NOT_READY");
   return t;
@@ -31,9 +33,11 @@ const pick = (cols: string[], r: Rec): Rec => Object.fromEntries(cols.map((c) =>
 const rowRange = (tab: string, headers: string[], row: number) => `'${tab}'!A${row}:${colLetter(headers.length - 1)}${row}`;
 const sheetErr = (e: unknown): never => { if (e instanceof AccError) throw e; if (e instanceof DevError) throw new AccError(e.status, e.message, e.code, { fields: e.extra.fields }); throw e; };
 
-const customersOf = (t: Record<string, Tab>): Customer[] => t.DEVELOPERS.rows.filter((r) => r.developer_id).map((r) => ({
-  developer_id: r.developer_id, code: r.dev_code, kind: kindOf(r), name: r.company_name || r.project_main, project: r.project_main, contact_name: r.contact_name, phone: r.phone,
-})).sort((a, b) => a.name.localeCompare(b.name, "th"));
+const profileOf = (t: Record<string, Tab>, id: string): Rec => t[PROFILE_TAB].rows.find((r) => r.developer_id === id) ?? {};
+/** ลูกค้า = แถวใน DEVELOPERS + ข้อมูลที่ระบบจำไว้จากเอกสารครั้งก่อน (ผู้ติดต่อ/เบอร์ ถ้าเคยแก้ในเอกสารจะใช้ค่าล่าสุด) */
+const customersOf = (t: Record<string, Tab>): Customer[] => t.DEVELOPERS.rows.filter((r) => r.developer_id).map((r) => { const p = profileOf(t, r.developer_id); return {
+  developer_id: r.developer_id, code: r.dev_code, kind: kindOf(r), name: r.company_name || r.project_main, project: r.project_main, contact_name: p.contact_name || r.contact_name, phone: p.phone || r.phone, address: p.address || "", tax_id: p.tax_id || "",
+}; }).sort((a, b) => a.name.localeCompare(b.name, "th"));
 const configOf = (t: Record<string, Tab>) => ({ types: productTypesOf(t.APP_CONFIG.rows), seller: parseSeller(t.APP_CONFIG.rows.find((r) => r.config_key === "account_seller")?.config_value) });
 
 const chainOf = (t: Record<string, Tab>, rootId: string) => t.ACC_DOCS.rows.filter((d) => d.doc_id && (d.root_id || d.doc_id) === rootId);
@@ -51,7 +55,8 @@ export async function getDoc(id: string) {
   const doc = t.ACC_DOCS.rows.find((d) => d.doc_id === id);
   if (!doc) throw new AccError(404, "ไม่พบเอกสาร", "NOT_FOUND");
   const rootId = doc.root_id || doc.doc_id;
-  const chain = chainOf(t, rootId).map((d) => ({ doc_id: d.doc_id, doc_type: d.doc_type, doc_no: d.doc_no, status: d.status, total: d.total })).sort((a, b) => a.doc_no.localeCompare(b.doc_no));
+  const order = (x: string) => DOC_TYPES.indexOf(x as DocType);
+  const chain = chainOf(t, rootId).map((d) => ({ doc_id: d.doc_id, doc_type: d.doc_type, doc_no: d.doc_no, status: d.status, total: d.total })).sort((a, b) => order(a.doc_type) - order(b.doc_type) || a.doc_no.localeCompare(b.doc_no));
   const ids = new Set(chainOf(t, rootId).map((d) => d.doc_id));
   const root = t.ACC_DOCS.rows.find((d) => d.doc_id === rootId) ?? doc;
   const customer = customersOf(t).find((c) => c.developer_id === doc.customer_id) ?? null;
@@ -61,9 +66,11 @@ export async function getDoc(id: string) {
     editable: doc.status !== "cancelled" && !(Number(doc.paid_amount) > 0) && !t.ACC_DOCS.rows.some((d) => d.parent_doc_id === id),
     lines: t.ACC_LINES.rows.filter((l) => l.doc_id === id).map((l) => pick(LINE_COLUMNS, l)).sort((a, b) => Number(a.line_no) - Number(b.line_no)),
     payments: t.ACC_PAYMENTS.rows.filter((p) => p.doc_id === id).map((p) => pick(PAYMENT_COLUMNS, p)),
+    receipt_payment: doc.doc_type === "receipt" ? pick(PAYMENT_COLUMNS, t.ACC_PAYMENTS.rows.find((p) => p.receipt_doc_id === id) ?? {}) : null,
+    parent_no: t.ACC_DOCS.rows.find((d) => d.doc_id === doc.parent_doc_id)?.doc_no ?? "",
     files: t.ACC_FILES.rows.filter((f) => f.file_id && ids.has(f.doc_id)).map((f) => pick(FILE_COLUMNS, f)),
     jobs: t.PRODUCTION_JOBS.rows.filter((j) => j.job_id && j.doc_id && ids.has(j.doc_id)).map((j) => pick(JOB_COLUMNS, j)),
-    chain, customer: customer ? { ...customer, address: "", tax_id: "" } : null, customer_status: dev?.status ?? "",
+    chain, customer, customer_status: dev?.status ?? "",
     ...configOf(t), categories: PRODUCT_CATEGORIES, today: todayBkk(),
   };
 }
@@ -73,7 +80,7 @@ function docRecord(v: { doc: Rec; totals: ReturnType<typeof calcTotals> }, cust:
   const s = (k: string) => String(input[k] ?? "").trim().slice(0, 300);
   return {
     ...Object.fromEntries(DOC_COLUMNS.map((c) => [c, ""])), ...v.doc,
-    customer_id: cust.developer_id, customer_kind: cust.kind, customer_name: cust.name, customer_contact: v.doc.contact_name || cust.contact_name, customer_address: s("customer_address"), customer_tax_id: s("customer_tax_id"),
+    customer_id: cust.developer_id, customer_kind: cust.kind, customer_name: cust.name, customer_contact: v.doc.contact_name || cust.contact_name, customer_address: v.doc.customer_address, customer_tax_id: v.doc.customer_tax_id,
     contact_phone: v.doc.contact_phone || cust.phone, subtotal: String(v.totals.subtotal), discount: String(v.totals.discount), vat_rate: String(v.totals.vat_rate), vat: String(v.totals.vat), total: String(v.totals.total), wht_rate: String(v.totals.wht_rate), wht: String(v.totals.wht),
     ...extra, updated_by: actor, updated_at: now,
   };
@@ -102,6 +109,7 @@ export async function saveDoc(input: Record<string, unknown>, actor: string) {
     if (!("row" in g)) throw new AccError(409, "เอกสารนี้ถูกแก้ไขหรือลบโดยผู้อื่น กรุณาโหลดใหม่", "STALE");
     await batchUpdateValues([{ range: rowRange("ACC_DOCS", t.ACC_DOCS.headers, g.row), values: [toRow(t.ACC_DOCS.headers, rec)] }]);
     await replaceLines(t, id, lineRows(id, v.lines));
+    await rememberCustomer(t, rec, actor);
     await writeAudit(actor, "account_doc_update", "account_doc", id, `${rec.doc_no} รวม ${rec.total}`);
     return { doc: pick(DOC_COLUMNS, rec), created: false };
   }
@@ -111,8 +119,25 @@ export async function saveDoc(input: Record<string, unknown>, actor: string) {
   await appendRows("ACC_DOCS", [toRow(t.ACC_DOCS.headers, rec)]);
   rec.doc_no = await dedupeCode("ACC_DOCS", t.ACC_DOCS.headers, "doc_no", "doc_id", docId, no, (codes) => nextDocNo(type, codes, v.doc.doc_date));
   await appendRows("ACC_LINES", lineRows(docId, v.lines).map((l) => toRow(t.ACC_LINES.headers, l)));
+  await rememberCustomer(t, rec, actor);
   await writeAudit(actor, "account_doc_create", "account_doc", docId, `${rec.doc_no} ${cust.name} รวม ${rec.total}`);
   return { doc: pick(DOC_COLUMNS, rec), created: true };
+}
+
+/** จำผู้ติดต่อ / เบอร์ / ที่อยู่ / เลขผู้เสียภาษี ตามลูกค้า — ค่าที่กรอกในเอกสารล่าสุดชนะ (ช่องว่างไม่ลบค่าที่จำไว้) · พลาดไม่ทำให้การบันทึกเอกสารล้ม */
+async function rememberCustomer(t: Record<string, Tab>, doc: Rec, actor: string) {
+  if (!t[PROFILE_TAB].headers.includes("developer_id")) return;
+  try {
+    const i = t[PROFILE_TAB].rows.findIndex((r) => r.developer_id === doc.customer_id);
+    const prev = i >= 0 ? t[PROFILE_TAB].rows[i] : {};
+    const rec: Rec = { developer_id: doc.customer_id, contact_name: doc.contact_name || prev.contact_name || "", phone: doc.contact_phone || prev.phone || "", address: doc.customer_address || prev.address || "", tax_id: doc.customer_tax_id || prev.tax_id || "", updated_by: actor, updated_at: new Date().toISOString() };
+    if (i >= 0 && ["contact_name", "phone", "address", "tax_id"].every((k) => rec[k] === (prev[k] ?? ""))) return;
+    if (i >= 0) {
+      const g = await guardRow(PROFILE_TAB, t[PROFILE_TAB].headers, "developer_id", doc.customer_id, i + 2);
+      if ("row" in g) await batchUpdateValues([{ range: rowRange(PROFILE_TAB, t[PROFILE_TAB].headers, g.row), values: [toRow(t[PROFILE_TAB].headers, rec)] }]);
+    } else await appendRows(PROFILE_TAB, [toRow(t[PROFILE_TAB].headers, rec)]);
+    if (i >= 0) Object.assign(t[PROFILE_TAB].rows[i], rec); else t[PROFILE_TAB].rows.push(rec);
+  } catch { /* จำไม่สำเร็จก็ไม่เป็นไร ครั้งหน้ากรอกใหม่ */ }
 }
 
 /** แทนที่รายการสินค้าของเอกสาร (ลบแถวเดิมจากล่างขึ้นบน แล้วเพิ่มใหม่) */
@@ -203,6 +228,7 @@ export async function confirmPayment(id: string, input: Record<string, unknown>,
   if (i < 0) throw new AccError(404, "ไม่พบเอกสาร", "NOT_FOUND");
   const doc = t.ACC_DOCS.rows[i];
   if (doc.status === "cancelled") throw new AccError(409, "เอกสารที่ยกเลิกแล้วยืนยันชำระเงินไม่ได้", "LOCKED");
+  if (doc.doc_type === "receipt") throw new AccError(422, "ใบเสร็จออกจากการยืนยันชำระเงินของใบเสนอราคา / ใบวางบิล / ใบแจ้งหนี้ — ยืนยันชำระที่ใบเหล่านั้น", "BAD_FLOW");
   if (String(input.updated_at_seen ?? "") !== doc.updated_at) throw new AccError(409, "เอกสารนี้ถูกแก้ไขโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่", "STALE");
   const paid = round2(t.ACC_PAYMENTS.rows.filter((p) => p.doc_id === id).reduce((s, p) => s + Number(p.amount || 0), 0));
   const p = validatePayment(input, payableOf(doc), paid, todayBkk()); // ยอดที่ต้องชำระ = ยอดรวม − หัก ณ ที่จ่าย
@@ -217,6 +243,7 @@ export async function confirmPayment(id: string, input: Record<string, unknown>,
   const now = new Date().toISOString(), pid = crypto.randomUUID();
   const pay: Rec = { payment_id: pid, doc_id: id, root_id: doc.root_id || id, amount: String(p.amount), paid_at: String(input.paid_at), method: String(input.method), ref: String(input.ref ?? "").trim(), note: String(input.note ?? "").trim(), confirmed_by: actor, confirmed_at: now };
   await appendRows("ACC_PAYMENTS", [toRow(t.ACC_PAYMENTS.headers, pay)]);
+  t.ACC_PAYMENTS.rows.push(pay);
   const total = round2(paid + p.amount);
   const rec: Rec = { ...doc, paid_amount: String(total), status: statusFromPaid(doc.status, payableOf(doc), total), updated_by: actor, updated_at: now };
   const g = await guardRow("ACC_DOCS", t.ACC_DOCS.headers, "doc_id", id, i + 2);
@@ -225,9 +252,57 @@ export async function confirmPayment(id: string, input: Record<string, unknown>,
   t.ACC_DOCS.rows[i] = rec;
   await writeAudit(actor, "account_payment", "account_doc", id, `${doc.doc_no}: ชำระ ${p.amount} (${pay.method}) รวม ${total}/${doc.total}`);
   // บันทึกชำระแล้ว แต่เริ่มงานล้มเหลว (เช่น Sheets ขัดข้อง) → ไม่ให้ทั้งคำขอล้ม: แจ้งเหตุผล และให้กดปุ่ม "เริ่มงาน" ซ้ำได้ (applyWork ตรวจก่อนเขียน)
+  let receipt: Rec | null = null, receiptError = "";
+  try { receipt = await createReceipt(t, rec, pay, paid === 0 && p.full, actor); } catch (e) { receiptError = e instanceof Error ? e.message : "ออกใบเสร็จไม่สำเร็จ"; }
   let started: Awaited<ReturnType<typeof applyWork>> | null = null, startError = "";
   if (willStart) { try { started = await applyWork(t, rec, actor); } catch (e) { startError = e instanceof Error ? e.message : "เริ่มงานไม่สำเร็จ"; } }
-  return { payment: pay, doc: pick(DOC_COLUMNS, rec), full: p.full, started, startError, canStart: !started && !root.work_started_at };
+  return { payment: pay, doc: pick(DOC_COLUMNS, rec), receipt: receipt ? pick(DOC_COLUMNS, receipt) : null, receiptError, full: p.full, started, startError, canStart: !started && !root.work_started_at };
+}
+
+/**
+ * ใบเสร็จรับเงิน — ออกหนึ่งใบต่อการชำระหนึ่งครั้ง (มัดจำ = ใบเสร็จมัดจำ) เลขที่ RC+ปีเดือน+ลำดับ
+ * ชำระเต็มในครั้งเดียว → คัดลอกรายการ/ยอดจากเอกสารต้นทาง · ชำระเป็นงวด → หนึ่งบรรทัด "ชำระ… ตาม <เลขที่เอกสาร>" ยอดเท่าที่รับจริง
+ * ผูกกับการชำระผ่าน ACC_PAYMENTS.receipt_doc_id (ออกซ้ำไม่ได้: มีแล้วคืนใบเดิม)
+ */
+async function createReceipt(t: Record<string, Tab>, src: Rec, pay: Rec, wholeInOne: boolean, actor: string): Promise<Rec> {
+  const pi = t.ACC_PAYMENTS.rows.findIndex((x) => x.payment_id === pay.payment_id);
+  const prevPay = pi >= 0 ? t.ACC_PAYMENTS.rows[pi] : pay;
+  if (prevPay.receipt_doc_id) { const ex = t.ACC_DOCS.rows.find((d) => d.doc_id === prevPay.receipt_doc_id); if (ex) return ex; }
+  if (!t.ACC_PAYMENTS.headers.includes("receipt_doc_id")) throw new AccError(409, "ยังออกใบเสร็จไม่ได้ — ให้ Super Admin กด เตรียม Google Sheet แล้วกด ออกใบเสร็จ ที่รายการชำระ", "SHEET_NOT_READY");
+  const now = new Date().toISOString(), docId = crypto.randomUUID(), amount = Number(pay.amount), date = pay.paid_at;
+  const no = nextDocNo("receipt", t.ACC_DOCS.rows.map((d) => d.doc_no), date);
+  const base: Rec = { ...pick(DOC_COLUMNS, src), doc_id: docId, doc_type: "receipt", doc_no: no, doc_date: date, due_date: "", status: "paid", root_id: src.root_id || src.doc_id, parent_doc_id: src.doc_id, paid_amount: String(amount), work_started_at: "", note: "", created_by: actor, created_at: now, updated_by: actor, updated_at: now };
+  let lines: Rec[];
+  if (wholeInOne) lines = t.ACC_LINES.rows.filter((l) => l.doc_id === src.doc_id).map((l) => ({ ...pick(LINE_COLUMNS, l), line_id: crypto.randomUUID(), doc_id: docId, product_id: "", job_id: "", applied_at: "" }));
+  else {
+    Object.assign(base, { subtotal: String(amount), discount: "0", vat_rate: "0", vat: "0", total: String(amount), wht_rate: "0", wht: "0" });
+    const before = round2(t.ACC_PAYMENTS.rows.slice(0, pi >= 0 ? pi : t.ACC_PAYMENTS.rows.length).filter((x) => x.doc_id === src.doc_id).reduce((s, x) => s + Number(x.amount || 0), 0));
+    const full = round2(before + amount) >= payableOf(src);
+    lines = lineRows(docId, [{ product: `ชำระ${full ? "ส่วนที่เหลือ" : "บางส่วน / มัดจำ"} ตาม${DOC_LABEL[src.doc_type as DocType]} ${src.doc_no}`, category: "", description: "", qty: 1, unit_price: amount, amount, start_date: "", end_date: "" }]);
+  }
+  await appendRows("ACC_DOCS", [toRow(t.ACC_DOCS.headers, base)]);
+  base.doc_no = await dedupeCode("ACC_DOCS", t.ACC_DOCS.headers, "doc_no", "doc_id", docId, no, (codes) => nextDocNo("receipt", codes, date));
+  await appendRows("ACC_LINES", lines.map((l) => toRow(t.ACC_LINES.headers, l)));
+  t.ACC_DOCS.rows.push(base);
+  if (pi >= 0) {
+    const g = await guardRow("ACC_PAYMENTS", t.ACC_PAYMENTS.headers, "payment_id", pay.payment_id, pi + 2);
+    if ("row" in g) { prevPay.receipt_doc_id = docId; await batchUpdateValues([{ range: rowRange("ACC_PAYMENTS", t.ACC_PAYMENTS.headers, g.row), values: [toRow(t.ACC_PAYMENTS.headers, prevPay)] }]); }
+  }
+  await writeAudit(actor, "account_receipt", "account_doc", docId, `${base.doc_no} ← ${src.doc_no} รับ ${amount} (${pay.method})`);
+  return base;
+}
+
+/** ออกใบเสร็จให้การชำระที่ยังไม่มีใบเสร็จ (เช่น ชำระไว้ก่อนมีระบบใบเสร็จ หรือครั้งก่อนออกไม่สำเร็จ) */
+export async function issueReceipt(paymentId: string, actor: string) {
+  const t = await load();
+  const pay = t.ACC_PAYMENTS.rows.find((x) => x.payment_id === paymentId);
+  if (!pay) throw new AccError(404, "ไม่พบรายการชำระเงิน", "NOT_FOUND");
+  const src = t.ACC_DOCS.rows.find((d) => d.doc_id === pay.doc_id);
+  if (!src) throw new AccError(404, "ไม่พบเอกสาร", "NOT_FOUND");
+  if (pay.receipt_doc_id) { const ex = t.ACC_DOCS.rows.find((d) => d.doc_id === pay.receipt_doc_id); if (ex) return { receipt: pick(DOC_COLUMNS, ex), created: false }; }
+  const others = round2(t.ACC_PAYMENTS.rows.filter((x) => x.doc_id === pay.doc_id && x.payment_id !== paymentId).reduce((s, x) => s + Number(x.amount || 0), 0));
+  const r = await createReceipt(t, src, pay, others === 0 && round2(Number(pay.amount)) >= payableOf(src), actor);
+  return { receipt: pick(DOC_COLUMNS, r), created: true };
 }
 
 /** ปุ่ม "เริ่มงาน" สำหรับกรณีชำระมัดจำ (ต้องมียอดชำระแล้วอย่างน้อยบางส่วน) */
@@ -236,6 +311,7 @@ export async function startWork(id: string, actor: string) {
   const doc = t.ACC_DOCS.rows.find((d) => d.doc_id === id);
   if (!doc) throw new AccError(404, "ไม่พบเอกสาร", "NOT_FOUND");
   if (doc.status === "cancelled") throw new AccError(409, "เอกสารที่ยกเลิกแล้วเริ่มงานไม่ได้", "LOCKED");
+  if (doc.doc_type === "receipt") throw new AccError(422, "เริ่มงานจากใบเสร็จไม่ได้ — กดที่ใบเสนอราคา / ใบวางบิล / ใบแจ้งหนี้", "BAD_FLOW");
   if (!(Number(doc.paid_amount) > 0)) throw new AccError(409, "ต้องยืนยันการชำระเงิน (อย่างน้อยมัดจำ) ก่อนเริ่มงาน", "NOT_PAID");
   return { started: await applyWork(t, doc, actor) };
 }

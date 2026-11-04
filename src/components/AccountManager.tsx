@@ -17,7 +17,7 @@ export function AccountManager() {
   }, []);
   useEffect(() => { void load(); }, [load]);
   const shown = useMemo(() => (docs ?? []).filter((d) => (!type || d.doc_type === type) && (!status || d.status === status) && (!q || `${d.doc_no} ${d.customer_name} ${d.job_title}`.toLowerCase().includes(q.toLowerCase()))), [docs, type, status, q]);
-  const sum = shown.filter((d) => d.status !== "cancelled").reduce((s, d) => s + payableOf(d), 0), paid = shown.filter((d) => d.status !== "cancelled").reduce((s, d) => s + Number(d.paid_amount || 0), 0);
+  const sum = shown.filter((d) => d.status !== "cancelled" && d.doc_type !== "receipt").reduce((s, d) => s + payableOf(d), 0), paid = shown.filter((d) => d.status !== "cancelled" && d.doc_type !== "receipt").reduce((s, d) => s + Number(d.paid_amount || 0), 0);
   return (
     <div className="space-y-3">
       <Notice msg={msg} onClose={() => setMsg(null)} />

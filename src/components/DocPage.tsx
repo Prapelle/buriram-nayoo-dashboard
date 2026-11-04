@@ -2,12 +2,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { calcTotals, payableOf, DOC_LABEL, NEXT_TYPES, PAY_METHODS, STATUS_LABEL, money, round2, thaiDate, type Customer, type DocStatus, type DocType, type Rec } from "@/lib/account";
+import { calcTotals, payableOf, DOC_LABEL, NEXT_TYPES, DOC_TYPES, PAY_METHODS, STATUS_LABEL, money, round2, thaiDate, type Customer, type DocStatus, type DocType, type Rec } from "@/lib/account";
 import { Notice, type Msg } from "./Toast";
 import { btn, PageHeader } from "./PageHeader";
 
 type Line = { product: string; category: string; description: string; qty: string; unit_price: string; start_date: string; end_date: string };
-type Detail = { doc: Rec; work_started_at: string; editable: boolean; lines: Rec[]; payments: Rec[]; files: Rec[]; jobs: Rec[]; chain: Rec[]; customer_status: string };
+type Detail = { receipt_payment: Rec | null; parent_no: string; doc: Rec; work_started_at: string; editable: boolean; lines: Rec[]; payments: Rec[]; files: Rec[]; jobs: Rec[]; chain: Rec[]; customer_status: string };
 const blankLine = (cat = "Product"): Line => ({ product: "", category: cat, description: "", qty: "1", unit_price: "", start_date: "", end_date: "" });
 const inp = "w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm";
 async function api(url: string, init?: RequestInit) { const r = await fetch(url, { cache: "no-store", ...init }); const j = await r.json().catch(() => ({})); if (!r.ok) throw Object.assign(new Error(j.error ?? "ผิดพลาด"), { fields: j.fields as Record<string, string> | undefined, code: j.code as string | undefined }); return j; }
@@ -44,7 +44,7 @@ export function DocPage({ docType = "quotation", docId, canPay }: { docType?: Do
   const run = async (fn: () => Promise<void>) => { setBusy(true); setErrs({}); try { await fn(); } catch (x) { const er = x as Error & { fields?: Record<string, string> }; setErrs(er.fields ?? {}); setMsg({ type: "error", text: er.message }); } finally { setBusy(false); } };
   const post = (b: Record<string, unknown>, url = "/api/account") => api(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(b) });
 
-  const pickCustomer = (id: string) => { set("customer_id", id); const c = customers.find((x) => x.developer_id === id); if (c) setF((p) => ({ ...p, customer_id: id, contact_name: p.contact_name || c.contact_name, contact_phone: p.contact_phone || c.phone })); };
+  const pickCustomer = (id: string) => { set("customer_id", id); const c = customers.find((x) => x.developer_id === id); if (c) setF((p) => ({ ...p, customer_id: id, contact_name: c.contact_name, contact_phone: c.phone, customer_address: c.address, customer_tax_id: c.tax_id })); };
   const addType = () => { const name = window.prompt("ชื่อ Product ใหม่ (จะไปอยู่ในรายการ Product ของ Developer / Home Builder ด้วย)"); if (name) void run(async () => { const r = await post({ action: "product_type", name }); setTypes(r.types); setMsg({ type: "ok", text: `เพิ่ม Product "${name.trim()}" แล้ว` }); }); };
   const addCustomer = () => nc && run(async () => {
     const r = await api("/api/developers", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...nc, kind: nc.kind }) });
@@ -63,8 +63,10 @@ export function DocPage({ docType = "quotation", docId, canPay }: { docType?: Do
     let note = "";
     if (slip) { try { await upload(slip, r.payment.payment_id); setSlip(null); } catch (x) { note = ` (แนบไฟล์ไม่สำเร็จ: ${(x as Error).message})`; } }
     await load();
-    setMsg({ type: r.startError || note ? "warn" : "ok", text: r.started ? `ยืนยันชำระแล้ว — เพิ่ม Product ให้ลูกค้า ${r.started.products} รายการ และสร้าง Job ${r.started.jobs.map((j: Rec) => j.job_code).join(", ")}${note}` : r.startError ? `บันทึกการชำระแล้ว แต่เริ่มงานไม่สำเร็จ: ${r.startError} — แก้แล้วกดปุ่ม เริ่มงาน${note}` : r.canStart ? `บันทึกมัดจำแล้ว — กดปุ่ม เริ่มงาน เมื่อพร้อม${note}` : `บันทึกการชำระแล้ว${note}` });
+    const rcNote = r.receipt ? ` · ออกใบเสร็จ ${r.receipt.doc_no} แล้ว` : r.receiptError ? ` · ออกใบเสร็จไม่สำเร็จ: ${r.receiptError}` : "";
+    setMsg({ type: r.startError || note || r.receiptError ? "warn" : "ok", text: (r.started ? `ยืนยันชำระแล้ว — เพิ่ม Product ให้ลูกค้า ${r.started.products} รายการ และสร้าง Job ${r.started.jobs.map((j: Rec) => j.job_code).join(", ")}${note}` : r.startError ? `บันทึกการชำระแล้ว แต่เริ่มงานไม่สำเร็จ: ${r.startError} — แก้แล้วกดปุ่ม เริ่มงาน${note}` : r.canStart ? `บันทึกมัดจำแล้ว — กดปุ่ม เริ่มงาน เมื่อพร้อม${note}` : `บันทึกการชำระแล้ว${note}`) + rcNote });
   });
+  const issueRc = (paymentId: string) => run(async () => { const r = await post({ action: "receipt", payment_id: paymentId }, "/api/account/pay"); await load(); setMsg({ type: "ok", text: `ออกใบเสร็จ ${r.receipt.doc_no} แล้ว` }); });
   const attach = (file: File | undefined) => file && run(async () => { await upload(file); await load(); setMsg({ type: "ok", text: "แนบไฟล์แล้ว" }); });
 
   if (!loaded) return <p className="p-6 text-slate-500">กำลังโหลด…</p>;
@@ -77,9 +79,10 @@ export function DocPage({ docType = "quotation", docId, canPay }: { docType?: Do
       <PageHeader crumb="บัญชี" title={doc ? `${label} ${doc.doc_no}` : `ออก${label}`}
         sub={doc ? <span>{thaiDate(doc.doc_date)} · {STATUS_LABEL[doc.status as DocStatus]}{started ? " · เริ่มงานแล้ว" : ""}{d?.customer_status ? ` · สถานะลูกค้า: ${d.customer_status}` : ""}</span> : "เลือกลูกค้าจากรายชื่อ Developer / Home Builder · รายการสินค้าคือ Product เดียวกับของลูกค้า"}>
         {doc && <a href={`/print/${doc.doc_id}`} target="_blank" rel="noreferrer" className={btn.secondary}>พิมพ์ / PDF</a>}
-        {doc && !cancelled && NEXT_TYPES[doc.doc_type as DocType].map((t) => <button key={t} type="button" disabled={busy} onClick={() => convert(t)} className={btn.secondary}>สร้าง{DOC_LABEL[t]}ต่อ</button>)}
-        {doc && canPay && paid > 0 && !started && !cancelled && <button type="button" disabled={busy} onClick={start} className={btn.primary}>▶ เริ่มงาน</button>}
+        {doc && !cancelled && doc.doc_type !== "receipt" && NEXT_TYPES[doc.doc_type as DocType].map((t) => <button key={t} type="button" disabled={busy} onClick={() => convert(t)} className={btn.secondary}>สร้าง{DOC_LABEL[t]}ต่อ</button>)}
+        {doc && canPay && doc.doc_type !== "receipt" && paid > 0 && !started && !cancelled && <button type="button" disabled={busy} onClick={start} className={btn.primary}>▶ เริ่มงาน</button>}
       </PageHeader>
+      {d && <Stepper chain={d.chain} cur={docId!} />}
       {d && d.chain.length > 1 && <p className="text-sm text-slate-600">สายเอกสาร: {d.chain.map((c, i) => <span key={c.doc_id}>{i > 0 && " → "}{c.doc_id === docId ? <b>{c.doc_no}</b> : <Link className="underline" href={`/account/${c.doc_id}`}>{c.doc_no}</Link>}</span>)}</p>}
       {!editable && docId && <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-700">{cancelled ? "เอกสารนี้ยกเลิกแล้ว" : "เอกสารนี้มีการชำระเงินหรือถูกสร้างใบต่อไปแล้ว จึงแก้ไขไม่ได้ — ถ้าต้องแก้ ให้ยกเลิกแล้วออกใบใหม่"}</p>}
 
@@ -91,7 +94,7 @@ export function DocPage({ docType = "quotation", docId, canPay }: { docType?: Do
             <select value={f.customer_id} onChange={(e2) => pickCustomer(e2.target.value)} className={inp} aria-label="ลูกค้า"><option value="">— เลือกลูกค้า —</option>{shownCust.map((c) => <option key={c.developer_id} value={c.developer_id}>{c.code} · {c.name}{c.project && c.project !== c.name ? ` (${c.project})` : ""}</option>)}</select>
           </div>
           {e("customer_id")}
-          {cust && <p className="text-xs text-slate-500">{cust.kind === "home_builder" ? "Home Builder" : "Developer"} {cust.code} — Product จะถูกเพิ่มให้ลูกค้ารายนี้เมื่อยืนยันชำระ</p>}
+          {cust && <p className="text-xs text-slate-500">{cust.kind === "home_builder" ? "Home Builder" : "Developer"} {cust.code} — Product จะถูกเพิ่มให้ลูกค้ารายนี้เมื่อยืนยันชำระ · ผู้ติดต่อ เบอร์ ที่อยู่ เลขผู้เสียภาษี ระบบจำจากเอกสารล่าสุดและใส่ให้อัตโนมัติ</p>}
           {!nc ? <button type="button" onClick={() => setNc({ kind: "developer", company_name: "", contact_name: "", phone: "" })} className="text-sm text-brand-700 underline">＋ ไม่พบในรายชื่อ? เพิ่มลูกค้าใหม่</button> : (
             <div className="grid gap-2 rounded-md bg-slate-50 p-3 sm:grid-cols-5">
               <select value={nc.kind} onChange={(e2) => setNc({ ...nc, kind: e2.target.value })} className={inp}><option value="developer">Developer</option><option value="home_builder">Home Builder</option></select>
@@ -105,7 +108,7 @@ export function DocPage({ docType = "quotation", docId, canPay }: { docType?: Do
             <label className="text-sm">ผู้ติดต่อ<input value={f.contact_name} onChange={(e2) => set("contact_name", e2.target.value)} className={inp} /></label>
             <label className="text-sm">เบอร์โทร<input value={f.contact_phone} onChange={(e2) => set("contact_phone", e2.target.value)} className={inp} /></label>
             <label className="text-sm sm:col-span-2">ที่อยู่ลูกค้า (แสดงบนเอกสาร)<input value={f.customer_address} onChange={(e2) => set("customer_address", e2.target.value)} className={inp} /></label>
-            <label className="text-sm">เลขประจำตัวผู้เสียภาษี<input value={f.customer_tax_id} onChange={(e2) => set("customer_tax_id", e2.target.value)} className={inp} /></label>
+            <label className="text-sm">เลขประจำตัวผู้เสียภาษี (13 หลัก)<input inputMode="numeric" value={f.customer_tax_id} onChange={(e2) => set("customer_tax_id", e2.target.value)} className={inp} />{e("customer_tax_id")}</label>
             <label className="text-sm">วันที่<input type="date" value={f.doc_date} onChange={(e2) => set("doc_date", e2.target.value)} className={inp} />{e("doc_date")}</label>
             <label className="text-sm">ครบกำหนด / ใช้ได้ถึง<input type="date" value={f.due_date} onChange={(e2) => set("due_date", e2.target.value)} className={inp} />{e("due_date")}</label>
             <label className="text-sm">ผู้ขาย (ชื่อเซลส์)<input value={f.seller_name} onChange={(e2) => set("seller_name", e2.target.value)} className={inp} /></label>
@@ -154,7 +157,8 @@ export function DocPage({ docType = "quotation", docId, canPay }: { docType?: Do
       {doc && (
         <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
           <h2 className="font-semibold">การชำระเงิน — ยอดที่ต้องชำระ ฿{money(payable)}{Number(doc.wht) > 0 ? ` (รวม ฿${money(doc.total)} หัก ณ ที่จ่าย ฿${money(doc.wht)})` : ""} · ชำระแล้ว ฿{money(paid)} · คงเหลือ ฿{money(remain)}</h2>
-          {d!.payments.length > 0 && <ul className="text-sm text-slate-700">{d!.payments.map((p) => <li key={p.payment_id}>{thaiDate(p.paid_at)} · ฿{money(p.amount)} · {p.method}{p.ref ? ` · ${p.ref}` : ""} <span className="text-xs text-slate-400">({p.confirmed_by})</span></li>)}</ul>}
+          {d!.payments.length > 0 && <ul className="text-sm text-slate-700">{d!.payments.map((p) => { const rc = d!.chain.find((c) => c.doc_id === p.receipt_doc_id); return <li key={p.payment_id}>{thaiDate(p.paid_at)} · ฿{money(p.amount)} · {p.method}{p.ref ? ` · ${p.ref}` : ""} <span className="text-xs text-slate-400">({p.confirmed_by})</span>{" "}
+            {rc ? <Link className="text-brand-700 underline" href={`/account/${rc.doc_id}`}>ใบเสร็จ {rc.doc_no}</Link> : canPay && <button type="button" disabled={busy} onClick={() => issueRc(p.payment_id)} className="text-brand-700 underline">ออกใบเสร็จ</button>}</li>; })}</ul>}
           {canPay && !cancelled && remain > 0 ? (
             <div className="grid gap-2 rounded-md bg-slate-50 p-3 sm:grid-cols-5">
               <label className="text-xs">จำนวนเงิน<input inputMode="decimal" value={pay.amount} onChange={(e2) => setPay({ ...pay, amount: e2.target.value })} className={inp} />{e("amount")}</label>
@@ -181,4 +185,24 @@ export function DocPage({ docType = "quotation", docId, canPay }: { docType?: Do
         </div>)}
     </section>
   );
+}
+
+/** แถบสถานะสายเอกสาร: ใบเสนอราคา → ใบวางบิล → ใบแจ้งหนี้ → ใบเสร็จ (ขั้นที่ข้ามแสดงจาง ๆ · ขั้นที่ยังไม่ถึงแสดงเทา) */
+function Stepper({ chain, cur }: { chain: Rec[]; cur: string }) {
+  const steps = DOC_TYPES.map((t) => ({ t, docs: chain.filter((c) => c.doc_type === t) }));
+  const last = Math.max(...steps.map((s, i) => (s.docs.length ? i : -1)));
+  return (
+    <ol className="flex flex-wrap items-center gap-2 text-sm" aria-label="ขั้นตอนเอกสาร">
+      {steps.map(({ t, docs }, i) => {
+        const has = docs.length > 0, here = docs.some((x) => x.doc_id === cur), skipped = !has && i < last;
+        return (
+          <li key={t} className="flex items-center gap-2">
+            {i > 0 && <span className="text-slate-300">→</span>}
+            <span className={`rounded-full border px-3 py-1 ${here ? "border-brand-600 bg-brand-50 font-semibold text-brand-800" : has ? "border-green-300 bg-green-50 text-green-800" : skipped ? "border-dashed border-slate-300 text-slate-400 line-through" : "border-dashed border-slate-300 text-slate-400"}`}>
+              {DOC_LABEL[t]}{skipped ? " (ข้าม)" : ""}
+              {docs.map((x) => <span key={x.doc_id}> {x.doc_id === cur ? <b>{x.doc_no}</b> : <Link className="underline" href={`/account/${x.doc_id}`}>{x.doc_no}</Link>}</span>)}
+            </span>
+          </li>);
+      })}
+    </ol>);
 }

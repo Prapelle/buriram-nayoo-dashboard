@@ -1,7 +1,7 @@
 import { logError } from "@/lib/log";
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/guard";
-import { AccError, confirmPayment, startWork } from "@/lib/account-service";
+import { AccError, confirmPayment, issueReceipt, startWork } from "@/lib/account-service";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +19,7 @@ export async function POST(req: Request) {
   try {
     if (b.action === "start") return NextResponse.json(await startWork(String(b.doc_id ?? ""), g.email));
     if (b.action === "payment") return NextResponse.json(await confirmPayment(String(b.doc_id ?? ""), b, g.email));
+    if (b.action === "receipt") return NextResponse.json(await issueReceipt(String(b.payment_id ?? ""), g.email));
     return NextResponse.json({ error: "ไม่รู้จักคำสั่ง" }, { status: 400 });
   } catch (e) { return fail(e); }
 }
