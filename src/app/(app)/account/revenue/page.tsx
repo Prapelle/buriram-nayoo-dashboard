@@ -9,14 +9,14 @@ import { BarList, LineChart, Pending } from "@/components/charts";
 import { DataTable } from "@/components/DataTable";
 import { listDocs } from "@/lib/account-service";
 import { money, summarize } from "@/lib/account";
-import { computeSales, type SalesFilters, type TxRow } from "@/lib/sales/dashboard";
+import { computeSales, dedupeByDocNo, type SalesFilters, type TxRow } from "@/lib/sales/dashboard";
 import { readColumns } from "@/lib/tabdata";
 import { applyView, fmtCell, href, one, type Col } from "@/lib/tableview";
 
 export const dynamic = "force-dynamic";
 const iso = (v: string) => (/^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
 const thb = (n: number) => `฿${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const LABELS: Record<string, string> = { company_name: "บริษัทผู้ขาย", company_tax_id: "เลขผู้เสียภาษีผู้ขาย", report_period: "ช่วงรายงาน", invoice_date: "วันที่", invoice_no: "เลขที่เอกสาร", customer_name: "ลูกค้า", customer_tax_id: "เลขผู้เสียภาษีลูกค้า", branch: "สำนักงานใหญ่/สาขา", project_name: "โปรเจ็ค", salesperson: "พนักงานขาย", gross_sales: "ขายแยกภาษี (ก่อนส่วนลด)", discount_amount: "ส่วนลด", net_value: "มูลค่า", vat_amount: "ภาษีมูลค่าเพิ่ม", total_net: "ยอดรวมสุทธิ", payment_status: "สถานะ", sales_inc_vat: "ขายรวมภาษี", discount_before_vat: "ส่วนลดก่อน VAT", discount_doc: "ส่วนลดตามเอกสาร", ref_doc_system: "เอกสารอ้างอิงในระบบ", reference_no: "เลขที่อ้างอิง", deposit_ref_doc: "เอกสารอ้างอิงรับมัดจำ", note: "หมายเหตุ", internal_note: "โน้ตภายในบริษัท", lead_id: "Lead ที่เชื่อมโยง", source_channel: "ช่องทาง", campaign_name: "แคมเปญ", source_file: "ไฟล์ต้นทาง", source_row_number: "แถวในไฟล์", imported_at: "นำเข้าเมื่อ" };
+const LABELS: Record<string, string> = { company_name: "บริษัทผู้ขาย", company_tax_id: "เลขผู้เสียภาษีผู้ขาย", report_period: "ช่วงรายงาน", invoice_date: "วันที่", invoice_no: "เลขที่เอกสาร", customer_name: "ลูกค้า", customer_tax_id: "เลขผู้เสียภาษีลูกค้า", branch: "สำนักงานใหญ่/สาขา", project_name: "โปรเจ็ค", salesperson: "พนักงานขาย", gross_sales: "ขายแยกภาษี (ก่อนส่วนลด)", discount_amount: "ส่วนลด", net_value: "มูลค่า", vat_amount: "ภาษีมูลค่าเพิ่ม", total_net: "ยอดรวมสุทธิ", payment_status: "สถานะ", sales_inc_vat: "ขายรวมภาษี", discount_before_vat: "ส่วนลดก่อน VAT", discount_doc: "ส่วนลดตามเอกสาร", ref_doc_system: "เอกสารอ้างอิงในระบบ", reference_no: "เลขที่อ้างอิง", deposit_ref_doc: "เอกสารอ้างอิงรับมัดจำ", note: "หมายเหตุ", internal_note: "โน้ตภายในบริษัท", source_channel: "ช่องทาง", campaign_name: "แคมเปญ", source_file: "ไฟล์ต้นทาง", source_row_number: "แถวในไฟล์", imported_at: "นำเข้าเมื่อ" };
 const MONEY = new Set(["gross_sales", "discount_amount", "net_value", "vat_amount", "total_net", "sales_inc_vat", "discount_before_vat", "discount_doc"]);
 
 export default async function SalesDashboardPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -42,7 +42,7 @@ export default async function SalesDashboardPage({ searchParams }: { searchParam
     { key: "customer_name", label: "ลูกค้า", kind: "clip" }, { key: "project_name", label: "โปรเจ็ค", kind: "clip" }, { key: "salesperson", label: "พนักงานขาย" },
     { key: "total_net", label: "ยอดสุทธิ", kind: "thb" }, { key: "payment_status", label: "สถานะ" },
   ];
-  const detail = doc ? all.find((r) => r.invoice_no === doc) : undefined;
+  const detail = doc ? dedupeByDocNo(all).find((r) => r.invoice_no === doc) : undefined;
   const last = all.map((r) => r.imported_at).filter(Boolean).sort().pop();
   const exportUrl = href("/api/export/sales-transactions", params);
   const inp = "h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm";
@@ -108,12 +108,6 @@ export default async function SalesDashboardPage({ searchParams }: { searchParam
         <Card title="สัดส่วนยอดขายตามสถานะ (฿)">{v.charts.status ? <BarList title="สัดส่วนตามสถานะ" unit="฿" items={v.charts.status} /> : <Pending />}</Card>
       </div>
 
-      <Card title="ยอดขายที่เชื่อมโยงกับการตลาด">
-        {v.linked.value === null
-          ? <p className="text-sm text-slate-500">รอข้อมูล — ยังไม่มีเอกสารที่เชื่อมโยงกับ Lead หรือแคมเปญ ยอดทั้งหมดด้านบนจึงเป็น <b>ยอดขายจากรายงานบัญชี</b> ไม่ได้หมายความว่าเกิดจากการตลาด</p>
-          : <p className="text-sm">เอกสารที่เชื่อมโยงได้ {v.linked.docs} ใบ รวม <b>{thb(v.linked.value)}</b> (จาก Lead/แคมเปญที่ระบุไว้)</p>}
-        <Note className="mt-2" href="/settings/metrics/sales">ระบบไม่คำนวณ ROAS/ROI จากยอดขายรวม เพราะไม่มีข้อมูลเชื่อมโยงและต้นทุนโฆษณาที่ตรวจสอบได้ครบ</Note>
-      </Card>
 
       {detail && (
         <div className="rounded-lg border border-slate-300 bg-white p-4">

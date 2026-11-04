@@ -1,6 +1,7 @@
 // 5/11/2026 — ระบบบัญชี: เลขที่เอกสาร · ยอดรวม · ตัวอักษรบาท · ตรวจฟอร์ม · ชำระ/มัดจำ · เช็กลิสต์ Production (อิงใบเสนอราคาต้นแบบ QT2026100009)
 // รัน: npx tsx tests/account.test.ts
 import assert from "node:assert/strict";
+import { dedupeByDocNo, computeSales } from "../src/lib/sales/dashboard";
 import { payableOf, bahtText, calcTotals, checklistOf, missingDates, nextDocNo, nextJobCode, parseSeller, statusFromPaid, thaiDate, validateDoc, validatePayment, NEXT_TYPES } from "../src/lib/account";
 
 let pass = 0; const ok = (m: string) => { pass++; console.log("  ✓", m); };
@@ -58,5 +59,16 @@ assert.equal(nextJobCode([]), "PJ-0001"); assert.equal(nextJobCode(["PJ-0009", "
 assert.deepEqual(missingDates([{ start_date: "2026-11-01", end_date: "" }, { start_date: "", end_date: "" }]), { "lines.0.end_date": "ใส่วันสิ้นสุด", "lines.1.start_date": "ใส่วันเริ่ม", "lines.1.end_date": "ใส่วันสิ้นสุด" });
 assert.equal(parseSeller("").tax_id, "0325566000476"); assert.equal(parseSeller('{"phone":"0811111111"}').phone, "0811111111");
 ok("เช็กลิสต์จากบรรทัดที่ขึ้นต้นด้วย - (ตัด ** ออก) · ไม่มี → ชื่อ Product · รหัส PJ-#### · ตรวจวันเริ่ม/สิ้นสุดก่อนเริ่มงาน · ข้อมูลผู้ขาย");
+
+// Revenue: เลขที่เอกสารเดียวกัน = เอกสารเดียวกัน ไม่บวกยอดสุทธิซ้ำ
+{
+  const rows = [
+    { invoice_no: "IV1", total_net: "1000", imported_at: "2026-11-01", invoice_date: "2026-11-01" }, { invoice_no: "IV2", total_net: "500", imported_at: "2026-11-01", invoice_date: "2026-11-01" },
+    { invoice_no: "IV1", total_net: "1000", imported_at: "2026-11-02", invoice_date: "2026-11-01" }, { invoice_no: "", total_net: "70", imported_at: "", invoice_date: "2026-11-01" },
+  ];
+  assert.deepEqual(dedupeByDocNo(rows).map((r) => r.invoice_no + ":" + r.imported_at), ["IV1:2026-11-02", "IV2:2026-11-01", ":"]);
+  const v = computeSales(rows, {}); assert.equal(v.kpis.find((k) => k.key === "net")!.value, 1570); assert.equal(v.kpis.find((k) => k.key === "docs")!.value, 3);
+  console.log("  ✓ Revenue: เลขที่เอกสารซ้ำนับเป็นเอกสารเดียว (ใช้แถวนำเข้าล่าสุด) ยอดสุทธิไม่บวกซ้ำ");
+}
 
 console.log(`\nผ่านทั้งหมด ${pass} กลุ่ม`);
