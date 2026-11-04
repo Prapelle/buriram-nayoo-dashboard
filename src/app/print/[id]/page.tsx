@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requirePage } from "@/lib/page-guard";
 import { AccError, getDoc } from "@/lib/account-service";
-import { bahtText, DEFAULT_SELLER, DOC_LABEL, money, thaiDate, type DocType } from "@/lib/account";
+import { bahtText, DEFAULT_SELLER, DOC_LABEL, money, payableOf, thaiDate, type DocType } from "@/lib/account";
 import { PrintButton } from "@/components/PrintButton";
 
 export const dynamic = "force-dynamic";
@@ -49,8 +49,9 @@ export default async function PrintPage({ params }: { params: Promise<{ id: stri
         {Number(doc.discount) > 0 && <Tot k="ส่วนลด" v={`-${money(doc.discount)} บาท`} />}
         {Number(doc.vat) > 0 && <Tot k={`ภาษีมูลค่าเพิ่ม ${Number(doc.vat_rate)}%`} v={`${money(doc.vat)} บาท`} />}
         <Tot k="จำนวนเงินรวมทั้งสิ้น" v={`${money(doc.total)} บาท`} />
+        {Number(doc.wht) > 0 && <><Tot k={`หัก ณ ที่จ่าย ${Number(doc.wht_rate)}%`} v={`-${money(doc.wht)} บาท`} /><Tot k="ยอดชำระสุทธิ" v={`${money(payableOf(doc))} บาท`} /></>}
       </div>
-      <div className="mt-1">({bahtText(Number(doc.total))})</div>
+      <div className="mt-1">({bahtText(payableOf(doc))})</div>
       {doc.note && <div className="mt-4 whitespace-pre-wrap text-slate-700">หมายเหตุ: {doc.note}</div>}
       <div className="absolute left-[14mm] right-[14mm] bottom-[12mm] space-y-10">
         <div className="flex justify-between"><span>ในนาม {doc.contact_name || doc.customer_name}</span><span>ในนาม {seller.name.replace(/\s*\(.*\)$/, "")}</span></div>

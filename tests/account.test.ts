@@ -1,7 +1,7 @@
 // 5/11/2026 — ระบบบัญชี: เลขที่เอกสาร · ยอดรวม · ตัวอักษรบาท · ตรวจฟอร์ม · ชำระ/มัดจำ · เช็กลิสต์ Production (อิงใบเสนอราคาต้นแบบ QT2026100009)
 // รัน: npx tsx tests/account.test.ts
 import assert from "node:assert/strict";
-import { bahtText, calcTotals, checklistOf, missingDates, nextDocNo, nextJobCode, parseSeller, statusFromPaid, thaiDate, validateDoc, validatePayment, NEXT_TYPES } from "../src/lib/account";
+import { payableOf, bahtText, calcTotals, checklistOf, missingDates, nextDocNo, nextJobCode, parseSeller, statusFromPaid, thaiDate, validateDoc, validatePayment, NEXT_TYPES } from "../src/lib/account";
 
 let pass = 0; const ok = (m: string) => { pass++; console.log("  ✓", m); };
 const TYPES = ["Top ads", "Super Topads", "แพ็กเกจ STD"], CATS = ["Product", "Service", "Event"];
@@ -13,9 +13,12 @@ assert.equal(nextDocNo("invoice", ["QT2026100009"], "2026-11-05"), "IV2026110001
 ok("คำนำหน้า + ปีเดือน + ลำดับ 4 หลัก แยกตามชนิดและเดือน");
 
 console.log("2) ยอดรวม / ตัวอักษรบาท");
-assert.deepEqual(calcTotals([{ qty: 1, unit_price: 5000 }], 0, 0), { subtotal: 5000, discount: 0, vat_rate: 0, vat: 0, total: 5000 });
+assert.deepEqual(calcTotals([{ qty: 1, unit_price: 5000 }], 0, 0), { subtotal: 5000, discount: 0, vat_rate: 0, vat: 0, total: 5000, wht_rate: 0, wht: 0 });
 assert.equal(calcTotals([{ qty: 2, unit_price: 1000 }, { qty: 1, unit_price: 500.5 }], 500, 7).total, 2140.54);
 assert.equal(calcTotals([{ qty: 1, unit_price: 100 }], 999, 0).total, 0); // ส่วนลดเกินยอดรวมไม่ติดลบ
+const w = calcTotals([{ qty: 1, unit_price: 5000 }], 0, 0, 3); assert.equal(w.wht, 150); assert.equal(w.total, 5000); assert.equal(payableOf({ total: String(w.total), wht: String(w.wht) }), 4850);
+const w2 = calcTotals([{ qty: 1, unit_price: 1100 }], 100, 7, 3); assert.equal(w2.vat, 70); assert.equal(w2.total, 1070); assert.equal(w2.wht, 30); assert.equal(payableOf({ total: "1070", wht: "30" }), 1040); // หัก ณ ที่จ่ายคิดจากยอดก่อน VAT หลังส่วนลด
+assert.ok(!validateDoc({ ...({ doc_type: "quotation", doc_date: "2026-10-29", customer_id: "x", lines: [{ product: "Top ads", category: "Product", qty: 1, unit_price: 1 }] }), wht_rate: 20 }, TYPES, CATS).ok);
 assert.equal(bahtText(5000), "ห้าพันบาทถ้วน");
 assert.equal(bahtText(21), "ยี่สิบเอ็ดบาทถ้วน"); assert.equal(bahtText(11), "สิบเอ็ดบาทถ้วน"); assert.equal(bahtText(101), "หนึ่งร้อยเอ็ดบาทถ้วน");
 assert.equal(bahtText(1250.5), "หนึ่งพันสองร้อยห้าสิบบาทห้าสิบสตางค์"); assert.equal(bahtText(0), "ศูนย์บาทถ้วน"); assert.equal(bahtText(1_000_000), "หนึ่งล้านบาทถ้วน");

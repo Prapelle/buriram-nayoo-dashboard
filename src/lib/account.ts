@@ -28,7 +28,8 @@ export const FILE_TYPES = ["application/pdf", "image/png", "image/jpeg"];
 
 export const DOC_COLUMNS = ["doc_id", "doc_type", "doc_no", "doc_date", "due_date", "status", "root_id", "parent_doc_id",
   "customer_id", "customer_kind", "customer_name", "customer_contact", "customer_address", "customer_tax_id", "job_title", "contact_name", "contact_phone", "seller_name",
-  "subtotal", "discount", "vat_rate", "vat", "total", "paid_amount", "work_started_at", "note", "created_by", "created_at", "updated_by", "updated_at"];
+  "subtotal", "discount", "vat_rate", "vat", "total", "paid_amount", "work_started_at", "note", "created_by", "created_at", "updated_by", "updated_at",
+  "wht_rate", "wht"]; // ต่อท้าย 5/11/2026: หัก ณ ที่จ่าย (% และจำนวนเงิน)
 export const LINE_COLUMNS = ["line_id", "doc_id", "line_no", "product", "category", "description", "qty", "unit_price", "amount", "start_date", "end_date", "product_id", "job_id", "applied_at"];
 export const PAYMENT_COLUMNS = ["payment_id", "doc_id", "root_id", "amount", "paid_at", "method", "ref", "note", "confirmed_by", "confirmed_at"];
 export const FILE_COLUMNS = ["file_id", "doc_id", "payment_id", "file_name", "mime", "size", "storage_key", "uploaded_by", "uploaded_at"];
@@ -52,12 +53,14 @@ export function nextDocNo(type: DocType, existing: string[], date: string): stri
 }
 
 export type LineInput = { product: string; category: string; description: string; qty: number; unit_price: number; amount: number; start_date: string; end_date: string };
-export type Totals = { subtotal: number; discount: number; vat_rate: number; vat: number; total: number };
-export function calcTotals(lines: { qty: number; unit_price: number }[], discount: number, vatRate: number): Totals {
+/** wht = หัก ณ ที่จ่าย คิดจากยอดก่อน VAT (หลังหักส่วนลด) · total = ยอดรวมทั้งสิ้นรวม VAT · ยอดที่ลูกค้าต้องโอนจริง = total − wht (payableOf) */
+export type Totals = { subtotal: number; discount: number; vat_rate: number; vat: number; total: number; wht_rate: number; wht: number };
+export const payableOf = (d: { total?: string; wht?: string }) => round2(Number(d.total || 0) - Number(d.wht || 0));
+export function calcTotals(lines: { qty: number; unit_price: number }[], discount: number, vatRate: number, whtRate = 0): Totals {
   const subtotal = round2(lines.reduce((s, l) => s + round2(l.qty * l.unit_price), 0));
   const d = Math.min(Math.max(discount, 0), subtotal);
   const vat = round2((subtotal - d) * (vatRate / 100));
-  return { subtotal, discount: d, vat_rate: vatRate, vat, total: round2(subtotal - d + vat) };
+  return { subtotal, discount: d, vat_rate: vatRate, vat, total: round2(subtotal - d + vat), wht_rate: whtRate, wht: round2((subtotal - d) * (whtRate / 100)) };
 }
 
 export type DocValid = { ok: true; doc: Rec; lines: LineInput[]; totals: Totals } | { ok: false; errors: Record<string, string> };
@@ -90,9 +93,11 @@ export function validateDoc(input: Record<string, unknown>, types: string[], cat
   const discount = input.discount === undefined || input.discount === "" ? 0 : num(input.discount);
   const vatRate = input.vat_rate === undefined || input.vat_rate === "" ? 0 : num(input.vat_rate);
   if (!(discount >= 0)) errors.discount = "ส่วนลดต้องเป็นตัวเลข 0 ขึ้นไป";
+  const whtRate = input.wht_rate === undefined || input.wht_rate === "" ? 0 : num(input.wht_rate);
   if (!(vatRate >= 0 && vatRate <= 100)) errors.vat_rate = "VAT ต้องอยู่ระหว่าง 0–100";
+  if (!(whtRate >= 0 && whtRate <= 15)) errors.wht_rate = "หัก ณ ที่จ่ายต้องอยู่ระหว่าง 0–15%";
   if (Object.keys(errors).length) return { ok: false, errors };
-  return { ok: true, doc, lines, totals: calcTotals(lines, discount, vatRate) };
+  return { ok: true, doc, lines, totals: calcTotals(lines, discount, vatRate, whtRate) };
 }
 
 /** สถานะจากยอดชำระ (ยกเลิกไม่เปลี่ยน · ยังไม่ชำระ = คงสถานะเดิมที่ตั้งเอง) */

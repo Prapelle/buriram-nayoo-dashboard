@@ -6,7 +6,7 @@
  */
 import { writeAudit } from "./audit";
 import {
-  calcTotals, checklistOf, DOC_COLUMNS, DOC_LABEL, FILE_COLUMNS, FILE_TYPES, JOB_COLUMNS, JOB_STATUS, LINE_COLUMNS, MANUAL_STATUS, MAX_FILE_BYTES, missingDates, nextDocNo, nextJobCode, NEXT_TYPES, parseSeller,
+  calcTotals, checklistOf, payableOf, DOC_COLUMNS, DOC_LABEL, FILE_COLUMNS, FILE_TYPES, JOB_COLUMNS, JOB_STATUS, LINE_COLUMNS, MANUAL_STATUS, MAX_FILE_BYTES, missingDates, nextDocNo, nextJobCode, NEXT_TYPES, parseSeller,
   PAYMENT_COLUMNS, round2, statusFromPaid, validateDoc, validatePayment, type Customer, type DocType, type Rec,
 } from "./account";
 import { kindOf, PRODUCT_CATEGORIES, todayBkk, validateProduct } from "./developers";
@@ -74,7 +74,7 @@ function docRecord(v: { doc: Rec; totals: ReturnType<typeof calcTotals> }, cust:
   return {
     ...Object.fromEntries(DOC_COLUMNS.map((c) => [c, ""])), ...v.doc,
     customer_id: cust.developer_id, customer_kind: cust.kind, customer_name: cust.name, customer_contact: v.doc.contact_name || cust.contact_name, customer_address: s("customer_address"), customer_tax_id: s("customer_tax_id"),
-    contact_phone: v.doc.contact_phone || cust.phone, subtotal: String(v.totals.subtotal), discount: String(v.totals.discount), vat_rate: String(v.totals.vat_rate), vat: String(v.totals.vat), total: String(v.totals.total),
+    contact_phone: v.doc.contact_phone || cust.phone, subtotal: String(v.totals.subtotal), discount: String(v.totals.discount), vat_rate: String(v.totals.vat_rate), vat: String(v.totals.vat), total: String(v.totals.total), wht_rate: String(v.totals.wht_rate), wht: String(v.totals.wht),
     ...extra, updated_by: actor, updated_at: now,
   };
 }
@@ -205,7 +205,7 @@ export async function confirmPayment(id: string, input: Record<string, unknown>,
   if (doc.status === "cancelled") throw new AccError(409, "เอกสารที่ยกเลิกแล้วยืนยันชำระเงินไม่ได้", "LOCKED");
   if (String(input.updated_at_seen ?? "") !== doc.updated_at) throw new AccError(409, "เอกสารนี้ถูกแก้ไขโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่", "STALE");
   const paid = round2(t.ACC_PAYMENTS.rows.filter((p) => p.doc_id === id).reduce((s, p) => s + Number(p.amount || 0), 0));
-  const p = validatePayment(input, Number(doc.total), paid, todayBkk());
+  const p = validatePayment(input, payableOf(doc), paid, todayBkk()); // ยอดที่ต้องชำระ = ยอดรวม − หัก ณ ที่จ่าย
   if (!p.ok) throw new AccError(422, "ข้อมูลการชำระเงินไม่ถูกต้อง", "VALIDATION", { fields: p.errors });
   // เต็มจำนวน แต่ยังเริ่มงานไม่ได้ (ขาดวันที่/ลูกค้า) → ปฏิเสธก่อนบันทึกชำระ จะได้ไม่มีเงินเข้าแต่ไม่มีงาน
   const root = t.ACC_DOCS.rows.find((d) => d.doc_id === (doc.root_id || doc.doc_id)) ?? doc;
@@ -218,7 +218,7 @@ export async function confirmPayment(id: string, input: Record<string, unknown>,
   const pay: Rec = { payment_id: pid, doc_id: id, root_id: doc.root_id || id, amount: String(p.amount), paid_at: String(input.paid_at), method: String(input.method), ref: String(input.ref ?? "").trim(), note: String(input.note ?? "").trim(), confirmed_by: actor, confirmed_at: now };
   await appendRows("ACC_PAYMENTS", [toRow(t.ACC_PAYMENTS.headers, pay)]);
   const total = round2(paid + p.amount);
-  const rec: Rec = { ...doc, paid_amount: String(total), status: statusFromPaid(doc.status, Number(doc.total), total), updated_by: actor, updated_at: now };
+  const rec: Rec = { ...doc, paid_amount: String(total), status: statusFromPaid(doc.status, payableOf(doc), total), updated_by: actor, updated_at: now };
   const g = await guardRow("ACC_DOCS", t.ACC_DOCS.headers, "doc_id", id, i + 2);
   if (!("row" in g)) throw new AccError(404, "ไม่พบเอกสาร", "NOT_FOUND");
   await batchUpdateValues([{ range: rowRange("ACC_DOCS", t.ACC_DOCS.headers, g.row), values: [toRow(t.ACC_DOCS.headers, rec)] }]);

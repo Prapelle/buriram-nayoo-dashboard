@@ -96,6 +96,14 @@ await t("ยังไม่ชำระ → เริ่มงานไม่ไ
   await fails(A.confirmPayment(q4.doc_id, { amount: 100, paid_at: today, method: "โอนเงิน", updated_at_seen: c.updated_at }, ADMIN), "LOCKED");
   await fails(A.setDocStatus(q2.doc_id, "sent", ADMIN), "LOCKED"); await fails(A.setDocStatus(q4.doc_id, "paid", ADMIN), "VALIDATION");
 });
+await t("หัก ณ ที่จ่าย 3%: ยอดที่ต้องชำระ = ยอดรวม − หัก · ชำระเต็มตามยอดสุทธิ = เริ่มงานอัตโนมัติ · ชำระเกินยอดสุทธิถูกปฏิเสธ", async () => {
+  const q = (await A.saveDoc(form({ wht_rate: 3, lines: [{ product: "Top ads", category: "Product", description: "- ลงโฆษณา", qty: 1, unit_price: 5000, start_date: "2026-11-01", end_date: "2026-12-31" }] }), ADMIN)).doc;
+  assert.equal(q.total, "5000"); assert.equal(q.wht, "150"); assert.equal(q.wht_rate, "3");
+  await fails(A.confirmPayment(q.doc_id, { amount: 5000, paid_at: today, method: "โอนเงิน", updated_at_seen: q.updated_at }, ADMIN), "VALIDATION");
+  const r = await A.confirmPayment(q.doc_id, { amount: 4850, paid_at: today, method: "โอนเงิน", updated_at_seen: q.updated_at }, ADMIN);
+  assert.equal(r.full, true); assert.equal(r.doc.status, "paid"); assert.ok(r.started); assert.equal(rows("DEVELOPER_PRODUCTS").find((p) => p.notes.includes(q.doc_no))!.price_thb, "5000"); // Product บันทึกราคาเต็ม ไม่ใช่ยอดหลังหัก
+  const c = await A.convertDoc(q.doc_id, "invoice", ADMIN); assert.equal(c.doc.wht, "150");
+});
 await t("ลูกค้าถูกลบก่อนเริ่มงาน → เริ่มงานไม่ได้ (CUSTOMER_GONE) และไม่สร้าง Product/Job", async () => {
   const q5 = (await A.saveDoc(form({ customer_id: dev2.developer_id }), ADMIN)).doc;
   await A.confirmPayment(q5.doc_id, { amount: 100, paid_at: today, method: "เงินสด", updated_at_seen: q5.updated_at }, ADMIN);

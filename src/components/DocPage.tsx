@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { calcTotals, DOC_LABEL, NEXT_TYPES, PAY_METHODS, STATUS_LABEL, money, round2, thaiDate, type Customer, type DocStatus, type DocType, type Rec } from "@/lib/account";
+import { calcTotals, payableOf, DOC_LABEL, NEXT_TYPES, PAY_METHODS, STATUS_LABEL, money, round2, thaiDate, type Customer, type DocStatus, type DocType, type Rec } from "@/lib/account";
 import { Notice, type Msg } from "./Toast";
 import { btn, PageHeader } from "./PageHeader";
 
@@ -18,7 +18,7 @@ export function DocPage({ docType = "quotation", docId, canPay }: { docType?: Do
   const [msg, setMsg] = useState<Msg>(null); const [errs, setErrs] = useState<Record<string, string>>({}); const [busy, setBusy] = useState(false);
   const [customers, setCustomers] = useState<Customer[]>([]); const [types, setTypes] = useState<string[]>([]); const [cats, setCats] = useState<string[]>(["Product", "Service", "Event"]); const [today, setToday] = useState("");
   const [d, setD] = useState<Detail | null>(null); const [loaded, setLoaded] = useState(false);
-  const [f, setF] = useState<Record<string, string>>({ doc_type: docType, doc_date: "", due_date: "", customer_id: "", job_title: "", contact_name: "", contact_phone: "", seller_name: "", customer_address: "", customer_tax_id: "", discount: "0", vat_rate: "0", note: "" });
+  const [f, setF] = useState<Record<string, string>>({ doc_type: docType, doc_date: "", due_date: "", customer_id: "", job_title: "", contact_name: "", contact_phone: "", seller_name: "", customer_address: "", customer_tax_id: "", discount: "0", vat_rate: "0", wht_rate: "0", note: "" });
   const [lines, setLines] = useState<Line[]>([blankLine()]);
   const [find, setFind] = useState(""); const [nc, setNc] = useState<{ kind: string; company_name: string; contact_name: string; phone: string } | null>(null);
   const [pay, setPay] = useState({ amount: "", paid_at: "", method: PAY_METHODS[0], ref: "", note: "" }); const [slip, setSlip] = useState<File | null>(null);
@@ -28,17 +28,17 @@ export function DocPage({ docType = "quotation", docId, canPay }: { docType?: Do
       const l = await api("/api/account"); setCustomers(l.customers); setTypes(l.types); setCats(l.categories); setToday(l.today);
       if (docId) {
         const j: Detail = await api(`/api/account/${docId}`); setD(j);
-        const x = j.doc; setF({ doc_type: x.doc_type, doc_date: x.doc_date, due_date: x.due_date, customer_id: x.customer_id, job_title: x.job_title, contact_name: x.contact_name, contact_phone: x.contact_phone, seller_name: x.seller_name, customer_address: x.customer_address, customer_tax_id: x.customer_tax_id, discount: x.discount || "0", vat_rate: x.vat_rate || "0", note: x.note });
+        const x = j.doc; setF({ doc_type: x.doc_type, doc_date: x.doc_date, due_date: x.due_date, customer_id: x.customer_id, job_title: x.job_title, contact_name: x.contact_name, contact_phone: x.contact_phone, seller_name: x.seller_name, customer_address: x.customer_address, customer_tax_id: x.customer_tax_id, discount: x.discount || "0", vat_rate: x.vat_rate || "0", wht_rate: x.wht_rate || "0", note: x.note });
         setLines(j.lines.map((y) => ({ product: y.product, category: y.category || "Product", description: y.description, qty: y.qty, unit_price: y.unit_price, start_date: y.start_date, end_date: y.end_date })));
-        setPay((p) => ({ ...p, amount: String(round2(Number(x.total) - Number(x.paid_amount))), paid_at: l.today }));
+        setPay((p) => ({ ...p, amount: String(round2(payableOf(x) - Number(x.paid_amount))), paid_at: l.today }));
       } else setF((p) => ({ ...p, doc_date: p.doc_date || l.today }));
     } catch (e) { setMsg({ type: "error", text: e instanceof Error ? e.message : "โหลดไม่สำเร็จ" }); } finally { setLoaded(true); }
   }, [docId]);
   useEffect(() => { void load(); }, [load]);
 
-  const totals = useMemo(() => calcTotals(lines.map((l) => ({ qty: Number(l.qty) || 0, unit_price: Number(l.unit_price) || 0 })), Number(f.discount) || 0, Number(f.vat_rate) || 0), [lines, f.discount, f.vat_rate]);
+  const totals = useMemo(() => calcTotals(lines.map((l) => ({ qty: Number(l.qty) || 0, unit_price: Number(l.unit_price) || 0 })), Number(f.discount) || 0, Number(f.vat_rate) || 0, Number(f.wht_rate) || 0), [lines, f.discount, f.vat_rate, f.wht_rate]);
   const doc = d?.doc, editable = !docId || !!d?.editable, cancelled = doc?.status === "cancelled";
-  const paid = Number(doc?.paid_amount ?? 0), remain = round2(Number(doc?.total ?? 0) - paid), started = !!d?.work_started_at;
+  const paid = Number(doc?.paid_amount ?? 0), payable = doc ? payableOf(doc) : 0, remain = round2(payable - paid), started = !!d?.work_started_at;
   const set = (k: string, v: string) => setF((p) => ({ ...p, [k]: v })); const setL = (i: number, k: keyof Line, v: string) => setLines((p) => p.map((l, j) => (j === i ? { ...l, [k]: v } : l)));
   const e = (k: string) => errs[k] ? <span className="block text-xs text-red-600">{errs[k]}</span> : null;
   const run = async (fn: () => Promise<void>) => { setBusy(true); setErrs({}); try { await fn(); } catch (x) { const er = x as Error & { fields?: Record<string, string> }; setErrs(er.fields ?? {}); setMsg({ type: "error", text: er.message }); } finally { setBusy(false); } };
@@ -138,8 +138,10 @@ export function DocPage({ docType = "quotation", docId, canPay }: { docType?: Do
             <div className="flex justify-between"><span>รวมเป็นเงิน</span><span>{money(totals.subtotal)}</span></div>
             <label className="flex items-center justify-between gap-2"><span>ส่วนลด</span><input inputMode="decimal" value={f.discount} onChange={(e2) => set("discount", e2.target.value)} className={`${inp} w-28 text-right`} /></label>{e("discount")}
             <label className="flex items-center justify-between gap-2"><span>VAT %</span><input inputMode="decimal" value={f.vat_rate} onChange={(e2) => set("vat_rate", e2.target.value)} className={`${inp} w-28 text-right`} /></label>{e("vat_rate")}
+            <label className="flex items-center justify-between gap-2"><span>หัก ณ ที่จ่าย %</span><select value={f.wht_rate} onChange={(e2) => set("wht_rate", e2.target.value)} className={`${inp} w-28 text-right`} aria-label="หัก ณ ที่จ่าย">{[...new Set(["0", "1", "2", "3", "5", f.wht_rate])].map((x) => <option key={x} value={x}>{x === "0" ? "ไม่หัก" : `${x}%`}</option>)}</select></label>{e("wht_rate")}
             {totals.vat > 0 && <div className="flex justify-between"><span>VAT</span><span>{money(totals.vat)}</span></div>}
             <div className="flex justify-between border-t pt-1 text-base font-bold"><span>รวมทั้งสิ้น</span><span>฿{money(totals.total)}</span></div>
+            {totals.wht > 0 && <><div className="flex justify-between"><span>หัก ณ ที่จ่าย {totals.wht_rate}% (จากยอดก่อน VAT)</span><span>-{money(totals.wht)}</span></div><div className="flex justify-between text-base font-bold text-brand-700"><span>ยอดที่ต้องชำระ</span><span>฿{money(round2(totals.total - totals.wht))}</span></div></>}
           </div>
           <label className="block text-sm">หมายเหตุ<textarea value={f.note} onChange={(e2) => set("note", e2.target.value)} rows={2} className={inp} /></label>
         </div>
@@ -151,7 +153,7 @@ export function DocPage({ docType = "quotation", docId, canPay }: { docType?: Do
 
       {doc && (
         <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
-          <h2 className="font-semibold">การชำระเงิน — ยอดรวม ฿{money(doc.total)} · ชำระแล้ว ฿{money(paid)} · คงเหลือ ฿{money(remain)}</h2>
+          <h2 className="font-semibold">การชำระเงิน — ยอดที่ต้องชำระ ฿{money(payable)}{Number(doc.wht) > 0 ? ` (รวม ฿${money(doc.total)} หัก ณ ที่จ่าย ฿${money(doc.wht)})` : ""} · ชำระแล้ว ฿{money(paid)} · คงเหลือ ฿{money(remain)}</h2>
           {d!.payments.length > 0 && <ul className="text-sm text-slate-700">{d!.payments.map((p) => <li key={p.payment_id}>{thaiDate(p.paid_at)} · ฿{money(p.amount)} · {p.method}{p.ref ? ` · ${p.ref}` : ""} <span className="text-xs text-slate-400">({p.confirmed_by})</span></li>)}</ul>}
           {canPay && !cancelled && remain > 0 ? (
             <div className="grid gap-2 rounded-md bg-slate-50 p-3 sm:grid-cols-5">
