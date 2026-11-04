@@ -11,7 +11,7 @@ async function api(url: string, init?: RequestInit) { const r = await fetch(url,
 const json = (method: string, body: unknown): RequestInit => ({ method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
 /** Product: เพิ่ม · แก้ไข (เปลี่ยนชื่อ แก้ทุกที่ที่ใช้) · ลบ (ลบได้เมื่อไม่มีที่ใช้งานอยู่) */
-export function ProductsManager({ canEdit }: { canEdit: boolean }) {
+export function ProductsManager({ canDelete }: { canDelete: boolean }) {
   const [rows, setRows] = useState<P[] | null>(null); const [msg, setMsg] = useState<Msg>(null); const [busy, setBusy] = useState(false);
   const [name, setName] = useState(""); const [edit, setEdit] = useState<{ from: string; name: string } | null>(null); const [err, setErr] = useState("");
   const load = useCallback(async () => { try { setRows((await api("/api/account/products")).products); } catch (e) { setMsg({ type: "error", text: e instanceof Error ? e.message : "โหลดไม่สำเร็จ" }); setRows([]); } }, []);
@@ -30,11 +30,11 @@ export function ProductsManager({ canEdit }: { canEdit: boolean }) {
   return (
     <div className="space-y-3">
       <Notice msg={msg} onClose={() => setMsg(null)} />
-      {canEdit ? (
+      {(
         <div className="flex flex-wrap items-start gap-2 rounded-xl border border-slate-200 bg-white p-4">
           <label className="min-w-64 flex-1 text-sm">เพิ่ม Product ใหม่<input value={name} onChange={(e) => { setName(e.target.value); setErr(""); }} onKeyDown={(e) => { if (e.key === "Enter") void add(); }} placeholder="เช่น Top ads, Super Topads, แพ็กเกจ STD" className={err && !edit ? inpErr : inp} />{err && !edit && <span role="alert" className="mt-0.5 block text-xs font-medium text-red-600">⚠ {err}</span>}</label>
           <button type="button" disabled={busy} onClick={add} className={`${btn.primary} mt-5`}>＋ เพิ่ม</button>
-        </div>) : <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-600">เพิ่ม / แก้ไข / ลบ Product ทำได้เฉพาะ Admin</p>}
+        </div>)}
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left text-xs text-slate-600"><tr><th className="p-2">Product</th><th className="text-right">ใช้ที่ Developer / Home Builder</th><th className="text-right">ใช้ในเอกสาร</th><th /></tr></thead>
@@ -44,14 +44,14 @@ export function ProductsManager({ canEdit }: { canEdit: boolean }) {
               <tr key={p.name} className="border-t border-slate-100">
                 <td className="p-2">{edit?.from === p.name ? <><input value={edit.name} onChange={(e) => { setEdit({ ...edit, name: e.target.value }); setErr(""); }} onKeyDown={(e) => { if (e.key === "Enter") void rename(); }} className={err ? inpErr : inp} aria-label="ชื่อ Product" autoFocus />{err && <span role="alert" className="mt-0.5 block text-xs font-medium text-red-600">⚠ {err}</span>}</> : p.name}</td>
                 <td className="text-right tabular-nums">{p.developers}</td><td className="text-right tabular-nums">{p.docs}</td>
-                <td className="whitespace-nowrap p-2 text-right">{canEdit && (edit?.from === p.name
+                <td className="whitespace-nowrap p-2 text-right">{(edit?.from === p.name
                   ? <><button type="button" disabled={busy} onClick={rename} className={`${btn.primary} !h-8 !px-3`}>บันทึก</button> <button type="button" disabled={busy} onClick={() => { setEdit(null); setErr(""); }} className={`${btn.secondary} !h-8 !px-3`}>ยกเลิก</button></>
-                  : <><button type="button" disabled={busy} onClick={() => { setEdit({ from: p.name, name: p.name }); setErr(""); }} className={`${btn.secondary} !h-8 !px-3`}>✎ แก้ไข</button> <button type="button" disabled={busy} onClick={() => remove(p)} className={btnDanger}>🗑 ลบ</button></>)}</td>
+                  : <><button type="button" disabled={busy} onClick={() => { setEdit({ from: p.name, name: p.name }); setErr(""); }} className={`${btn.secondary} !h-8 !px-3`}>✎ แก้ไข</button> {canDelete && <button type="button" disabled={busy} onClick={() => remove(p)} className={btnDanger}>🗑 ลบ</button>}</>)}</td>
               </tr>))}
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-slate-500">เปลี่ยนชื่อ Product จะแก้ทุกที่ที่ใช้ชื่อเดิม (Developer / Home Builder, เอกสาร, งาน Production) · ลบได้เฉพาะ Product ที่ยังไม่มีที่ใช้งาน</p>
+      <p className="text-xs text-slate-500">เปลี่ยนชื่อ Product จะแก้ทุกที่ที่ใช้ชื่อเดิม (Developer / Home Builder, เอกสาร, งาน Production) · ลบได้เฉพาะ Admin และเฉพาะ Product ที่ยังไม่มีที่ใช้งาน</p>
     </div>
   );
 }

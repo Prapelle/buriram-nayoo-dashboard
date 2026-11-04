@@ -7,9 +7,9 @@ export default async function ProductsPage() {
     <section className="max-w-3xl space-y-4">
       <div>
         <h1 className="text-[26px] font-bold tracking-tight">Product</h1>
-        <p className="text-sm text-slate-500">รายการ Product ชุดเดียวกับที่ใช้ในใบเสนอราคา และหน้า Developer / Home Builder · เพิ่ม แก้ไขชื่อ หรือลบ</p>
+        <p className="text-sm text-slate-500">รายการ Product ชุดเดียวกับที่ใช้ในใบเสนอราคา และหน้า Developer / Home Builder · เพิ่ม แก้ไขชื่อ (Admin และ AE) หรือลบ (Admin)</p>
       </div>
-      <ProductsManager canEdit={role === "super_admin" || role === "admin"} />
+      <ProductsManager canDelete={role === "super_admin" || role === "admin"} />
     </section>
   );
 }
