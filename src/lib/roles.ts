@@ -26,7 +26,7 @@ export const canEditMarketing = (role: Role) => role === "super_admin" || role =
  * บัญชี / Production: เปิดใช้ 5/11/2026
  */
 export type SystemId = "dashboard" | "work" | "account" | "production";
-export type NavItem = { href: string; label: string; roles: Role[]; group?: string; icon?: string; children?: NavItem[]; system?: SystemId | "shared" };
+export type NavItem = { href: string; label: string; roles: Role[]; group?: string; icon?: string; children?: NavItem[]; system?: SystemId | "shared"; hideIn?: SystemId[] };
 
 const ALL: Role[] = ["super_admin", "admin", "ae", "marketing"];
 const MKT: Role[] = ["super_admin", "admin", "marketing"]; // ภาพรวม + การตลาด (Marketing ดูอย่างเดียว)
@@ -47,7 +47,7 @@ export const NAV: NavItem[] = [
   { href: "/work/leads", label: "Leads", roles: SALES, group: "ฝ่ายขาย", icon: "users", system: "work" },
   { href: "/work/seller-leads", label: "คนต้องการขาย", roles: SALES, group: "ฝ่ายขาย", icon: "board", system: "work" },
   { href: "/work/buyer-leads", label: "คนต้องการซื้อ", roles: SALES, group: "ฝ่ายขาย", icon: "board", system: "work" },
-  { href: "/lead-report", label: "รายงาน Lead", roles: ALL, group: "รายงาน", icon: "report", system: "shared" },
+  { href: "/lead-report", label: "รายงาน Lead", roles: ALL, group: "รายงาน", icon: "report", system: "shared", hideIn: ["account", "production"] }, // ไม่แสดงในระบบบัญชี / Production (5/11/2026)
   { href: "/work/developers", label: "Developer", roles: SALES, group: "Project", icon: "building", system: "work" },
   { href: "/work/sale-developer", label: "Sale developer", roles: SALES, group: "Project", icon: "board", system: "work" },
   { href: "/work/home-builders", label: "Home Builder", roles: SALES, group: "Project", icon: "building", system: "work" }, // 1/11/2026
@@ -89,7 +89,7 @@ export const systemsFor = (role: Role) => SYSTEMS.filter((x) => !x.soon && x.rol
 /** ระบบของ path (หน้าที่ใช้ร่วมกันคืน null) */
 export const systemOf = (path: string): SystemId | null => SYSTEMS.find((x) => path === x.prefix || path.startsWith(x.prefix + "/"))?.id ?? null;
 /** เมนูของระบบหนึ่ง = เมนูของระบบนั้น + เมนูที่ใช้ร่วมกัน */
-export const navOfSystem = (items: NavItem[], sys: SystemId | null) => items.filter((n) => n.system === "shared" || !n.system || n.system === sys)
+export const navOfSystem = (items: NavItem[], sys: SystemId | null) => items.filter((n) => (n.system === "shared" || !n.system || n.system === sys) && !(sys && n.hideIn?.includes(sys)))
   .map((n) => (n.children ? { ...n, children: n.children.filter((c) => c.system === "shared" || !c.system || c.system === sys) } : n))
   .map((n) => (n.children && n.children.length ? { ...n, href: n.children[0].href } : n))
   .filter((n) => !n.children || n.children.length);
