@@ -9,7 +9,7 @@ export default async function ImportGuideIndex() {
     <section className="max-w-4xl space-y-5">
       <div>
         <h1 className="text-[26px] font-bold tracking-tight">คู่มือนำเข้าข้อมูล</h1>
-        <p className="text-sm text-slate-500">เลือกแพลตฟอร์มเพื่อดูวิธีดาวน์โหลดไฟล์ แล้วนำเข้าที่หน้า <Link href="/import" className="underline">นำเข้า CSV</Link></p>
+        <p className="text-sm text-slate-500">เลือกแพลตฟอร์มเพื่อดูวิธีดาวน์โหลดไฟล์ แล้วนำเข้าที่หน้า <Link href="/dashboard/import" className="underline">นำเข้า CSV</Link></p>
       </div>
       <nav aria-label="สารบัญ" className="grid gap-3 sm:grid-cols-2">
         {GUIDES.map((g) => (
@@ -23,7 +23,7 @@ export default async function ImportGuideIndex() {
       <div className="rounded-lg bg-sky-50 p-4 text-sm text-sky-900">
         <div className="mb-1 font-semibold">ขั้นตอนหลังดาวน์โหลดไฟล์ (ทุกแพลตฟอร์ม)</div>
         <ol className="list-decimal space-y-1 pl-5">
-          <li>ไปที่ <Link href="/import" className="underline">นำเข้า CSV</Link> → ลากไฟล์มาวาง หรือกด เลือกไฟล์ (หลายไฟล์พร้อมกันได้)</li>
+          <li>ไปที่ <Link href="/dashboard/import" className="underline">นำเข้า CSV</Link> → ลากไฟล์มาวาง หรือกด เลือกไฟล์ (หลายไฟล์พร้อมกันได้)</li>
           <li>ตรวจประเภทรายงานและช่วงวันที่ที่ระบบอ่านได้ → กด <b>ยืนยันนำเข้า</b> (ไฟล์ถัดไปกด <b>ไฟล์ถัดไป</b>)</li>
           <li>ถ้าระบบแจ้งให้ <b>เตรียม Google Sheet</b> ให้ Admin ไปที่ ตั้งค่า → ตั้งค่าระบบ → เตรียม Google Sheet แล้วนำเข้าใหม่</li>
           <li>ไม่ต้องแก้ไฟล์ก่อนนำเข้า (ไม่ต้องเปิดแล้วบันทึกใน Excel)</li>

@@ -57,7 +57,7 @@ export function buildChecklist(d: DashData, month: string, today: string, opts: 
     { key: "ga4", name: "GA4 — Reports snapshot", href: G + "website", ...(ga4Exact ? { status: "ครบ" as const, detail: "มี Reports snapshot ของเดือนนี้" }
       : ga4R.status === "ยังไม่มี" ? ga4R : { status: "บางส่วน" as const, detail: ga4R.status === "ครบ" ? "มีรายงาน GA4 แต่ไม่มี Reports snapshot ของเดือนนี้ (ยอดผู้ใช้อาจไม่มี)" : ga4R.detail }) },
     { key: "gsc", name: "Search Console", href: G + "website", ...daily(gsc, from, to) },
-    { key: "line", name: "LINE OA (กรอกเอง)", href: "/line-oa", ...(line ? { status: "ครบ" as const, detail: "กรอกยอดเดือนนี้แล้ว" } : { status: "ยังไม่มี" as const, detail: "ยังไม่ได้กรอกยอดเดือนนี้" }) },
+    { key: "line", name: "LINE OA (กรอกเอง)", href: "/dashboard/line-oa", ...(line ? { status: "ครบ" as const, detail: "กรอกยอดเดือนนี้แล้ว" } : { status: "ยังไม่มี" as const, detail: "ยังไม่ได้กรอกยอดเดือนนี้" }) },
   ];
   if (opts.salesDates) {
     const n = opts.salesDates.filter((x) => x.slice(0, 7) === month).length;

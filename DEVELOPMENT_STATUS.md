@@ -1379,3 +1379,15 @@ Users 17,443 · Page Views 42,450 · PV/User 2.43 · Duration 1 นาที 0 �
 ไฟล์: `src/lib/{roles,page-guard,guard-core,lead-properties,leads-service,users-service,health,init-sheet,schema}.ts`, `src/components/{LeadsManager,DevelopersManager,LineOaManager,WebsiteManager,ImportWizard,Sidebar,UsersManager}.tsx`, ทุก `src/app/(app)/**/page.tsx`, ทุก `src/app/api/**/route.ts`
 
 **Passed:** 509/509 (security เขียนใหม่ตามตารางสิทธิ์ · e2e +8 ทรัพย์/ฝั่งละ 1 · http-integration ทุก Role · browser: ฟอร์ม URL ทรัพย์ + Marketing ดูอย่างเดียว)
+
+## 4/11/2026 (2) — แยกระบบด้วย path: Dashboard / ติดตามงาน
+
+- `/` = **หน้าเลือกระบบ** (หน้าแรกหลังล็อกอิน · `/home` → `/`) การ์ด 4 ระบบ: Dashboard · ติดตามงาน · บัญชี (เร็ว ๆ นี้) · Production (เร็ว ๆ นี้) · ระบบที่ไม่มีสิทธิ์แสดงเป็นสีเทา
+- `/dashboard/*` = ภาพรวมการตลาด (`/dashboard`), Performance, Facebook Page/Ads, Google Ads, LINE OA, Website, นำเข้า, ส่งออก
+- `/work/*` = Leads, คนต้องการซื้อ/ขาย, Developer, Sale developer, Home Builder, Sale home builder, Revenue (`/work/sales`, `/work/sales/import`)
+- ใช้ร่วมกัน (path เดิม แสดงในเมนูทั้งสองระบบ): `/lead-report`, `/settings` (ตั้งค่าระบบ/ผู้ใช้), `/settings/metrics` · เฉพาะ Dashboard: `/settings/targets`, `/settings/import-guide`
+- แถบบน: ปุ่มระบบ (`SYSTEMS` ใน roles.ts — เพิ่มระบบใหม่ที่เดียว ตั้ง `soon: false` + `roles` เมื่อเปิดใช้) · เมนูข้าง/แถบล่างมือถือแสดงเฉพาะระบบที่เปิด · หน้าใช้ร่วมจำระบบล่าสุด (localStorage `nayoo.system`)
+- ลิงก์เดิม (`/leads`, `/performance` ฯลฯ) redirect ไป path ใหม่พร้อม query เดิม (`next.config.ts`)
+- สิทธิ์: Marketing → Dashboard เท่านั้น · AE → ติดตามงาน เท่านั้น · Admin / Super Admin → ทั้งสอง
+
+**Passed:** 512/512

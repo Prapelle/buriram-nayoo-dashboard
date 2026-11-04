@@ -39,7 +39,7 @@ try {
   const { page, errors } = await open("admin@example.com");
   { // ประวัติการนำเข้า: ไม่โหลดจนกว่าจะกดเปิด (1/11/2026)
     let histCalls = 0; const onReq = (r) => { if (r.url().includes("/api/import/history")) histCalls++; }; page.on("request", onReq);
-    await page.goto(BASE + "/import", { waitUntil: "networkidle" }); assert.equal(histCalls, 0); assert.equal(await page.getByText("ยังไม่มีประวัติการนำเข้า").count(), 0);
+    await page.goto(BASE + "/dashboard/import", { waitUntil: "networkidle" }); assert.equal(histCalls, 0); assert.equal(await page.getByText("ยังไม่มีประวัติการนำเข้า").count(), 0);
     await page.getByText("ประวัติการนำเข้า", { exact: true }).click(); await page.getByText("ยังไม่มีประวัติการนำเข้า").waitFor(); assert.equal(histCalls, 1);
     page.off("request", onReq);
     ok("ประวัติการนำเข้า: เปิดหน้าแล้วยังไม่โหลด · กดแล้วจึงโหลดและแสดง");
@@ -117,14 +117,14 @@ try {
     L({ ...base, lead_id: "B2", lead_code: "LD-2026-0004", customer_name: "ผู้ซื้อ ข", need: "เช่า", call_status: "เข้าชมโครงการแล้ว" }), // ชื่อเดิม
   ] }) });
   const col = (pg, name) => pg.locator("div[data-col]", { has: pg.locator("span", { hasText: new RegExp(`^${name}$`) }) });
-  await page.goto(BASE + "/seller-leads"); await page.getByText("ผู้ขาย ก").waitFor();
+  await page.goto(BASE + "/work/seller-leads"); await page.getByText("ผู้ขาย ก").waitFor();
   assert.ok(await col(page, "รอติดต่อ").getByText("ผู้ขาย ก").isVisible()); assert.ok(await col(page, "ค่าเดิมที่ไม่รู้จัก").getByText("ผู้ขาย ข").isVisible());
   await page.getByText("ผู้ขาย ก").dragTo(col(page, "สนใจขาย")); await page.getByText("ผู้ขาย ก: รอติดต่อ → สนใจขาย").waitFor();
   await page.getByLabel("เปลี่ยน Sell Status ผู้ขาย ข").selectOption("เซ็นสัญญา"); await page.getByText("ผู้ขาย ข: ค่าเดิม → เซ็นสัญญา").waitFor();
   let lr = await tab("LEADS"); const H = lr[0], get = (id, c) => lr.find((r) => r[H.indexOf("lead_id")] === id)[H.indexOf(c)];
   assert.equal(get("S1", "sell_status"), "สนใจขาย"); assert.equal(get("S1", "status"), "Qualified"); assert.equal(get("S2", "sell_status"), "เซ็นสัญญา"); assert.equal(get("S1", "updated_by"), "admin@example.com");
   ok("Seller Leads: ลากการ์ด รอติดต่อ → สนใจขาย และเปลี่ยนด้วยเมนู (ค่าเดิม ทำสัญญา อยู่คอลัมน์ ค่าเดิมที่ไม่รู้จัก → เซ็นสัญญา) · บันทึกลง Sheet + ขั้น Pipeline = Qualified");
-  await page.goto(BASE + "/buyer-leads"); await page.getByText("ผู้ซื้อ ก").waitFor();
+  await page.goto(BASE + "/work/buyer-leads"); await page.getByText("ผู้ซื้อ ก").waitFor();
   assert.ok(await col(page, "รอติดต่อ").getByText("ผู้ซื้อ ก").isVisible()); assert.ok(await col(page, "เข้าชมแล้ว").getByText("ผู้ซื้อ ข").isVisible());
   assert.equal(await page.getByText("ผู้ขาย ก").count(), 0);
   await page.getByText("ผู้ซื้อ ก").dragTo(col(page, "ติดต่อได้แล้ว")); await page.getByText("ผู้ซื้อ ก: รอติดต่อ → ติดต่อได้แล้ว").waitFor();
@@ -144,7 +144,7 @@ try {
   ok("คนต้องการซื้อ (กู้ไม่ผ่าน ต้องกรอกสาเหตุ: ยกเลิกแล้วการ์ดไม่ย้าย · กรอกแล้วบันทึกลงช่องสาเหตุ) · Call Status ชื่อเดิม (ยังไม่ได้โทร / เข้าชมโครงการแล้ว) อยู่คอลัมน์ใหม่ถูกต้อง · ลากไป ติดต่อได้แล้ว (contactable TRUE) · เมนูเปลี่ยนเป็น จอง · ไม่แสดง Lead ขาย");
   { // ใช้พร้อมกันหลายคน (1/11/2026): อีกคนเปิดบอร์ดเดียวกันอยู่ → เห็นการ์ดที่ย้ายเองภายใน 1 นาที (ไม่ต้องรีเฟรช) · ใช้ข้อมูลเก่า → แจ้งและโหลดใหม่
     const other = await open("admin@example.com"); const p2 = other.page;
-    await p2.clock.install(); await p2.goto(BASE + "/buyer-leads"); await col(p2, "ติดต่อได้แล้ว").getByText("ผู้ซื้อ ก").waitFor();
+    await p2.clock.install(); await p2.goto(BASE + "/work/buyer-leads"); await col(p2, "ติดต่อได้แล้ว").getByText("ผู้ซื้อ ก").waitFor();
     await page.getByLabel("เปลี่ยน Call Status ผู้ซื้อ ก").selectOption("รอเข้าชม"); await page.getByText("ผู้ซื้อ ก: ติดต่อได้แล้ว → รอเข้าชม").waitFor();
     assert.ok(await col(p2, "ติดต่อได้แล้ว").getByText("ผู้ซื้อ ก").isVisible()); // ยังเป็นข้อมูลเก่า
     await p2.clock.fastForward(61_000); await col(p2, "รอเข้าชม").getByText("ผู้ซื้อ ก").waitFor();
@@ -158,7 +158,7 @@ try {
   assert.deepEqual(errors, []);
 
   // ---- หน้า Leads: ตัดช่อง บริษัท/อีเมล/หมวดบริการ/บริการที่สนใจ/UTM · เพิ่ม Line ----
-  await page.goto(BASE + "/leads"); await page.getByRole("button", { name: "+ เพิ่ม Lead", exact: true }).click();
+  await page.goto(BASE + "/work/leads"); await page.getByRole("button", { name: "+ เพิ่ม Lead", exact: true }).click();
   const formT = await page.locator("section", { has: page.getByRole("heading", { name: "เพิ่ม Lead ใหม่" }) }).last().innerText();
   for (const gone of ["บริษัท", "อีเมล", "หมวดบริการ", "บริการที่สนใจ", "UTM source", "UTM medium", "UTM campaign"]) assert.ok(!formT.includes(gone), `ยังมีช่อง ${gone}`);
   assert.ok(formT.includes("Line") && formT.includes("Campaign") && formT.includes("ติดตามครั้งถัดไป"));
@@ -211,20 +211,21 @@ try {
   const lh = await tab("LEADS"); const ix = (c) => lh[0].indexOf(c);
   const lrows = lh.slice(1).map((r) => { const x = [...r]; while (x.length < lh[0].length) x.push(""); if (x[ix("lead_id")] === "B1") x[ix("next_follow_up_at")] = "2026-01-15"; return x; });
   await fetch(`http://127.0.0.1:${CTRL}/set`, { method: "POST", body: JSON.stringify({ name: "LEADS", rows: [lh[0], ...lrows] }) });
-  await page.goto(BASE + "/"); await page.getByRole("heading", { name: "ติดตามลูกค้า (ฝ่ายขาย)" }).waitFor();
+  await page.goto(BASE + "/dashboard"); await page.getByRole("heading", { name: "ติดตามลูกค้า (ฝ่ายขาย)" }).waitFor();
   const ov = (await page.locator("main").innerText()).replace(/\s+/g, " ");
   assert.ok(/เลยกำหนดติดตาม 1/.test(ov), ov.slice(0, 400)); assert.ok(/Leads vs เป้า \d+ \/ 12/.test(ov) && /ค่าโฆษณา vs งบ/.test(ov)); assert.ok(/ข้อมูลเดือน .*: ครบ \d+\/10/.test(ov));
   if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/overview-extras.png", clip: { x: 0, y: 0, width: 1280, height: 1100 } });
   ok("ภาพรวม (Admin): การ์ดติดตามลูกค้า เลยกำหนด 1 · เป้าหมายเดือนนี้ (Leads / 12, ค่าโฆษณา vs งบ) · Checklist ข้อมูลประจำเดือน 10 รายการ (รวมยอดขาย)");
   // ---- UX 31/10/2026: ตัวเลขบนเมนู · ช่วงวันที่สำเร็จรูป + จำข้ามหน้า · วันที่ "31 ต.ค. 69" · กดหัวคอลัมน์เรียง · ⓘ ที่มาของตัวเลข ----
-  await page.getByRole("navigation", { name: "เมนูหลัก" }).getByRole("link", { name: /^Leads\s*1$/ }).waitFor(); // เลยกำหนด 1 + วันนี้ 0
+  await page.goto(BASE + "/work/leads"); await page.getByRole("navigation", { name: "เมนูหลัก" }).getByRole("link", { name: /^Leads\s*1$/ }).waitFor(); // เลยกำหนด 1 + วันนี้ 0 (เมนูของระบบ ติดตามงาน)
+  await page.goto(BASE + "/dashboard"); await page.getByRole("heading", { name: "ติดตามลูกค้า (ฝ่ายขาย)" }).waitFor();
   assert.ok(!(await page.locator("main").innerText()).includes("mm/dd/yyyy"));
   await page.getByRole("button", { name: "เดือนก่อน" }).click(); await page.waitForURL(/from=\d{4}-\d{2}-01&to=/);
   const u = new URL(page.url()); const pf = u.searchParams.get("from"), pt = u.searchParams.get("to");
   const TM = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
   const thd = (d) => `${Number(d.slice(8))} ${TM[Number(d.slice(5, 7)) - 1]} ${(Number(d.slice(0, 4)) + 543) % 100}`;
   await page.getByText(thd(pf), { exact: true }).first().waitFor(); // ช่องวันที่แสดงแบบไทย
-  await page.goto(BASE + "/performance"); await page.getByRole("heading", { name: /Marketing Performance/, level: 1 }).waitFor();
+  await page.goto(BASE + "/dashboard/performance"); await page.getByRole("heading", { name: /Marketing Performance/, level: 1 }).waitFor();
   assert.equal(await page.locator('input[name="from"]').inputValue(), pf); assert.equal(await page.locator('input[name="to"]').inputValue(), pt);
   assert.ok(await page.getByText("ใช้ช่วงวันที่ล่าสุดที่เลือกไว้").isVisible());
   assert.equal(await page.getByRole("button", { name: "เดือนก่อน" }).getAttribute("aria-pressed"), "true");
@@ -242,7 +243,7 @@ try {
   await note.click(); assert.ok(await page.getByText(/%Conversion = ซื้อสำเร็จ/).first().isVisible());
   if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/lead-report.png", fullPage: true });
   ok("UX: ตัวเลข Lead ที่ต้องติดตามบนเมนู · ปุ่ม เดือนก่อน ตั้งช่วงและจำข้ามหน้า (หน้า Performance ใช้ช่วงเดิม) · ทั้งหมด = ล้าง · ช่องวันที่แสดง \"1 ก.ย. 69\" · กดหัวคอลัมน์เรียงมาก→น้อย/น้อย→มาก แถวรวมอยู่ท้าย · ที่มาของตัวเลขซ่อนใน ⓘ");
-  await page.goto(BASE + "/leads?follow=overdue"); await page.getByText("ผู้ซื้อ ก").first().waitFor(); await page.getByText("1 รายการ").first().waitFor();
+  await page.goto(BASE + "/work/leads?follow=overdue"); await page.getByText("ผู้ซื้อ ก").first().waitFor(); await page.getByText("1 รายการ").first().waitFor();
   assert.equal(await page.getByText("ผู้ขาย ก").count(), 0);
   ok("ภาพรวม → เลยกำหนด เปิดหน้า Leads กรองเฉพาะ Lead ที่ต้องติดตาม (1 รายการ)");
   await page.goto(BASE + "/lead-report"); await page.getByRole("heading", { name: "ผลงานรายพนักงาน" }).waitFor();
@@ -261,7 +262,7 @@ try {
 
   // ---- Developer + Sale developer (31/10/2026) ----
   const dAdd = (n) => new Date(Date.parse(today) + n * 864e5).toISOString().slice(0, 10);
-  await page.goto(BASE + "/developers"); await page.getByRole("button", { name: "+ เพิ่ม Developer" }).click();
+  await page.goto(BASE + "/work/developers"); await page.getByRole("button", { name: "+ เพิ่ม Developer" }).click();
   const dform = () => page.locator("section", { has: page.getByRole("heading", { name: "เพิ่ม Developer ใหม่" }) }).last();
   await dform().getByLabel("ชื่อบริษัท").fill("บริษัท บ้านดี จำกัด"); await dform().getByLabel("โครงการหลัก").fill("บ้านดี วิลล์"); await dform().getByLabel("โครงการรอง 1").fill("บ้านดี 2");
   await dform().getByLabel("ชื่อผู้ติดต่อ").fill("คุณดี"); await dform().getByLabel("เบอร์").fill("0812223333"); await dform().getByLabel("Line", { exact: true }).fill("@baandee");
@@ -277,7 +278,7 @@ try {
   if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/developers.png", fullPage: true });
   const dv = await tab("DEVELOPERS"); assert.equal(dv.length - 1, 2); assert.equal(dv[1][dv[0].indexOf("status")], "กำลังใช้ Product"); assert.equal(dv[1][dv[0].indexOf("tier")], "C");
   ok("หน้า Developer: เพิ่มบริษัท (ครบทุกช่อง) → เพิ่ม Product Top ads ที่เริ่มแล้ว → Status เป็น กำลังใช้ Product เอง · เพิ่มรายการที่ 2 (เข้าร่วมแล้ว)");
-  await page.goto(BASE + "/sale-developer"); await page.getByText("สวนสวย โฮม").first().waitFor();
+  await page.goto(BASE + "/work/sale-developer"); await page.getByText("สวนสวย โฮม").first().waitFor();
   const colsTxt = await page.locator("[data-col]").evaluateAll((e) => e.map((x) => x.getAttribute("data-col")));
   assert.deepEqual(colsTxt, ["ยังไม่เข้าร่วม", "เข้าร่วมแล้ว", "มีแผนเข้าพบ", "เข้าพบแล้ว", "ปิดการขาย", "กำลังใช้ Product", "ใกล้หมดสัญญา", "ไม่ให้เข้าพบ"]);
   assert.ok(await page.locator('[data-col="กำลังใช้ Product"]').getByText("บ้านดี วิลล์").first().isVisible());
@@ -294,7 +295,7 @@ try {
   if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/sale-developer.png", fullPage: true });
   ok("หน้า Sale developer: 8 คอลัมน์ตามลำดับที่กำหนด · การ์ดที่มี Product อยู่คอลัมน์ กำลังใช้ Product และล็อก · เมนู → มีแผนเข้าพบ · ลาก → เข้าพบแล้ว (ติดต่อล่าสุด = วันนี้) · บันทึกประวัติ");
   { // Home Builder + Sale home builder (1/11/2026): ระบบเดียวกับ Developer แยกข้อมูลกัน · ไม่มีช่องโครงการ
-    await page.goto(BASE + "/home-builders"); await page.getByRole("button", { name: "+ เพิ่ม Home Builder" }).click();
+    await page.goto(BASE + "/work/home-builders"); await page.getByRole("button", { name: "+ เพิ่ม Home Builder" }).click();
     const hform = page.locator("section", { has: page.getByRole("heading", { name: "เพิ่ม Home Builder ใหม่" }) }).last();
     assert.equal(await hform.getByLabel("โครงการหลัก").count(), 0); assert.equal(await hform.getByLabel("โครงการรอง 1").count(), 0); assert.equal(await hform.getByLabel("โครงการรอง 2").count(), 0);
     await hform.getByLabel("ชื่อบริษัท").fill("บริษัท รับสร้างบ้าน ก"); await hform.getByLabel("เบอร์").fill("0819998888");
@@ -302,8 +303,8 @@ try {
     const hb = await tab("DEVELOPERS"); const hr = hb.find((x) => x[hb[0].indexOf("company_name")] === "บริษัท รับสร้างบ้าน ก");
     assert.equal(hr[hb[0].indexOf("kind")], "home_builder"); assert.equal(hr[hb[0].indexOf("dev_code")], "HB-0001");
     assert.equal(await page.getByText("บริษัท บ้านดี จำกัด").count(), 0); // Developer ไม่ปนในหน้า Home Builder
-    await page.goto(BASE + "/developers"); await page.getByText("บริษัท บ้านดี จำกัด").first().waitFor(); assert.equal(await page.getByText("บริษัท รับสร้างบ้าน ก").count(), 0);
-    await page.goto(BASE + "/sale-home-builder"); await page.locator('[data-col="ยังไม่เข้าร่วม"]').getByText("บริษัท รับสร้างบ้าน ก").waitFor();
+    await page.goto(BASE + "/work/developers"); await page.getByText("บริษัท บ้านดี จำกัด").first().waitFor(); assert.equal(await page.getByText("บริษัท รับสร้างบ้าน ก").count(), 0);
+    await page.goto(BASE + "/work/sale-home-builder"); await page.locator('[data-col="ยังไม่เข้าร่วม"]').getByText("บริษัท รับสร้างบ้าน ก").waitFor();
     assert.equal(await page.getByText("บริษัท สวนสวย").count(), 0);
     const nav = page.getByRole("navigation", { name: "เมนูหลัก" });
     assert.ok(await nav.getByText("Project", { exact: true }).count() > 0 || (await nav.innerText()).toUpperCase().includes("PROJECT"));
@@ -343,7 +344,7 @@ try {
   await m.page.goto(BASE + "/settings/metrics/overview"); await m.page.getByRole("heading", { name: /ภาพรวมการตลาด/, level: 1 }).waitFor();
   if (process.env.SHOT_DIR) await m.page.screenshot({ path: process.env.SHOT_DIR + "/guide-metrics-topic.png", fullPage: true });
   await m.page.goto(BASE + "/settings/metrics/xyz"); await m.page.waitForLoadState("networkidle"); assert.ok(/404|could not be found|ไม่พบ/i.test(await m.page.locator("body").innerText())); assert.equal(await m.page.locator("article").count(), 0);
-  await m.page.goto(BASE + "/settings"); await m.page.waitForURL(BASE + "/leads"); // Admin เข้าตั้งค่าระบบไม่ได้ → หน้าแรก (Leads)
+  await m.page.goto(BASE + "/settings"); await m.page.waitForURL(BASE + "/"); // Admin เข้าตั้งค่าระบบไม่ได้ → หน้าแรก (Leads)
   await m.page.setViewportSize({ width: 390, height: 844 }); await m.page.goto(BASE + "/settings/metrics/performance", { waitUntil: "networkidle" }); await m.page.getByRole("heading", { name: /Marketing Performance/, level: 1 }).waitFor();
   assert.ok(await m.page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth) <= 1, "มือถือล้นแนวนอน");
   // ---- ปุ่มเบอร์เกอร์ (มือถือ): เมนูปิดไว้ก่อน · กดเปิด · กดลิงก์แล้วเปลี่ยนหน้า + ปิด · พื้นหลัง/Esc ปิด ----
@@ -373,23 +374,41 @@ try {
   await burger.click(); await m.page.locator("#side-menu:not([data-compact])").waitFor(); await expanded("true");
   ok("ปุ่มเบอร์เกอร์: มือถือปิดไว้ก่อน กดเปิด/กดลิงก์ปิด/Esc/พื้นหลังปิด ไม่ล้นจอ · จอใหญ่เมนูแบ่งกลุ่ม เปิดไว้ก่อน กดย่อเหลือไอคอน/ขยาย และจำค่าหลังโหลดหน้าใหม่");
   ok("ตั้งค่า (Admin): คู่มือนำเข้าข้อมูล / คำอธิบายตัวเลข หน้าแรกเป็นสารบัญอย่างเดียว · กดแต่ละหัวข้อเปิดหน้าของหัวข้อนั้น (6 + 5 หน้า) เนื้อหาครบ · หัวข้อที่ไม่มี = 404 · ตั้งค่าระบบไม่เห็นและเข้าไม่ได้ · มือถือไม่ล้น");
+  // ---- แยกระบบ (4/11/2026): ปุ่มระบบแถบบน · เมนูข้างตามระบบ · หน้าที่ใช้ร่วมกันจำระบบล่าสุด ----
+  {
+    const sysNav = m.page.getByRole("navigation", { name: "ระบบ" }), side = m.page.getByRole("navigation", { name: "เมนูหลัก" });
+    await m.page.goto(BASE + "/work/leads"); await m.page.getByRole("heading", { name: "Leads", level: 1 }).waitFor();
+    assert.deepEqual((await sysNav.innerText()).split(/\s+/).filter(Boolean).filter((t) => !/เร็ว|นี้|^ๆ$/.test(t)), ["Dashboard", "ติดตามงาน", "บัญชี", "Production"]);
+    assert.equal(await sysNav.getByRole("link", { name: "ติดตามงาน" }).getAttribute("aria-current"), "true"); assert.equal(await sysNav.getByRole("link", { name: "บัญชี" }).count(), 0);
+    let st = await side.innerText(); assert.ok(st.includes("Leads") && st.includes("Revenue") && st.includes("รายงาน Lead") && !st.includes("Facebook Page") && !st.includes("นำเข้า CSV"));
+    await m.page.goto(BASE + "/lead-report"); st = await side.innerText(); assert.ok(st.includes("Leads") && !st.includes("Facebook Page"), "หน้าใช้ร่วม: คงเมนูระบบล่าสุด (ติดตามงาน)");
+    await sysNav.getByRole("link", { name: "Dashboard" }).click(); await m.page.waitForURL(BASE + "/dashboard/facebook-ads");
+    st = await side.innerText(); assert.ok(st.includes("Facebook Page") && st.includes("นำเข้า CSV") && st.includes("รายงาน Lead") && !st.includes("Revenue") && !st.includes("Sale developer"));
+    await m.page.goto(BASE + "/"); await m.page.getByRole("heading", { name: "เลือกระบบ" }).waitFor(); assert.equal(await m.page.locator("#side-menu").count(), 0);
+    assert.equal(await m.page.getByRole("link", { name: /ติดตามงาน/ }).count() >= 1, true); assert.ok((await m.page.locator("main").innerText()).includes("Production"));
+    await m.page.goto(BASE + "/leads"); await m.page.waitForURL(BASE + "/work/leads");
+    assert.deepEqual(m.errors, []);
+    ok("แยกระบบ: แถบบนมี Dashboard / ติดตามงาน / บัญชี / Production (2 อันหลัง = เร็ว ๆ นี้) · เมนูข้างแสดงเฉพาะระบบที่เปิด · รายงาน Lead / ตั้งค่า อยู่ทั้งสองระบบ · หน้าเลือกระบบไม่มีเมนูข้าง · ลิงก์เดิม /leads พาไป /work/leads");
+  }
   const mk = await open("marketing@example.com");
-  await mk.page.goto(BASE + "/"); await mk.page.getByText(/ข้อมูลเดือน .*: ครบ \d+\/9/).first().waitFor(); // Marketing: ไม่มีแถวยอดขาย
+  await mk.page.goto(BASE + "/dashboard"); await mk.page.getByText(/ข้อมูลเดือน .*: ครบ \d+\/9/).first().waitFor(); // Marketing: ไม่มีแถวยอดขาย
   assert.equal(await mk.page.getByRole("heading", { name: "ติดตามลูกค้า (ฝ่ายขาย)" }).count(), 0); assert.equal(await mk.page.getByText("แก้ไขเป้า").count(), 0); // ดูอย่างเดียว
   await mk.page.goto(BASE + "/lead-report"); await mk.page.getByRole("heading", { name: "ผลงานรายพนักงาน" }).waitFor();
   assert.ok(!(await mk.page.locator("main").innerText()).includes("ผู้ซื้อ ก")); // ตัวเลขรวมเท่านั้น ไม่มีชื่อลูกค้า
-  for (const pth of ["/developers", "/sale-developer", "/home-builders", "/sale-home-builder", "/import", "/export", "/settings/targets", "/settings/import-guide"]) { await mk.page.goto(BASE + pth); await mk.page.waitForURL(BASE + "/facebook-ads"); }
-  await mk.page.goto(BASE + "/home"); await mk.page.waitForURL(BASE + "/facebook-ads"); // หน้าแรกของ Marketing (4/11/2026)
-  for (const pth of ["/buyer-leads", "/seller-leads"]) { await mk.page.goto(BASE + pth); await mk.page.waitForURL(BASE + "/facebook-ads"); } // Marketing ไม่มีสิทธิ์ข้อมูลลูกค้า → กลับหน้าแรก
+  for (const pth of ["/work/developers", "/work/sale-developer", "/work/home-builders", "/work/sale-home-builder", "/dashboard/import", "/dashboard/export", "/settings/targets", "/settings/import-guide"]) { await mk.page.goto(BASE + pth); await mk.page.waitForURL(BASE + "/"); }
+  await mk.page.goto(BASE + "/home"); await mk.page.waitForURL(BASE + "/"); await mk.page.getByRole("heading", { name: "เลือกระบบ" }).waitFor(); // หน้าเลือกระบบ (4/11/2026)
+  for (const pth of ["/work/buyer-leads", "/work/seller-leads"]) { await mk.page.goto(BASE + pth); await mk.page.waitForURL(BASE + "/"); } // Marketing ไม่มีสิทธิ์ข้อมูลลูกค้า → กลับหน้าแรก
+  const mksys = await mk.page.getByRole("navigation", { name: "ระบบ" }); assert.equal(await mksys.getByRole("link").count(), 1); assert.equal(await mksys.getByRole("link", { name: "Dashboard" }).count(), 1); // Marketing: ไม่มีปุ่ม ติดตามงาน
+  await mk.page.goto(BASE + "/lead-report"); await mk.page.getByRole("heading", { name: "ผลงานรายพนักงาน" }).waitFor();
   const mknav = await mk.page.getByRole("navigation", { name: "เมนูหลัก" }).innerText();
   assert.ok(mknav.includes("คำอธิบายตัวเลข") && mknav.includes("รายงาน") && !mknav.includes("นำเข้า CSV") && !mknav.includes("ส่งออก") && !mknav.includes("เป้าหมายรายเดือน") && !mknav.includes("คู่มือนำเข้าข้อมูล"));
-  await mk.page.goto(BASE + "/website"); await mk.page.getByRole("heading", { name: "Website", level: 1 }).waitFor(); assert.equal(await mk.page.getByText("นำเข้าไฟล์ GA4 / Search Console").count(), 0);
-  await mk.page.goto(BASE + "/line-oa"); await mk.page.getByRole("heading", { name: "ข้อมูลที่บันทึกแล้ว" }).waitFor(); assert.equal(await mk.page.getByRole("button", { name: /^บันทึก/ }).count(), 0);
+  await mk.page.goto(BASE + "/dashboard/website"); await mk.page.getByRole("heading", { name: "Website", level: 1 }).waitFor(); assert.equal(await mk.page.getByText("นำเข้าไฟล์ GA4 / Search Console").count(), 0);
+  await mk.page.goto(BASE + "/dashboard/line-oa"); await mk.page.getByRole("heading", { name: "ข้อมูลที่บันทึกแล้ว" }).waitFor(); assert.equal(await mk.page.getByRole("button", { name: /^บันทึก/ }).count(), 0);
   const pr = await fetch(BASE + "/api/leads", { method: "PATCH", headers: { cookie: `authjs.session-token=${await cookie("marketing@example.com")}`, "sec-fetch-site": "same-origin", "content-type": "application/json" }, body: JSON.stringify({ lead_id: "B1", field: "call_status", value: "จอง" }) });
   assert.equal(pr.status, 403);
   assert.deepEqual(mk.errors, []);
   ok("Marketing (ดูอย่างเดียว): หน้าแรก = Facebook Ads · ภาพรวมมี Checklist 9 รายการ ไม่มีปุ่มแก้เป้า · รายงาน Lead ไม่มีชื่อลูกค้า · LINE OA / Website ไม่มีฟอร์มบันทึก/นำเข้า · นำเข้า / ส่งออก / เป้าหมาย / คู่มือนำเข้า / Project / Leads ถูกพาออก · เมนูไม่มีรายการเหล่านั้น");
-  await m.page.goto(BASE + "/import"); await m.page.getByText("ประวัติการนำเข้า", { exact: true }).click(); await m.page.getByRole("cell", { name: "Campaigns_2026_09_01-2026_09_30_.csv" }).waitFor();
+  await m.page.goto(BASE + "/dashboard/import"); await m.page.getByText("ประวัติการนำเข้า", { exact: true }).click(); await m.page.getByRole("cell", { name: "Campaigns_2026_09_01-2026_09_30_.csv" }).waitFor();
   await m.page.locator('input[type="file"]').first().setInputFiles([`${FX}/website/gsc_Devices.csv`, `${FX}/Devices_2026_09_01-2026_09_30_.csv`]);
   await m.page.getByRole("heading", { name: "ไฟล์เว็บไซต์ (GA4 / Search Console)" }).waitFor();
   assert.equal(await m.page.locator("select").first().evaluate((el) => el.options[el.selectedIndex].text), "Google Ads — Devices (เพิ่มเติม)");

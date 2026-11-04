@@ -6,6 +6,6 @@ import { canAccess, normRole, type Role } from "./roles";
 export async function requirePage(path: string): Promise<Role> {
   const role = normRole((await auth())?.user?.role);
   if (!role) redirect("/login");
-  if (!canAccess(role, path)) redirect("/home");
+  if (!canAccess(role, path)) redirect("/");
   return role;
 }

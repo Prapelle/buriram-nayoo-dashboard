@@ -43,23 +43,32 @@ assert.ok(read("src/lib/guard-core.ts").includes('role !== "super_admin" && !all
 
 console.log("2) หน้าจอและการล็อกอิน");
 const layout = read("src/app/(app)/layout.tsx"); assert.ok(layout.includes("auth()") && layout.includes('redirect("/login")') && /!role/.test(layout)); ok("Layout ของทุกหน้าในระบบ: ไม่ได้ล็อกอิน/ไม่มี Role → ส่งไปหน้า login");
-const { canAccess, homeFor, normRole, NAV } = await import("../src/lib/roles");
+const { canAccess, homeFor, normRole, NAV, navFor, navOfSystem, systemOf, systemsFor } = await import("../src/lib/roles");
 const pageFiles = files.map(norm).filter((f) => /^src\/app\/\(app\)\/.*page\.tsx$/.test(f) && !f.includes("[slug]")); // [slug] = หน้าว่างตาม NAV (notFound ถ้าไม่มีสิทธิ์)
 for (const f of pageFiles) {
   const route = "/" + f.replace(/^src\/app\/\(app\)\/?/, "").replace(/\/?page\.tsx$/, "");
   assert.ok(read(f).includes(`requirePage("${route.replace("[id]", "").replace(/\/$/, "") || "/"}`) || read(f).includes(`requirePage("${route}`), `${f}: ต้องเรียก requirePage("${route}") ตรวจ Role ฝั่ง Server`);
 }
-const pg = read("src/lib/page-guard.ts"); assert.ok(pg.includes('redirect("/login")') && pg.includes('redirect("/home")') && pg.includes("canAccess(role, path)"));
+const pg = read("src/lib/page-guard.ts"); assert.ok(pg.includes('redirect("/login")') && pg.includes('redirect("/")') && pg.includes("canAccess(role, path)"));
 const can = (r: string, p: string) => canAccess(normRole(r)!, p);
-for (const p of ["/leads", "/buyer-leads", "/seller-leads", "/lead-report", "/developers", "/sale-developer", "/home-builders", "/sale-home-builder", "/sales"]) assert.ok(can("ae", p), `AE ต้องเข้า ${p} ได้`);
-for (const p of ["/", "/facebook-ads", "/performance", "/import", "/export", "/settings", "/settings/metrics", "/settings/targets", "/sales/import"]) assert.ok(!can("ae", p), `AE ต้องเข้า ${p} ไม่ได้`);
-for (const p of ["/", "/facebook-ads", "/facebook-page", "/google-ads", "/line-oa", "/website", "/performance", "/lead-report", "/settings/metrics"]) assert.ok(can("marketing", p), `Marketing ต้องเข้า ${p} ได้`);
-for (const p of ["/leads", "/buyer-leads", "/developers", "/sales", "/import", "/export", "/settings", "/settings/targets", "/settings/import-guide"]) assert.ok(!can("marketing", p), `Marketing ต้องเข้า ${p} ไม่ได้`);
-for (const p of ["/", "/leads", "/developers", "/sales", "/sales/import", "/import", "/export", "/settings/targets", "/settings/metrics", "/facebook-ads"]) assert.ok(can("admin", p), `Admin ต้องเข้า ${p} ได้`);
+for (const p of ["/work/leads", "/work/buyer-leads", "/work/seller-leads", "/lead-report", "/work/developers", "/work/sale-developer", "/work/home-builders", "/work/sale-home-builder", "/work/sales"]) assert.ok(can("ae", p), `AE ต้องเข้า ${p} ได้`);
+for (const p of ["/dashboard", "/dashboard/facebook-ads", "/dashboard/performance", "/dashboard/import", "/dashboard/export", "/settings", "/settings/metrics", "/settings/targets", "/work/sales/import"]) assert.ok(!can("ae", p), `AE ต้องเข้า ${p} ไม่ได้`);
+for (const p of ["/dashboard", "/dashboard/facebook-ads", "/dashboard/facebook-page", "/dashboard/google-ads", "/dashboard/line-oa", "/dashboard/website", "/dashboard/performance", "/lead-report", "/settings/metrics"]) assert.ok(can("marketing", p), `Marketing ต้องเข้า ${p} ได้`);
+for (const p of ["/work/leads", "/work/buyer-leads", "/work/developers", "/work/sales", "/dashboard/import", "/dashboard/export", "/settings", "/settings/targets", "/settings/import-guide"]) assert.ok(!can("marketing", p), `Marketing ต้องเข้า ${p} ไม่ได้`);
+for (const p of ["/dashboard", "/work/leads", "/work/developers", "/work/sales", "/work/sales/import", "/dashboard/import", "/dashboard/export", "/settings/targets", "/settings/metrics", "/dashboard/facebook-ads"]) assert.ok(can("admin", p), `Admin ต้องเข้า ${p} ได้`);
 assert.ok(!can("admin", "/settings"), "Admin ต้องเข้าตั้งค่าระบบไม่ได้");
 for (const n of NAV.flatMap((x) => ("children" in x && x.children ? x.children : [x]) as { href: string }[])) assert.ok(can("super_admin", n.href), `Super Admin ต้องเข้า ${n.href} ได้`);
-assert.equal(normRole("sales"), "ae"); assert.equal(normRole("Admin"), "admin"); assert.equal(normRole("x"), null); assert.equal(homeFor("marketing"), "/facebook-ads"); assert.equal(homeFor("ae"), "/leads");
-ok(`หน้าจอ ${pageFiles.length} หน้า ตรวจ Role ฝั่ง Server (requirePage) · สิทธิ์ AE / Marketing / Admin / Super Admin ตรงตามที่กำหนด · "sales" เดิม = AE`);
+assert.equal(normRole("sales"), "ae"); assert.equal(normRole("Admin"), "admin"); assert.equal(normRole("x"), null); assert.equal(homeFor("marketing"), "/"); assert.equal(homeFor("ae"), "/");
+for (const r of ["super_admin", "admin", "ae", "marketing"] as const) assert.ok(can(r, "/"), `${r} ต้องเข้าหน้าเลือกระบบได้`);
+assert.deepEqual(systemsFor("marketing").map((x) => x.id), ["dashboard"]); assert.deepEqual(systemsFor("ae").map((x) => x.id), ["work"]); assert.deepEqual(systemsFor("admin").map((x) => x.id), ["dashboard", "work"]);
+assert.equal(systemOf("/dashboard"), "dashboard"); assert.equal(systemOf("/work/sales/import"), "work"); assert.equal(systemOf("/lead-report"), null); assert.equal(systemOf("/settings"), null);
+const hrefs = (sys: "dashboard" | "work", r: "super_admin" | "ae" | "marketing") => navOfSystem(navFor(r), sys).flatMap((n) => n.children ?? [n]).map((n) => n.href);
+const sd = hrefs("dashboard", "super_admin"), sw = hrefs("work", "super_admin");
+assert.ok(sd.every((h) => !h.startsWith("/work")) && sw.every((h) => !h.startsWith("/dashboard")), "เมนูแต่ละระบบต้องไม่มีหน้าของอีกระบบ");
+for (const h of ["/lead-report", "/settings"]) assert.ok(sd.includes(h) && sw.includes(h), `${h} ต้องอยู่ทั้งสองระบบ`);
+assert.ok(sd.includes("/settings/targets") && !sw.includes("/settings/targets"));
+for (const x of NAV.flatMap((n) => [n, ...(n.children ?? [])])) assert.ok(x.system === "shared" || x.href.startsWith("/" + x.system) || x.href.startsWith("/settings/"), `${x.href}: path ต้องขึ้นต้นด้วยระบบของเมนู`);
+ok(`แยกระบบด้วย path: /dashboard · /work · หน้าเลือกระบบ "/" ทุก Role เข้าได้ · เมนูแต่ละระบบไม่ปนกัน · รายงาน Lead / ตั้งค่า อยู่ทั้งสองระบบ`); ok(`หน้าจอ ${pageFiles.length} หน้า ตรวจ Role ฝั่ง Server (requirePage) · สิทธิ์ AE / Marketing / Admin / Super Admin ตรงตามที่กำหนด · "sales" เดิม = AE`);
 const authSrc = read("src/auth.ts"); assert.ok(/providers:\s*\[Google\]/.test(authSrc) && authSrc.includes("resolveRole(profile.email)") && authSrc.includes("email_verified")); assert.ok(!files.some((f) => /(register|signup|sign-up)/i.test(norm(f))));
 ok("ปิด Public Signup: ผู้ให้บริการเดียวคือ Google, อนุญาตเฉพาะอีเมลที่อยู่ใน APP_USERS (หรือ INITIAL_ADMIN_EMAIL) และต้องยืนยันอีเมลแล้ว, ไม่มีหน้า/เส้นทางสมัครสมาชิก");
 

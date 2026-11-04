@@ -31,7 +31,7 @@ export const SECTIONS: Sec[] = [
     ],
   },
   {
-    id: "performance", title: "2. Marketing Performance", page: "/performance",
+    id: "performance", title: "2. Marketing Performance", page: "/dashboard/performance",
     intro: "ประสิทธิภาพแยก Paid / Organic / Website ตามช่วงวันที่ · ทุกสูตรใช้ตัวตั้งและตัวหารจากแหล่งเดียวกัน ช่วงวันที่เดียวกัน",
     items: [
       { name: "Google Ads Spend / Clicks", source: "Google Ads Time series (รายวัน) ถ้าครบทุกวันในช่วง มิฉะนั้น Campaign Report", formula: "ผลรวมในช่วง (Time series ตัดช่วงวันได้ตรง · Campaign Report เป็นยอดทั้งช่วงรายงาน)", use: "ค่าใช้จ่ายและคลิกของ Google Ads" },
@@ -51,7 +51,7 @@ export const SECTIONS: Sec[] = [
     ],
   },
   {
-    id: "leads", title: "3. Leads / คนต้องการขาย / คนต้องการซื้อ", page: "/leads",
+    id: "leads", title: "3. Leads / คนต้องการขาย / คนต้องการซื้อ", page: "/work/leads",
     intro: "สถานะของ Lead ที่ใช้คำนวณตัวเลขในหน้าอื่น",
     items: [
       { name: "Call Status (คนต้องการซื้อ)", source: "กรอกที่หน้า Leads หรือลากการ์ดที่หน้า คนต้องการซื้อ", formula: list(CALL_STATUS) + " · กู้ไม่ผ่าน ต้องกรอกสาเหตุ", use: "ขั้นการติดตามลูกค้าที่ต้องการ ซื้อ / เช่า / สร้าง" },
@@ -80,7 +80,7 @@ export const SECTIONS: Sec[] = [
     ],
   },
   {
-    id: "developer", title: "6. Developer / Sale developer", page: "/sale-developer",
+    id: "developer", title: "6. Developer / Sale developer", page: "/work/sale-developer",
     intro: "ลูกค้าโครงการหมู่บ้านที่ซื้อโฆษณา · Status ลำดับ: ยังไม่เข้าร่วม → เข้าร่วมแล้ว → มีแผนเข้าพบ → เข้าพบแล้ว → ปิดการขาย → กำลังใช้ Product → ใกล้หมดสัญญา · ไม่ให้เข้าพบ",
     items: [
       { name: "สิ้นเดือน (มีแผนเข้าพบ / เข้าพบแล้ว)", source: "Status ที่ตั้งไว้ก่อนเดือนนี้", formula: "เปิดหน้าครั้งแรกของเดือนใหม่ → การ์ดกลับไป เข้าร่วมแล้ว · มีแผนเข้าพบ ที่ค้าง นับเป็น นัดไม่สำเร็จ ของเดือนที่ตั้ง", use: "เริ่มนัดใหม่ทุกเดือน และรู้ว่าเดือนนั้นนัดไม่สำเร็จกี่โครงการ" },
@@ -97,7 +97,7 @@ export const SECTIONS: Sec[] = [
     ],
   },
   {
-    id: "sales", title: "5. Revenue (ยอดขาย)", page: "/sales",
+    id: "sales", title: "5. Revenue (ยอดขาย)", page: "/work/sales",
     intro: "จากรายงานยอดขาย FlowAccount (.xlsx) · เฉพาะ Admin / AE",
     items: [
       { name: "ยอดขายสุทธิ", source: "FlowAccount — ยอดรวมสุทธิ", formula: "ผลรวมทุกเอกสารในช่วง (เอกสารยกเลิกรวมตามรายงานบัญชี — มีคำเตือน)", use: "รายได้ตามเอกสารขาย" },

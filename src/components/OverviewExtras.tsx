@@ -32,7 +32,7 @@ export function TargetCard({ p, canEdit }: { p: Progress | null; canEdit: boolea
       <div className="flex items-baseline justify-between"><h2 className="text-sm font-semibold">เป้าหมาย {p.label}{p.current && <span className="ml-2 font-normal text-slate-500">(ถึงวันนี้ · ผ่านไป {p.elapsedPct}% ของเดือน — เส้นสีฟ้า)</span>}</h2>
         {canEdit && <Link href="/settings/targets" className="text-xs underline">แก้ไขเป้า</Link>}</div>
       <div className="grid gap-4 md:grid-cols-2">
-        <Bar label="ค่าโฆษณา vs งบ" actual={p.spend} target={p.budget} pctV={p.spendPct} elapsed={p.current ? p.elapsedPct : 0} unit="thb" note={p.budget !== null ? p.spendNote : undefined} noteHref={canEdit ? "/import" : undefined} />
+        <Bar label="ค่าโฆษณา vs งบ" actual={p.spend} target={p.budget} pctV={p.spendPct} elapsed={p.current ? p.elapsedPct : 0} unit="thb" note={p.budget !== null ? p.spendNote : undefined} noteHref={canEdit ? "/dashboard/import" : undefined} />
         <Bar label="Leads vs เป้า" actual={p.leads} target={p.leadTarget} pctV={p.leadPct} elapsed={p.current ? p.elapsedPct : 0} unit="int" />
       </div>
     </div>
@@ -70,7 +70,7 @@ export function ChecklistCard({ lists }: { lists: Checklist[] }) {
 export function FollowUpCard({ overdue, today, stale }: { overdue: number; today: number; stale: number }) {
   // แบบ A: ป้ายซ้าย ตัวเลขขวา · มีรายการ = สีเตือน
   const box = (n: number, label: string, cls: string, q: string) => (
-    <Link href={`/leads?follow=${q}`} className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 transition-colors ${n ? cls : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>
+    <Link href={`/work/leads?follow=${q}`} className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 transition-colors ${n ? cls : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>
       <span className="text-sm">{label}</span><span className="text-2xl font-bold tabular-nums">{n.toLocaleString("en-US")}</span>
     </Link>
   );

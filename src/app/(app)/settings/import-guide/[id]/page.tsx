@@ -23,7 +23,7 @@ export default async function ImportGuideTopic({ params }: { params: Promise<{ i
         <ol className="list-decimal space-y-1.5 pl-5 text-sm text-slate-700">{g.steps.map((s, k) => <li key={k}>{s}</li>)}</ol>
         {g.files && <div className="text-sm"><div className="text-xs font-semibold text-slate-500">ไฟล์ที่ได้</div><ul className="list-disc pl-5 text-slate-700">{g.files.map((s, k) => <li key={k}>{s}</li>)}</ul></div>}
         {g.tips && <div className="rounded-md bg-amber-50 p-3 text-sm text-amber-900"><div className="text-xs font-semibold">ข้อควรระวัง</div><ul className="list-disc pl-5">{g.tips.map((s, k) => <li key={k}>{s}</li>)}</ul></div>}
-        <p className="text-sm">ดาวน์โหลดแล้ว นำเข้าที่หน้า <Link href="/import" className="underline">นำเข้า CSV</Link></p>
+        <p className="text-sm">ดาวน์โหลดแล้ว นำเข้าที่หน้า <Link href="/dashboard/import" className="underline">นำเข้า CSV</Link></p>
       </article>
       <nav aria-label="หัวข้อก่อนหน้า/ถัดไป" className="flex justify-between gap-3 text-sm">
         {prev ? <Link href={`/settings/import-guide/${prev.id}`} className="underline">← {prev.title}</Link> : <span />}

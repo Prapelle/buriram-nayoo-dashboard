@@ -1,161 +1,53 @@
-import { requirePage } from "@/lib/page-guard";
-import { canEditMarketing } from "@/lib/roles";
-import { RangeFields } from "@/components/RangeFields";
-import { logError } from "@/lib/log";
-import { rangeOf } from "@/lib/range-memory";
-import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
 import Link from "next/link";
-import { Note } from "@/components/Note";
-import { PageHeader, btn } from "@/components/PageHeader";
-import { fetchDashboardData } from "@/lib/dashboard-data";
-import { ALL_CHANNELS, channelLabel, SERVICES, computeDashboardCompared, dmyS, type Dashboard, type Filters } from "@/lib/dashboard";
-import type { CompareMode, DRange } from "@/lib/compare";
-import { KpiGrid } from "@/components/KpiCard";
-import { BarList, LineChart, Pending, StackedMonths, dm, my } from "@/components/charts";
-import { ChecklistCard, FollowUpCard, TargetCard } from "@/components/OverviewExtras";
-import { buildChecklist, type Checklist } from "@/lib/data-checklist";
-import { followUps } from "@/lib/lead-insights";
-import { todayBkk } from "@/lib/leads";
-import { readColumns } from "@/lib/tabdata";
-import { progressMonth, targetProgress, type Progress } from "@/lib/target-progress";
+import { auth, signOut } from "@/auth";
+import { requirePage } from "@/lib/page-guard";
+import { ROLE_LABEL, SYSTEMS } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
-const AREAS: [string, string][] = [["buriram", "บุรีรัมย์"], ["surin", "สุรินทร์"], ["multi_province", "หลายจังหวัด"], ["unknown", "ไม่ทราบ (Unknown)"]];
-const dmy = (iso?: string) => thDate(iso) || "-";
-const when = (iso: string) => (iso ? thDateTime(iso) : "ยังไม่มีข้อมูล");
-const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
-const iso = (v: string) => (/^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
+const ICON: Record<string, string> = {
+  dashboard: "M4 20V10M10 20V4M16 20v-7M22 20H2",
+  work: "M9 11l2 2 4-4M5 4h14v16H5zM9 2v4M15 2v4",
+  account: "M4 4h16v16H4zM8 8h8M8 12h8M8 16h5",
+  production: "M3 21V9l6 4V9l6 4V5h6v16zM7 17h2M12 17h2M17 17h2",
+};
 
-const Card = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <div className="rounded-xl border border-slate-200 bg-white p-4"><h3 className="mb-3 text-sm font-semibold">{title}</h3>{children}</div>
-);
-
-export default async function OverviewPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const sp = await searchParams;
+/** หน้าเลือกระบบ (4/11/2026) — หน้าแรกหลังเข้าสู่ระบบ: Dashboard · ติดตามงาน · บัญชี · Production */
+export default async function SystemPicker() {
   const role = await requirePage("/");
-  const rg = await rangeOf(sp);
-  const f: Filters = {
-    from: rg.from, to: rg.to, channel: one(sp.channel) || undefined,
-    campaign: one(sp.campaign) || undefined, area: one(sp.area) || undefined, service: one(sp.service) || undefined,
-  };
-
-  const mode = (["yoy", "prev"].includes(one(sp.compare)) ? one(sp.compare) : undefined) as CompareMode | undefined;
-  let dash: Dashboard, campaigns: string[] = [], prevRange: DRange | null = null, cmpNote: string | undefined;
-  let progress: Progress | null = null, lists: Checklist[] = [], fu: { overdue: number; today: number; stale: number } | null = null;
-  const today = todayBkk();
-  try {
-    const [data, salesDates] = await Promise.all([
-      fetchDashboardData(role),
-      // Checklist ของ Admin รวมยอดขาย FlowAccount (วันที่เอกสารเท่านั้น) · แท็บยังไม่มี = ข้าม
-      role !== "marketing" ? readColumns("SALES_TRANSACTIONS", { only: ["invoice_date"] }).then((t) => t.rows.map((r) => String(r.invoice_date ?? "").slice(0, 10))).catch(() => undefined) : Promise.resolve(undefined),
-    ]);
-    progress = targetProgress(data, progressMonth(f.from, f.to, today), today, role);
-    if (role !== "ae") {
-      const prevMonth = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 2, 1)).toISOString().slice(0, 7);
-      lists = [buildChecklist(data, prevMonth, today, { salesDates }), buildChecklist(data, today.slice(0, 7), today, { salesDates })].filter((x): x is Checklist => !!x);
-    }
-    if (role !== "marketing") { const x = followUps(data.leads, today); fu = { overdue: x.overdue.length, today: x.today.length, stale: x.stale.length }; }
-    ({ dash, prevRange, note: cmpNote } = computeDashboardCompared(data, f, role, mode));
-    campaigns = [...new Set([...data.google.map((r) => r.campaign_name), ...data.meta.map((r) => r.ad_set_name), ...data.leads.map((r) => r.campaign_name)].filter(Boolean))].sort();
-  } catch (e) { logError("page /", e);
-    return (
-      <section>
-        <h1 className="mb-4 text-[26px] font-bold tracking-tight">ภาพรวมการตลาด</h1>
-        <p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">
-          โหลดข้อมูลไม่สำเร็จ: {e instanceof Error ? e.message.slice(0, 200) : "ไม่ทราบสาเหตุ"}
-          <br />ถ้าเพิ่งอัปเดตระบบ ให้ไปที่ <Link href="/settings" className="underline">ตั้งค่า → เตรียม Google Sheet</Link> อีกครั้ง
-        </p>
-      </section>
-    );
-  }
-  const filtered = Object.values(f).some(Boolean) || !!mode;
-  const inp = "h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm";
-  const c = dash.charts;
-  // ป้ายตัวกรองที่ใช้อยู่ (นอกจากช่วงวันที่) — กดเพื่อเอาตัวกรองนั้นออก
-  const qs = (drop: string) => { const u = new URLSearchParams(); for (const [k, v] of Object.entries({ from: f.from, to: f.to, channel: f.channel, campaign: f.campaign, area: f.area, service: f.service, compare: mode })) if (v && k !== drop) u.set(k, v); if (!f.from && !f.to) u.set("range", "all"); return "/?" + u.toString(); };
-  const active = ([["channel", "ช่องทาง", f.channel], ["campaign", "Campaign", f.campaign], ["area", "พื้นที่", f.area && (AREAS.find(([v]) => v === f.area)?.[1] ?? f.area)], ["service", "Service", f.service], ["compare", "เปรียบเทียบ", mode && (mode === "yoy" ? "ปีก่อน" : "ช่วงก่อนหน้า")]] as [string, string, string | undefined][])
-    .filter(([, , v]) => v).map(([k, l, v]) => ({ k, label: `${l}: ${v}`, href: qs(k) }));
-  const imp = canEditMarketing(role) ? "/import" : undefined; // ช่องที่ยังไม่มีข้อมูล → ลิงก์ไปนำเข้า
-
+  const email = (await auth())?.user?.email ?? "";
   return (
-    <section className="space-y-6">
-      <PageHeader crumb="หน้าแรก" title="ภาพรวมการตลาด" sub={<>อัปเดตล่าสุด: {when(dash.lastImport)}{dash.dataRange && <> · ข้อมูลโฆษณาครอบคลุม {dmy(dash.dataRange.start)} – {dmy(dash.dataRange.end)}</>}</>}>
-        <Link href="/export" prefetch={false} className={btn.secondary}>ส่งออก</Link>
-        {canEditMarketing(role) && <Link href="/import" prefetch={false} className={btn.primary}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 20h16" /></svg>นำเข้าข้อมูล</Link>}
-      </PageHeader>
-
-      <form method="get" action="/" className="flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm">
-        <RangeFields from={f.from} to={f.to} className={inp} remembered={rg.remembered} />
-        <button className="h-9 rounded-lg bg-brand-600 px-4 font-medium text-white hover:bg-brand-700">ใช้ตัวกรอง</button>
-        {filtered && <Link href="/?range=all" className="py-1.5 text-slate-600 underline">ล้างตัวกรอง</Link>}
-        {/* แบบ A: ตัวกรองอื่นเก็บไว้ใน "ตัวกรองเพิ่มเติม" · ตัวกรองที่ใช้อยู่แสดงเป็นป้าย กด × เพื่อลบ */}
-        {active.map((a) => <Link key={a.k} href={a.href} prefetch={false} className="inline-flex h-8 items-center gap-1.5 self-center rounded-full bg-brand-50 px-3 text-[13px] text-brand-800 hover:bg-brand-100">{a.label}<span aria-label="ลบตัวกรอง">×</span></Link>)}
-        <details className="group w-full" open={active.length > 0}>
-          <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-[13px] hover:bg-slate-50 [&::-webkit-details-marker]:hidden">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4" /></svg>ตัวกรองเพิ่มเติม{active.length > 0 && ` (${active.length})`}<span aria-hidden="true" className="group-open:rotate-180">▾</span>
-          </summary>
-          <div className="mt-3 flex flex-wrap items-end gap-3">
-        <label><span className="mb-1 block text-xs text-slate-500">ช่องทาง</span>
-          <select name="channel" defaultValue={f.channel ?? ""} className={inp}><option value="">ทั้งหมด</option>{ALL_CHANNELS.map((x) => <option key={x} value={x}>{channelLabel(x)}</option>)}</select></label>
-        <label><span className="mb-1 block text-xs text-slate-500">Campaign / Ad set</span>
-          <select name="campaign" defaultValue={f.campaign ?? ""} className={inp + " max-w-56"}><option value="">ทั้งหมด</option>{campaigns.map((x) => <option key={x}>{x}</option>)}</select></label>
-        <label><span className="mb-1 block text-xs text-slate-500">พื้นที่</span>
-          <select name="area" defaultValue={f.area ?? ""} className={inp}><option value="">ทั้งหมด</option>{AREAS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
-        <label><span className="mb-1 block text-xs text-slate-500">Service</span>
-          <select name="service" defaultValue={f.service ?? ""} className={inp}><option value="">ทั้งหมด</option>{SERVICES.map((x) => <option key={x}>{x}</option>)}</select></label>
-        <label><span className="mb-1 block text-xs text-slate-500">เปรียบเทียบ</span>
-          <select name="compare" defaultValue={mode ?? ""} className={inp}><option value="">ไม่เปรียบเทียบ</option><option value="yoy">ปีก่อน (YoY)</option><option value="prev">ช่วงก่อนหน้า</option></select></label>
-          </div>
-        </details>
-      </form>
-
-      {!dash.hasAnyData && (
-        <div className="rounded-lg border border-dashed border-slate-300 bg-white p-6 text-slate-600">
-          ยังไม่มีข้อมูลในระบบ — {!canEditMarketing(role) ? "รอทีมการตลาดนำเข้าข้อมูล" : <>เริ่มจาก <Link href="/import" className="underline">นำเข้า CSV</Link></>}
-        </div>
-      )}
-      {/* ลำดับตามบทบาท: Sales เห็นงานติดตามลูกค้าก่อน · Marketing/Admin เห็นสถานะข้อมูล (แถบย่อ) แล้วเป้าหมาย */}
-      <ChecklistCard lists={lists} />
-      {fu && <FollowUpCard {...fu} />}
-      <TargetCard p={progress} canEdit={canEditMarketing(role)} />
-      {mode && cmpNote && <p role="status" className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">⚠ {cmpNote}</p>}
-      {prevRange && <p className="text-sm text-slate-600">เทียบกับ{mode === "yoy" ? "ช่วงเดียวกันของปีก่อน" : "ช่วงก่อนหน้า"}: <b>{dmyS(prevRange.from)} – {dmyS(prevRange.to)}</b> (ตัวกรองอื่นเหมือนกัน) · % เปลี่ยนแปลง = (ปัจจุบัน − ค่าเปรียบเทียบ) ÷ ค่าเปรียบเทียบ × 100 · ค่าเปรียบเทียบ = 0 → N/A</p>}
-      {dash.warnings.map((w, i) => <p key={i} role="alert" className="rounded-md bg-amber-50 p-3 text-sm text-amber-900">⚠ {w}</p>)}
-      {dash.unknownAreaRows > 0 && !f.area && <p className="rounded-md bg-slate-100 p-3 text-sm text-slate-600">ข้อมูลโฆษณา {dash.unknownAreaRows} แถวยังไม่ระบุ Area — กำหนดได้ที่แท็บ AREA_MAPPINGS ใน Google Sheet แล้วนำเข้าไฟล์ใหม่</p>}
-
-      {dash.groups.map((g) => (
-        <div key={g.title}>
-          <h2 className="mb-2 text-sm font-semibold text-slate-700">{g.title}</h2>
-          <KpiGrid items={g.items} importHref={imp} />
-        </div>
-      ))}
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="ค่าโฆษณาแยกตามช่องทาง (฿)">{c.spendByChannel ? <BarList items={c.spendByChannel} unit="฿" title="ค่าโฆษณาแยกตามช่องทาง" /> : <Pending href={imp} />}</Card>
-        <Card title="Monthly Trend — ค่าโฆษณารายเดือน (฿)">{c.monthly ? <StackedMonths rows={c.monthly} /> : <Pending href={imp} />}</Card>
-        <Card title="Leads แยกตามช่องทาง — คนต้องการซื้อ / เช่า / สร้าง">{c.leadsByChannelBuy ? <BarList items={c.leadsByChannelBuy} title="Leads คนต้องการซื้อ แยกตามช่องทาง" /> : <Pending text="ยังไม่มี Lead คนต้องการซื้อ / เช่า / สร้าง ในช่วงนี้" />}</Card>
-        <Card title="Leads แยกตามช่องทาง — คนต้องการขาย">{c.leadsByChannelSell ? <BarList items={c.leadsByChannelSell} title="Leads คนต้องการขาย แยกตามช่องทาง" /> : <Pending text="ยังไม่มี Lead คนต้องการขาย ในช่วงนี้" />}</Card>
-        <Card title="Qualified แยกตามช่องทาง — คนต้องการซื้อ (รอเข้าชมขึ้นไป)">{c.qualByChannelBuy ? <BarList items={c.qualByChannelBuy} title="Qualified คนต้องการซื้อ แยกตามช่องทาง" /> : <Pending text="ยังไม่มี Lead คนต้องการซื้อ / เช่า / สร้าง ในช่วงนี้" />}</Card>
-        <Card title="Qualified แยกตามช่องทาง — คนต้องการขาย (สัญญา + ขายแล้ว)">{c.qualByChannelSell ? <BarList items={c.qualByChannelSell} title="Qualified คนต้องการขาย แยกตามช่องทาง" /> : <Pending text="ยังไม่มี Lead คนต้องการขาย ในช่วงนี้" />}</Card>
-        <Card title="Lead ซื้อ / เช่า / สร้าง แยกตาม Buy Status">{c.buyStatus ? <BarList items={c.buyStatus} title="Lead แยกตาม Buy Status" /> : <Pending text="ยังไม่มี Lead ที่ Need เป็น ซื้อ / เช่า / สร้าง" href={imp} />}</Card>
-        <Card title="Lead ขาย แยกตาม Sell Status">{c.sellStatus ? <BarList items={c.sellStatus} title="Lead แยกตาม Sell Status" /> : <Pending text="ยังไม่มี Lead ที่ Need เป็น ขาย" href={imp} />}</Card>
-        <Card title="Sales Pipeline — คนต้องการซื้อ / เช่า / สร้าง (สะสม)">{c.pipelineBuy ? <BarList items={c.pipelineBuy} title="Sales Pipeline คนต้องการซื้อ" /> : <Pending text="ยังไม่มี Lead คนต้องการซื้อ / เช่า / สร้าง ในช่วงนี้" />}</Card>
-        <Card title="Sales Pipeline — คนต้องการขาย (สะสม)">{c.pipelineSell ? <BarList items={c.pipelineSell} title="Sales Pipeline คนต้องการขาย" /> : <Pending text="ยังไม่มี Lead คนต้องการขาย ในช่วงนี้" />}</Card>
-        <Card title="LINE OA Growth (เพื่อนทั้งหมดสิ้นเดือน)">
-          {c.lineGrowth && c.lineGrowth.some((r) => r.friendsEnd !== null)
-            ? <LineChart label="เพื่อน LINE OA" points={c.lineGrowth.filter((r) => r.friendsEnd !== null).map((r) => ({ x: my(r.month), y: r.friendsEnd! }))} />
-            : <Pending href={imp} />}
-        </Card>
-        <Card title="แนวโน้มรายวัน — Google Ads Cost (฿)">
-          {c.daily ? <LineChart label="Google Ads Cost รายวัน" unit="฿" points={c.daily.map((d) => ({ x: dm(d.date), y: d.cost }))} /> : <Pending text="รอข้อมูล (นำเข้า Google Ads Time series)" href={imp} />}
-        </Card>
+    <section className="mx-auto max-w-4xl space-y-6 py-2 md:py-6">
+      <div>
+        <h1 className="text-[26px] font-bold tracking-tight">เลือกระบบ</h1>
+        <p className="text-sm text-slate-500">สลับระบบได้ทุกเมื่อจากปุ่มแถบด้านบน · กดโลโก้เพื่อกลับมาหน้านี้</p>
       </div>
-
-      <Note href="/settings/metrics/overview">
-        {dash.notes.map((n, i) => <p key={i}>• {n}</p>)}
-        <p>• ระบบไม่คำนวณ ROI เชิงสาเหตุ (Attribution เป็น Manual/Unknown) · Total Paid Media Spend ใช้เฉพาะ Google Ads Campaign Report ไม่รวมรายงานรายละเอียดอื่น</p>
-      </Note>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {SYSTEMS.map((x) => {
+          const ok = !x.soon && x.roles.includes(role);
+          const body = (
+            <>
+              <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${ok ? "bg-brand-50 text-brand-700" : "bg-slate-100 text-slate-400"}`}>
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={ICON[x.id]} /></svg>
+              </span>
+              <span className="min-w-0">
+                <span className="flex items-center gap-2 text-lg font-semibold">{x.label}
+                  {x.soon && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-normal text-slate-500">เร็ว ๆ นี้</span>}
+                  {!x.soon && !ok && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-normal text-slate-500">ไม่มีสิทธิ์</span>}
+                </span>
+                <span className="mt-0.5 block text-sm text-slate-500">{x.desc}</span>
+              </span>
+            </>
+          );
+          return ok
+            ? <Link key={x.id} href={x.href} prefetch={false} className="flex items-start gap-4 rounded-xl border border-slate-200 bg-white p-5 transition-colors hover:border-brand-600 hover:bg-brand-50/40">{body}</Link>
+            : <div key={x.id} aria-disabled="true" className="flex items-start gap-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 opacity-70">{body}</div>;
+        })}
+      </div>
+      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+        <span>{email} · สิทธิ์ {ROLE_LABEL[role]}</span>
+        <form action={async () => { "use server"; await signOut({ redirectTo: "/login" }); }}><button className="underline">ออกจากระบบ</button></form>
+      </div>
     </section>
   );
 }

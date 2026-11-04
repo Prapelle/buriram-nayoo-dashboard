@@ -18,7 +18,7 @@ const HINT: Record<string, string> = { มีแผนเข้าพบ: "ส�
 const dmy = (s?: string) => (s && /^\d{4}-\d{2}-\d{2}/.test(s) ? thDate(s) : "");
 
 export function DevBoard({ kind = "developer" }: { kind?: DevKind }) {
-  const L = KIND_LABEL[kind], page = kind === "home_builder" ? "/home-builders" : "/developers";
+  const L = KIND_LABEL[kind], page = kind === "home_builder" ? "/work/home-builders" : "/work/developers";
   const [all, setAll] = useState<Dev[]>([]); const [products, setProducts] = useState<DevProduct[]>([]); const [staff, setStaff] = useState<string[]>([]); const [today, setToday] = useState("");
   const [state, setState] = useState<"loading" | "ok" | "error">("loading");
   const [tab, setTab] = useState(""); // มือถือ: คอลัมน์ที่แสดง

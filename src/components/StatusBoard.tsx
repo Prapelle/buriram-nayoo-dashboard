@@ -111,7 +111,7 @@ export function StatusBoard({ kind }: { kind: "seller" | "buyer" }) {
         <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">Staff</span>
           <select value={staffF} onChange={(e) => setStaffF(e.target.value)} className="max-w-40 h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm"><option value="">ทั้งหมด</option>{staff.map((s) => <option key={s}>{s}</option>)}</select></label>
         {(q || staffF) && <button onClick={() => { setQ(""); setStaffF(""); }} className="py-1.5 text-sm underline">ล้าง</button>}
-        <span className="ml-auto text-xs text-slate-500">{shown.length.toLocaleString("en-US")} รายการ · เพิ่ม/แก้ไขรายละเอียดที่หน้า <Link href="/leads" className="underline">Leads</Link></span>
+        <span className="ml-auto text-xs text-slate-500">{shown.length.toLocaleString("en-US")} รายการ · เพิ่ม/แก้ไขรายละเอียดที่หน้า <Link href="/work/leads" className="underline">Leads</Link></span>
       </div>
 
       {state === "loading" && <Skeleton kind={"board"} />}

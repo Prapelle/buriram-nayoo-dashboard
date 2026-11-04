@@ -32,7 +32,7 @@ try {
   await ctx.addCookies([{ name: "authjs.session-token", value: token, domain: "127.0.0.1", path: "/", httpOnly: true, sameSite: "Lax" }]);
   const page = await ctx.newPage();
   const errors = []; page.on("pageerror", (e) => { if (/Minified React error #418/.test(String(e))) { console.log("    (เตือน) hydration ไม่ตรง → React วาดใหม่ฝั่งเบราว์เซอร์ @", page.url()); return; } errors.push(`${e} @ ${page.url()}`); }); /* #418: ดู browser-import.mjs */ page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
-  await page.goto(BASE + "/website"); await page.getByText("1. นำเข้าไฟล์ GA4 / Search Console").waitFor();
+  await page.goto(BASE + "/dashboard/website"); await page.getByText("1. นำเข้าไฟล์ GA4 / Search Console").waitFor();
   assert.ok(await page.getByRole("button", { name: "เลือกไฟล์" }).isVisible()); assert.ok(!(await page.locator('input[type="file"]').isVisible()));
   if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/website-upload.png", clip: { x: 0, y: 0, width: 1280, height: 520 } });
   ok("หน้า Website: มีปุ่ม \"เลือกไฟล์\" + พื้นที่ลากไฟล์มาวาง (ซ่อนช่อง Choose files เดิม)");
@@ -67,7 +67,7 @@ try {
   await page.getByRole("button", { name: "บันทึกยอดผู้ใช้" }).click();
   await page.getByText("บันทึกยอดผู้ใช้แล้ว").waitFor();
   ok("กดช่วงของไฟล์ GA4 แล้วกรอก Users 21,000 → บันทึกแล้ว");
-  await page.goto(BASE + "/performance?from=2026-10-01&to=2026-10-27");
+  await page.goto(BASE + "/dashboard/performance?from=2026-10-01&to=2026-10-27");
   await page.getByText("Website Users", { exact: false }).first().waitFor();
   const perf = (await page.locator("main").innerText()).replace(/\s+/g, " ");
   assert.ok(/Website Users 21,000/.test(perf), perf.slice(perf.indexOf("Website (GA4)"), perf.indexOf("Website (GA4)") + 900)); assert.ok(/Website Page Views 35,820/.test(perf)); assert.ok(/Page Views per User 1\.71/.test(perf)); assert.ok(perf.includes("47 วินาที") || perf.includes("47.3 วินาที"), "duration");
@@ -80,7 +80,7 @@ try {
   const LD = []; const add = (n, ch, calls) => { for (let i = 0; i < n; i++) LD.push({ lead_id: `${ch}-${i}`, lead_code: `L${LD.length}`, received_at: `2026-09-${String(1 + (LD.length % 28)).padStart(2, "0")}`, source_channel: ch, call_status: calls[i] ?? "ยังไม่ได้โทร", need: "ซื้อ", status: "New" }); };
   add(12, "Facebook Ads", ["ซื้อสำเร็จ", "เข้าชมโครงการแล้ว", "ติดต่อได้แล้ว", "ติดต่อไม่ได้"]); add(5, "Google Ads", ["เข้าชมโครงการแล้ว", "ติดต่อได้แล้ว"]); add(4, "LINE OA", ["ซื้อสำเร็จ", "ติดต่อได้แล้ว"]); add(2, "Website/SEO", ["ไม่สนใจ"]);
   await setRows("LEADS", LD);
-  await page.goto(BASE + "/performance?from=2026-09-01&to=2026-09-30");
+  await page.goto(BASE + "/dashboard/performance?from=2026-09-01&to=2026-09-30");
   await page.getByText("Website Users", { exact: false }).first().waitFor();
   const sepT = (await page.locator("main").innerText()).replace(/\s+/g, " ");
   assert.ok(/Website Users 17,443/.test(sepT) && /Website Page Views 42,450/.test(sepT) && /Page Views per User 2\.43/.test(sepT) && sepT.includes("1 นาที 0 วินาที") && /Sessions 22,409/.test(sepT), sepT.slice(sepT.indexOf("Website (GA4)"), sepT.indexOf("Website (GA4)") + 700));
@@ -92,7 +92,7 @@ try {
   // Facebook ระดับเพจ: ไฟล์จริงจาก Meta Business Suite (UTF-16) ผ่านหน้า นำเข้า CSV
   const FB = `${process.env.FIXTURE_DIR ?? "tests/fixtures"}/fbpage/`;
   for (const [f, label] of [["Viewers.csv", "Facebook Page — Viewers รายวัน (ระดับเพจ)"], ["Link_clicks.csv", "Facebook Page — Link clicks รายวัน (ระดับเพจ)"]]) {
-    await page.goto(BASE + "/import"); await page.getByText("ประวัติการนำเข้า", { exact: true }).click(); await page.getByRole("cell", { name: "ga4_pages.csv" }).waitFor(); // ประวัติโหลดแล้ว = หน้าพร้อมรับไฟล์
+    await page.goto(BASE + "/dashboard/import"); await page.getByText("ประวัติการนำเข้า", { exact: true }).click(); await page.getByRole("cell", { name: "ga4_pages.csv" }).waitFor(); // ประวัติโหลดแล้ว = หน้าพร้อมรับไฟล์
     await page.locator('input[type="file"]').first().setInputFiles(FB + f);
     await page.getByText(/ช่วงรายงานจากไฟล์: 1 ก.ย. 69\s*–\s*30 ก.ย. 69/).waitFor();
     assert.equal(await page.locator("select").first().evaluate((el) => el.options[el.selectedIndex].text), label);
@@ -101,20 +101,20 @@ try {
   }
   assert.equal((await tab("FB_PAGE_INSIGHTS")).length - 1, 60);
   ok("หน้า นำเข้า CSV: ไฟล์ Viewers / Link clicks จริง (UTF-16 จาก Meta Business Suite) ตรวจประเภทอัตโนมัติ ช่วง 01–30/09/2026 → นำเข้า 30 + 30 วัน");
-  await page.goto(BASE + "/facebook-page?from=2026-09-01&to=2026-09-30"); await page.getByText("Viewers (แทน Reach)").waitFor();
+  await page.goto(BASE + "/dashboard/facebook-page?from=2026-09-01&to=2026-09-30"); await page.getByText("Viewers (แทน Reach)").waitFor();
   const fbT = (await page.locator("main").innerText()).replace(/\s+/g, " ");
   assert.ok(/Viewers \(แทน Reach\) 806,272 ใช้ Viewers เทียบเคียง Reach/.test(fbT) && /Link clicks \(ระดับเพจ\) 6,443/.test(fbT), fbT.slice(0, 900));
   if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/fb-page.png", fullPage: false });
   assert.match(await page.getByRole("link", { name: "Viewers / Link clicks รายวัน (ระดับเพจ)" }).getAttribute("href"), /view=page/);
-  await page.goto(BASE + "/facebook-page?view=page&from=2026-09-01&to=2026-09-30"); await page.getByText("93,295").waitFor();
+  await page.goto(BASE + "/dashboard/facebook-page?view=page&from=2026-09-01&to=2026-09-30"); await page.getByText("93,295").waitFor();
   const fbD = (await page.locator("main").innerText()).replace(/\s+/g, " ");
   assert.ok(/10 ก.ย. 69 93,295 375/.test(fbD), fbD.slice(fbD.indexOf("วันที่"), fbD.indexOf("วันที่") + 400));
-  await page.goto(BASE + "/performance?from=2026-09-01&to=2026-09-30"); await page.getByText("Website Users", { exact: false }).first().waitFor();
+  await page.goto(BASE + "/dashboard/performance?from=2026-09-01&to=2026-09-30"); await page.getByText("Website Users", { exact: false }).first().waitFor();
   const pfT = (await page.locator("main").innerText()).replace(/\s+/g, " ");
   assert.ok(/Facebook Viewers \(แทน Reach\) 806,272/.test(pfT) && /Reach \(ทุก Social\) .*1,306,272/.test(pfT), pfT.slice(pfT.indexOf("Facebook Page (Organic)"), pfT.indexOf("Facebook Page (Organic)") + 500));
   ok("หน้า Facebook Page: การ์ด Viewers (แทน Reach) 806,272 + หมายเหตุ ใช้ Viewers เทียบเคียง Reach · Link clicks 6,443 · ตารางรายวัน · Performance/Funnel ใช้ Viewers (500,000 + 806,272)");
-  await page.goto(BASE + "/website"); await page.getByText("GA4 Snapshot — Sessions ตามแหล่งที่มา").waitFor({ timeout: 5000 }).catch(() => {});
-  await page.setViewportSize({ width: 390, height: 844 }); await page.goto(BASE + "/website");
+  await page.goto(BASE + "/dashboard/website"); await page.getByText("GA4 Snapshot — Sessions ตามแหล่งที่มา").waitFor({ timeout: 5000 }).catch(() => {});
+  await page.setViewportSize({ width: 390, height: 844 }); await page.goto(BASE + "/dashboard/website");
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   assert.ok(overflow <= 1, `หน้าเลื่อนแนวนอน ${overflow}px`); await page.screenshot({ path: "/tmp/website-mobile.png", fullPage: false });
   ok("หน้าจอมือถือ (390px): หน้า Website ไม่ล้นแนวนอน");
