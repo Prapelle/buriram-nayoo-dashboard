@@ -21,7 +21,9 @@ export default async function PrintPage({ params }: { params: Promise<{ id: stri
       <PrintButton />
       <div aria-hidden style={{ position: "absolute", top: 0, right: 0, width: 0, height: 0, borderLeft: "60px solid transparent", borderTop: `60px solid ${ORANGE}` }} />
       <div className="flex justify-between gap-6">
-        <div className="w-[48%] space-y-0.5 pt-6">
+        <div className="w-[48%] space-y-0.5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/seller-logo.png" alt={seller.name} style={{ height: "24mm", width: "auto" }} className="mb-2" />
           <div className="font-semibold">{seller.name}</div><div>{seller.address}</div><div>เลขประจำตัวผู้เสียภาษี {seller.tax_id}</div><div>โทร. {seller.phone}</div>
           <div className="pt-3" style={{ color: ORANGE }}>ลูกค้า</div>
           <div>{doc.customer_contact || doc.contact_name}</div><div className="font-semibold">{doc.customer_name}</div>
