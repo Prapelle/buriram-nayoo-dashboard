@@ -22,7 +22,7 @@ export type TabReport = {
 };
 export type VerifyReport = { group: string; at: string; ok: boolean; tabs: TabReport[] };
 
-const SUMS: Record<string, string[]> = { ACC_DOCS: ["total", "paid_amount"], ACC_PAYMENTS: ["amount"], ACC_LINES: ["amount"] };
+const SUMS: Record<string, string[]> = { ACC_DOCS: ["total", "paid_amount"], ACC_PAYMENTS: ["amount"], ACC_LINES: ["amount"], SALES: ["deal_value_thb", "company_revenue_thb", "direct_cost_thb"], META_ADS: ["amount_spent_thb", "impressions", "reach"], GOOGLE_ADS_CAMPAIGNS: ["cost_thb", "clicks"], FB_PAGE_POSTS: ["views", "reach", "reactions"] };
 const clean = (h: string[]) => [...new Set(h.filter(Boolean))];
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
