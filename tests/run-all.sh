@@ -16,6 +16,8 @@ echo "== developers";  npx tsx tests/developers.test.ts
 echo "== thdate";      npx tsx tests/thdate.test.ts
 echo "== account";     npx tsx tests/account.test.ts
 echo "== account-service"; npx tsx tests/account-service.test.mts
+echo "== account-service (บน D1 จำลอง)"; D1_MODE=1 npx tsx tests/account-service.test.mts
+echo "== d1 (ย้าย Sheets → D1)"; npx tsx tests/d1.test.mts
 if ls "$FIX"/Page.csv >/dev/null 2>&1; then
   echo "== import";    npx tsx tests/import.test.ts
   echo "== dashboard"; npx tsx tests/dashboard.test.ts

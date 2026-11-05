@@ -3,6 +3,7 @@ import { HealthCheck } from "@/components/HealthCheck";
 import { InitButton } from "@/components/InitButton";
 import { UsersManager } from "@/components/UsersManager";
 import { BackupGuide } from "@/components/BackupGuide";
+import { D1Manager } from "@/components/D1Manager";
 
 export default async function SettingsPage() {
   await requirePage("/settings");
@@ -20,6 +21,13 @@ export default async function SettingsPage() {
           สร้างแท็บและ Header ที่ขาด เพิ่มผู้ใช้ Admin คนแรก และค่า Config เริ่มต้น โดยไม่ลบหรือแก้ข้อมูลเดิม
         </p>
         <InitButton />
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-white p-5">
+        <h2 className="mb-1 font-semibold">ฐานข้อมูล D1 (ย้ายจาก Google Sheets)</h2>
+        <p className="mb-4 text-sm text-slate-600">
+          ย้ายข้อมูลเป็นกลุ่ม: สร้างตาราง → ลองคัดลอกและตรวจเทียบ → สลับเมื่อตรงทุกแท็บ · Google Sheet เดิมไม่ถูกแก้หรือลบ และกลับไปใช้ได้
+        </p>
+        <D1Manager />
       </div>
       <div className="rounded-xl border border-slate-200 bg-white p-5">
         <h2 className="mb-1 font-semibold">สำรองข้อมูล Google Sheet อัตโนมัติ</h2>
