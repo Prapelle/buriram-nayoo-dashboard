@@ -12,7 +12,7 @@ function fail(e: unknown) {
 
 // Production: ดูได้ Super Admin / Admin / AE · แก้สถานะ Job ได้ Super Admin / Admin
 export async function GET() {
-  const g = await requireRole(["admin", "ae"]);
+  const g = await requireRole(["admin", "ae", "production"]);
   if (!g.ok) return g.res;
   try { return NextResponse.json(await listJobs()); } catch (e) { return fail(e); }
 }

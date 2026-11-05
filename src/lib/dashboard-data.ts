@@ -13,7 +13,7 @@ const wanted = (role: Role): Record<string, string[]> => ({
   LINE_OA_MONTHLY: ["report_month", "new_friends", "friends_end", "inquiries", "leads"],
   LEADS: ["lead_id", "received_at", "source_channel", "campaign_name", "area", "service_category", "status", "qualified_at", "need", "buy_status", "sell_status", "call_status",
     "staff", "next_follow_up_at", "updated_at", "created_at", "lost_reason"], // 30/10/2026: ติดตาม / ผลงานรายพนักงาน / เหตุผลที่ไม่สำเร็จ (ไม่มีชื่อ/เบอร์ลูกค้า)
-  SALES: ["closing_date", "revenue_date", "service_category", "source_channel", "campaign_name", "payment_status", ...(role === "marketing" ? [] : FIN_COLS)],
+  SALES: ["closing_date", "revenue_date", "service_category", "source_channel", "campaign_name", "payment_status", ...(role === "marketing" || role === "production" ? [] : FIN_COLS)],
   APP_CONFIG: ["config_key", "config_value"],
   FB_PAGE_INSIGHTS: ["metric", "metric_date", "value", "imported_at"],
   MONTHLY_TARGETS: ["month", "ad_budget_thb", "lead_target", "notes"],

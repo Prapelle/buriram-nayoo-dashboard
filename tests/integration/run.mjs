@@ -45,7 +45,7 @@ async function call(path, { as, method = "GET", body, headers = {} } = {}) {
 const locPath = (l) => { try { const u = new URL(l, "http://x"); return u.pathname + u.search; } catch { return String(l); } };
 const redirectedTo = (r, to) => ([302, 303, 307, 308].includes(r.status) && (locPath(r.location) === to || locPath(r.location).startsWith(to + "?"))) || (r.status === 200 && (r.text.includes(`NEXT_REDIRECT;replace;${to};`) || r.text.includes(`NEXT_REDIRECT;push;${to};`) || new RegExp(`http-equiv="refresh" content="[^"]*url=${to.replace(/[?]/g, "\\?")}["&]`).test(r.text)));
 const file = (name) => readFileSync(`${FIX}/${name}`, "utf8");
-const ADMIN = "admin@example.com", IMP = "importer@example.com", MKT = "marketing@example.com", SALES = "sales@example.com", OFF = "inactive@example.com"; // ADMIN = Super Admin (INITIAL_ADMIN_EMAIL) · IMP = Admin · SALES = role "sales" เดิม (= AE)
+const ADMIN = "admin@example.com", IMP = "importer@example.com", MKT = "marketing@example.com", SALES = "sales@example.com", OFF = "inactive@example.com", PRD = "production@example.com"; // ADMIN = Super Admin (INITIAL_ADMIN_EMAIL) · IMP = Admin · SALES = role "sales" เดิม (= AE)
 
 async function waitUp() {
   for (let i = 0; i < 120; i++) { try { const r = await fetch(`${BASE}/login`); if (r.status < 500) return; } catch { /* starting */ } await new Promise((r) => setTimeout(r, 500)); }
@@ -65,10 +65,10 @@ try {
   r = await call("/api/init", { as: ADMIN, method: "POST" }); assert.equal(r.status, 200, r.text); assert.ok(r.json.createdTabs.length > 20);
   ok("Login", `Admin คนแรก (INITIAL_ADMIN_EMAIL) เตรียม Google Sheet ได้ — สร้าง ${r.json.createdTabs.length} แท็บ`);
   // เพิ่มสมาชิกผ่านหน้า ตั้งค่า (API /api/users) แทนการแก้ Sheet ด้วยมือ
-  for (const [email, role, active] of [[MKT, "marketing", true], [SALES, "sales", true], [OFF, "ae", false], [IMP, "admin", true]]) {
+  for (const [email, role, active] of [[MKT, "marketing", true], [SALES, "sales", true], [OFF, "ae", false], [IMP, "admin", true], [PRD, "production", true]]) {
     r = await call("/api/users", { as: ADMIN, method: "POST", body: { email: email.toUpperCase(), display_name: role, role, active } }); assert.equal(r.status, 200, r.text);
   }
-  r = await call("/api/users", { as: ADMIN }); assert.equal(r.json.users.length, 5); assert.equal(r.json.users.find((u) => u.email === SALES).role, "ae"); assert.ok(r.json.users.every((u) => u.email === u.email.toLowerCase()));
+  r = await call("/api/users", { as: ADMIN }); assert.equal(r.json.users.length, 6); assert.equal(r.json.users.find((u) => u.email === SALES).role, "ae"); assert.ok(r.json.users.every((u) => u.email === u.email.toLowerCase()));
   assert.equal((await call("/api/users", { as: ADMIN, method: "POST", body: { email: MKT, role: "sales" } })).json.code, "DUPLICATE_EMAIL");
   assert.equal((await call("/api/users", { as: MKT })).status, 403); assert.equal((await call("/api/users", { as: MKT, method: "POST", body: { email: "x@y.com", role: "admin" } })).status, 403);
   const meRow = r.json.users.find((u) => u.email === ADMIN);
@@ -91,7 +91,7 @@ try {
   ok("Login", "Marketing เข้า Leads ไม่ได้ (403) · Sales นำเข้าไม่ได้ (403) · Marketing เตรียม Sheet ไม่ได้ · ผู้ใช้ปิดใช้งาน/ไม่อยู่ในรายชื่อ → 401");
   r = await call("/home", { as: ADMIN }); assert.ok(redirectedTo(r, "/"), `/home as ADMIN → ${r.status} ${r.location}`);
   r = await call("/home", { as: SALES }); assert.ok(redirectedTo(r, "/")); r = await call("/home", { as: MKT }); assert.ok(redirectedTo(r, "/"));
-  r = await call("/", { as: MKT }); assert.equal(r.status, 200); assert.ok(r.html.includes("เลือกระบบ") && r.html.includes('href="/dashboard/facebook-ads"') && !r.html.includes('href="/work/leads"') && r.html.includes("เร็ว ๆ นี้"));
+  r = await call("/", { as: MKT }); assert.equal(r.status, 200); assert.ok(r.html.includes("เลือกระบบ") && r.html.includes('href="/dashboard/facebook-ads"') && !r.html.includes('href="/work/leads"') && r.html.includes("ไม่มีสิทธิ์"));
   r = await call("/", { as: SALES }); assert.ok(r.html.includes('href="/work/leads"') && !r.html.includes('href="/dashboard/facebook-ads"'));
   r = await call("/leads?follow=today", { as: SALES }); assert.ok(redirectedTo(r, "/work/leads?follow=today"), `old /leads → ${r.location}`); r = await call("/performance", { as: MKT }); assert.ok(redirectedTo(r, "/dashboard/performance"));
   ok("Login", "หลังล็อกอิน → หน้าเลือกระบบ (Dashboard / ติดตามงาน / บัญชี / Production) แสดงเฉพาะระบบที่มีสิทธิ์ · ลิงก์เดิม (/leads, /performance) พาไปหน้าใหม่พร้อม query เดิม");
@@ -104,6 +104,12 @@ try {
   r = await call("/work/leads", { as: SALES }); assert.equal(r.status, 200); assert.ok(!r.html.includes('href="/dashboard/performance"') && !r.html.includes('href="/dashboard/import"') && !r.html.includes('href="/dashboard/facebook-ads"'));
   for (const p of ["/dashboard/import", "/dashboard/export", "/work/leads", "/work/developers", "/settings/targets"]) { r = await call(p, { as: MKT }); assert.ok(redirectedTo(r, "/"), `${p} as MKT → ${r.status}`); }
   for (const p of ["/dashboard/facebook-ads", "/dashboard/line-oa", "/dashboard/website", "/settings/metrics", "/lead-report"]) { r = await call(p, { as: MKT }); assert.equal(r.status, 200, `${p} as MKT`); }
+  for (const p of ["/dashboard/facebook-ads", "/dashboard/performance", "/dashboard/line-oa", "/lead-report", "/settings/metrics"]) { r = await call(p, { as: PRD }); assert.equal(r.status, 200, `${p} as PRD`); }
+  for (const p of ["/production"]) { r = await call(p, { as: PRD }); assert.equal(r.status, 200, `${p} as PRD`); } assert.equal((await call("/api/production", { as: PRD })).status, 200); assert.equal((await call("/api/production", { as: PRD, method: "PATCH", body: {} })).status, 403);
+  for (const p of ["/work/leads", "/account", "/account/revenue", "/dashboard/import", "/dashboard/export", "/settings", "/settings/targets"]) { r = await call(p, { as: PRD }); assert.ok(redirectedTo(r, "/"), `${p} as PRD → ${r.status}`); }
+  assert.equal((await call("/api/leads", { as: PRD })).status, 403); assert.equal((await call("/api/line-oa", { as: PRD, method: "POST", body: {} })).status, 403); assert.equal((await call("/api/line-oa", { as: PRD })).status, 200);
+  r = await call("/", { as: PRD }); assert.ok(r.html.includes('href="/dashboard/facebook-ads"') && r.html.includes('href="/production"') && !r.html.includes('href="/work/leads"') && !r.html.includes('href="/account"'));
+  ok("Login", "Production: ดู Dashboard ได้ (ดูอย่างเดียว) · ระบบ Production ดูงานได้ (แก้ไขไม่ได้) · ติดตามงาน / บัญชี / นำเข้า / ส่งออก / ตั้งค่า ถูกพาออก · API Lead 403");
   for (const p of ["/dashboard", "/dashboard/import", "/dashboard/export", "/work/leads", "/account/revenue", "/account/revenue/import", "/settings/targets"]) { r = await call(p, { as: IMP }); assert.equal(r.status, 200, `${p} as IMP`); }
   ok("Login", "AE: เข้าเฉพาะ ฝ่ายขาย + Project (ภาพรวมการตลาดถูกพาออก) · Marketing: การตลาด + รายงาน Lead + คำอธิบายตัวเลข (นำเข้า/ส่งออก/เป้าหมาย/Lead ถูกพาออก) · Admin: นำเข้า / ส่งออก / ฝ่ายขาย / Project ได้");
   ok("Login", "หน้าเว็บตามสิทธิ์: Marketing → /leads ถูกพาออก · Sales → /performance, /import, /settings, /facebook-ads ถูกพาออก (ไม่แสดงเนื้อหา) · เมนูของ Sales ไม่มี Performance/นำเข้า");

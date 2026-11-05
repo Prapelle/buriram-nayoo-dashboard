@@ -379,8 +379,8 @@ try {
     const sysNav = m.page.getByRole("navigation", { name: "ระบบ" }), side = m.page.getByRole("navigation", { name: "เมนูหลัก" });
     await m.page.goto(BASE + "/work/leads"); await m.page.getByRole("heading", { name: "Leads", level: 1 }).waitFor();
     assert.deepEqual((await sysNav.innerText()).split(/\s+/).filter(Boolean).filter((t) => !/เร็ว|นี้|^ๆ$/.test(t)), ["Dashboard", "ติดตามงาน", "บัญชี", "Production"]);
-    assert.equal(await sysNav.getByRole("link", { name: "ติดตามงาน" }).getAttribute("aria-current"), "true"); assert.equal(await sysNav.getByRole("link", { name: "บัญชี" }).count(), 0);
-    let st = await side.innerText(); assert.ok(st.includes("Leads") && st.includes("Revenue") && st.includes("รายงาน Lead") && !st.includes("Facebook Page") && !st.includes("นำเข้า CSV"));
+    assert.equal(await sysNav.getByRole("link", { name: "ติดตามงาน" }).getAttribute("aria-current"), "true"); assert.equal(await sysNav.getByRole("link", { name: "บัญชี" }).count(), 1);
+    let st = await side.innerText(); assert.ok(st.includes("Leads") && st.includes("Developer") && st.includes("รายงาน Lead") && !st.includes("Facebook Page") && !st.includes("นำเข้า CSV") && !st.includes("เอกสารบัญชี"));
     await m.page.goto(BASE + "/lead-report"); st = await side.innerText(); assert.ok(st.includes("Leads") && !st.includes("Facebook Page"), "หน้าใช้ร่วม: คงเมนูระบบล่าสุด (ติดตามงาน)");
     await sysNav.getByRole("link", { name: "Dashboard" }).click(); await m.page.waitForURL(BASE + "/dashboard/facebook-ads");
     st = await side.innerText(); assert.ok(st.includes("Facebook Page") && st.includes("นำเข้า CSV") && st.includes("รายงาน Lead") && !st.includes("Revenue") && !st.includes("Sale developer"));
@@ -388,7 +388,7 @@ try {
     assert.equal(await m.page.getByRole("link", { name: /ติดตามงาน/ }).count() >= 1, true); assert.ok((await m.page.locator("main").innerText()).includes("Production"));
     await m.page.goto(BASE + "/leads"); await m.page.waitForURL(BASE + "/work/leads");
     assert.deepEqual(m.errors, []);
-    ok("แยกระบบ: แถบบนมี Dashboard / ติดตามงาน / บัญชี / Production (2 อันหลัง = เร็ว ๆ นี้) · เมนูข้างแสดงเฉพาะระบบที่เปิด · รายงาน Lead / ตั้งค่า อยู่ทั้งสองระบบ · หน้าเลือกระบบไม่มีเมนูข้าง · ลิงก์เดิม /leads พาไป /work/leads");
+    ok("แยกระบบ: แถบบนมี Dashboard / ติดตามงาน / บัญชี / Production · เมนูข้างแสดงเฉพาะระบบที่เปิด · รายงาน Lead / ตั้งค่า อยู่ทั้งสองระบบ · หน้าเลือกระบบไม่มีเมนูข้าง · ลิงก์เดิม /leads พาไป /work/leads");
   }
   const mk = await open("marketing@example.com");
   await mk.page.goto(BASE + "/dashboard"); await mk.page.getByText(/ข้อมูลเดือน .*: ครบ \d+\/9/).first().waitFor(); // Marketing: ไม่มีแถวยอดขาย

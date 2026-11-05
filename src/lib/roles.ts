@@ -4,10 +4,11 @@
  * - admin: เห็นทุกหน้า (ยกเว้นตั้งค่าระบบ) · นำเข้า CSV · เพิ่ม/แก้ข้อมูลได้ แต่ลบไม่ได้
  * - ae: ฝ่ายขาย + Project (เดิม sales — ค่า "sales" ใน Sheet ถือเป็น ae)
  * - marketing: ดูอย่างเดียว — ภาพรวม · การตลาด · รายงาน Lead · คำอธิบายตัวเลข
+ * - production: ดูอย่างเดียว — Dashboard (เหมือน Marketing) + ระบบ Production (ดูงาน · แก้ไขได้เฉพาะ Admin ขึ้นไป) (5/11/2026)
  */
-export type Role = "super_admin" | "admin" | "ae" | "marketing";
-export const ROLES: Role[] = ["super_admin", "admin", "ae", "marketing"];
-export const ROLE_LABEL: Record<Role, string> = { super_admin: "Super Admin", admin: "Admin", ae: "AE", marketing: "Marketing" };
+export type Role = "super_admin" | "admin" | "ae" | "marketing" | "production";
+export const ROLES: Role[] = ["super_admin", "admin", "ae", "marketing", "production"];
+export const ROLE_LABEL: Record<Role, string> = { super_admin: "Super Admin", admin: "Admin", ae: "AE", marketing: "Marketing", production: "Production" };
 export const normRole = (v: unknown): Role | null => {
   const r = String(v ?? "").trim().toLowerCase();
   if (r === "sales") return "ae"; // ชื่อเดิม
@@ -17,6 +18,8 @@ export const normRole = (v: unknown): Role | null => {
 export const canDelete = (role: Role) => role === "super_admin" || role === "ae";
 /** ยืนยันนำเข้าไฟล์ที่เคยนำเข้าแล้ว — Super Admin เท่านั้น */
 export const canOverrideImport = (role: Role) => role === "super_admin";
+/** ดูข้อมูลการตลาดอย่างเดียว (ไม่เห็นตัวเลขการเงิน / ข้อมูลลูกค้า) */
+export const isMktViewer = (role: Role) => role === "marketing" || role === "production";
 /** เพิ่ม / แก้ข้อมูลการตลาด (LINE OA, Website, เป้าหมาย, นำเข้า) */
 export const canEditMarketing = (role: Role) => role === "super_admin" || role === "admin";
 
@@ -28,8 +31,8 @@ export const canEditMarketing = (role: Role) => role === "super_admin" || role =
 export type SystemId = "dashboard" | "work" | "account" | "production";
 export type NavItem = { href: string; label: string; roles: Role[]; group?: string; icon?: string; children?: NavItem[]; system?: SystemId | "shared"; hideIn?: SystemId[] };
 
-const ALL: Role[] = ["super_admin", "admin", "ae", "marketing"];
-const MKT: Role[] = ["super_admin", "admin", "marketing"]; // ภาพรวม + การตลาด (Marketing ดูอย่างเดียว)
+const ALL: Role[] = ["super_admin", "admin", "ae", "marketing", "production"];
+const MKT: Role[] = ["super_admin", "admin", "marketing", "production"]; // ภาพรวม + การตลาด (Marketing ดูอย่างเดียว)
 const SALES: Role[] = ["super_admin", "admin", "ae"]; // ฝ่ายขาย + Project
 const DATA: Role[] = ["super_admin", "admin"]; // นำเข้า / ส่งออก / เป้าหมาย / คู่มือนำเข้า
 const SUPER: Role[] = ["super_admin"];
@@ -58,7 +61,7 @@ export const NAV: NavItem[] = [
   { href: "/account", label: "เอกสารบัญชี", roles: SALES, icon: "money", system: "account" },
   { href: "/account/customers", label: "รายชื่อลูกค้า", roles: SALES, icon: "users", system: "account" },
   { href: "/account/products", label: "Product", roles: SALES, icon: "board", system: "account" },
-  { href: "/production", label: "งาน Production", roles: SALES, icon: "board", system: "production" },
+  { href: "/production", label: "งาน Production", roles: [...SALES, "production"], icon: "board", system: "production" },
   { href: "/dashboard/import", label: "นำเข้า CSV", roles: DATA, group: "ข้อมูล", icon: "upload", system: "dashboard" },
   { href: "/dashboard/export", label: "ส่งออกข้อมูล", roles: DATA, group: "ข้อมูล", icon: "download", system: "dashboard" },
   // ตั้งค่า: เมนูย่อย — ตั้งค่าระบบ (Admin) · คู่มือนำเข้าข้อมูล และ คำอธิบายตัวเลข (ทุก Role)
@@ -85,7 +88,7 @@ export const SYSTEMS: SystemDef[] = [
   { id: "dashboard", label: "Dashboard", desc: "การตลาด · Facebook / Google / LINE OA / Website · นำเข้า-ส่งออกข้อมูล", href: "/dashboard/facebook-ads", prefix: "/dashboard", roles: MKT },
   { id: "work", label: "ติดตามงาน", desc: "Leads คนต้องการซื้อ / ขาย · Developer · Home Builder", href: "/work/leads", prefix: "/work", roles: SALES },
   { id: "account", label: "บัญชี", desc: "ใบเสนอราคา · ใบวางบิล · ใบแจ้งหนี้ · ใบเสร็จ · สรุปยอดรอเรียกเก็บ · Revenue", href: "/account", prefix: "/account", roles: SALES },
-  { id: "production", label: "Production", desc: "งานผลิตที่สร้างอัตโนมัติจากการชำระเงิน · เช็กลิสต์ตามรายละเอียดแพ็กเกจ", href: "/production", prefix: "/production", roles: SALES },
+  { id: "production", label: "Production", desc: "งานผลิตที่สร้างอัตโนมัติจากการชำระเงิน · เช็กลิสต์ตามรายละเอียดแพ็กเกจ", href: "/production", prefix: "/production", roles: [...SALES, "production"] },
 ];
 export const systemsFor = (role: Role) => SYSTEMS.filter((x) => !x.soon && x.roles.includes(role));
 /** ระบบของ path (หน้าที่ใช้ร่วมกันคืน null) */

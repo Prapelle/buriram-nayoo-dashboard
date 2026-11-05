@@ -1391,3 +1391,9 @@ Users 17,443 · Page Views 42,450 · PV/User 2.43 · Duration 1 นาที 0 �
 - สิทธิ์: Marketing → Dashboard เท่านั้น · AE → ติดตามงาน เท่านั้น · Admin / Super Admin → ทั้งสอง
 
 **Passed:** 512/512
+
+## 5/11/2026 — Role Production
+
+- Role ใหม่ `production`: ดู Dashboard อย่างเดียว (สิทธิ์เดียวกับ Marketing — ไม่เห็นตัวเลขการเงิน / ข้อมูลลูกค้า, ไม่มีนำเข้า / ส่งออก / เป้าหมาย) + ระบบ Production ดูงานได้ (GET /api/production · แก้ Job ยังเป็น Admin ขึ้นไป) · ไม่เห็น ติดตามงาน / บัญชี
+- `isMktViewer()` ใน roles.ts = Marketing หรือ Production (ใช้ตัดคอลัมน์การเงิน)
+- **Passed:** 551/551 (รวมระบบบัญชี / Production)
