@@ -82,6 +82,15 @@ export async function deleteRow(sheetId: number, rowNumber: number) {
   });
 }
 
+/** ลบหลายแถวติดกัน (เลขแถวแบบชีต from..to รวมปลาย) ห้ามลบแถว header */
+export async function deleteRows(sheetId: number, fromRow: number, toRow: number) {
+  if (fromRow < 2 || toRow < fromRow) throw new Error("ช่วงแถวที่จะลบไม่ถูกต้อง");
+  await call("/:batchUpdate", {
+    method: "POST",
+    body: JSON.stringify({ requests: [{ deleteDimension: { range: { sheetId, dimension: "ROWS", startIndex: fromRow - 1, endIndex: toRow } } }] }),
+  });
+}
+
 export async function batchGet(ranges: string[]): Promise<string[][][]> {
   const q = ranges.map((r) => `ranges=${encodeURIComponent(r)}`).join("&");
   const j = await call<{ valueRanges: { values?: (string | number | boolean)[][] }[] }>(

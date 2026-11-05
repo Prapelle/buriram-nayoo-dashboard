@@ -206,7 +206,7 @@ export function missingDates(lines: Rec[]): Record<string, string> {
 const D = ["", "หนึ่ง", "สอง", "สาม", "สี่", "ห้า", "หก", "เจ็ด", "แปด", "เก้า"], P = ["", "สิบ", "ร้อย", "พัน", "หมื่น", "แสน"];
 function readInt(n: number): string {
   if (n === 0) return "";
-  if (n >= 1_000_000) return readInt(Math.floor(n / 1_000_000)) + "ล้าน" + readInt(n % 1_000_000);
+  if (n >= 1_000_000) { const rest = n % 1_000_000; return readInt(Math.floor(n / 1_000_000)) + "ล้าน" + (rest === 1 ? "เอ็ด" : readInt(rest)); } // 1,000,001 = หนึ่งล้านเอ็ด
   const s = String(n); let out = "";
   for (let i = 0; i < s.length; i++) {
     const d = Number(s[i]), pos = s.length - 1 - i;

@@ -271,4 +271,60 @@ await t("สรุปบัญชี: ยอดขายแยกตามผู
   ];
   assert.deepEqual(summarize(docs, "2026-11-05").bySeller, [{ seller: "บี", count: 1, amount: 5000, paid: 5000 }, { seller: "เอ", count: 1, amount: 1940, paid: 500 }, { seller: "(ไม่ระบุผู้ขาย)", count: 1, amount: 100, paid: 0 }]);
 });
+// ── 5/11/2026: แก้จากการตรวจโค้ด ──
+await t("มัดจำที่ใบเสนอราคา แล้วออกใบแจ้งหนี้ต่อ → ใบแจ้งหนี้เก็บได้แค่ส่วนที่เหลือ (ไม่เก็บเงินซ้ำทั้งสาย) · ชำระส่วนที่เหลือ = ชำระแล้ว", async () => {
+  const q = (await A.saveDoc(form(), ADMIN)).doc;
+  await payNow(q.doc_id, { amount: 2000, paid_at: today, method: "โอนเงิน", updated_at_seen: q.updated_at }, ADMIN);
+  const inv = (await A.convertDoc(q.doc_id, "invoice", ADMIN)).doc;
+  await fails(payNow(inv.doc_id, { amount: 5000, paid_at: today, method: "โอนเงิน", updated_at_seen: inv.updated_at }, ADMIN), "VALIDATION");
+  const r = await payNow(inv.doc_id, { amount: 3000, paid_at: today, method: "โอนเงิน", updated_at_seen: inv.updated_at }, ADMIN);
+  assert.equal(r.full, true); assert.equal(r.doc.status, "paid"); assert.equal(r.doc.paid_amount, "3000");
+  assert.equal(rows("ACC_PAYMENTS").filter((p) => p.root_id === q.doc_id).reduce((s, p) => s + Number(p.amount), 0), 5000);
+  const rc = rows("ACC_DOCS").filter((d) => d.doc_type === "receipt" && d.root_id === q.doc_id); assert.equal(rc.length, 2);
+  assert.ok(rc.some((d) => d.total === "3000")); // ใบเสร็จงวดหลัง = ส่วนที่เหลือ ไม่ใช่ทั้งใบ
+});
+await t("เริ่มงานจากใบแจ้งหนี้ที่มัดจำไว้ที่ใบเสนอราคา: นับมัดจำทั้งสาย (ไม่ขึ้น ยังไม่ชำระ)", async () => {
+  const q = (await A.saveDoc(form(), ADMIN)).doc;
+  await payNow(q.doc_id, { amount: 1000, paid_at: today, method: "โอนเงิน", updated_at_seen: q.updated_at }, ADMIN);
+  const inv = (await A.convertDoc(q.doc_id, "invoice", ADMIN)).doc;
+  const r = await A.startWork(inv.doc_id, ADMIN); assert.equal(r.started.jobs.length, 1);
+});
+if (d1) {
+  await t("(D1) กดยืนยันชำระพร้อมกัน 2 คน → สำเร็จคนเดียว อีกคน STALE (ไม่มีชำระซ้ำ / Job ซ้ำ)", async () => {
+    const q = (await A.saveDoc(form(), ADMIN)).doc;
+    const inp = { amount: 5000, paid_at: today, method: "โอนเงิน", updated_at_seen: q.updated_at };
+    const res = await Promise.allSettled([payNow(q.doc_id, inp, ADMIN), payNow(q.doc_id, inp, "b@x.com")]);
+    assert.equal(res.filter((x) => x.status === "fulfilled").length, 1);
+    const bad = res.find((x) => x.status === "rejected") as PromiseRejectedResult; assert.equal((bad.reason as InstanceType<typeof A.AccError>).code, "STALE");
+    assert.equal(rows("ACC_PAYMENTS").filter((p) => p.doc_id === q.doc_id).length, 1); assert.equal(rows("PRODUCTION_JOBS").filter((j) => j.doc_id === q.doc_id).length, 1);
+  });
+  await t("(D1) เริ่มงานล้มกลางทาง แล้วกดใหม่ → ทำต่อเฉพาะรายการที่ค้าง ไม่สร้าง Product / Job ซ้ำ", async () => {
+    const two = form({ lines: [form().lines[0], { ...form().lines[0], description: "- โพสต์ที่ 2" }] });
+    const q = (await A.saveDoc(two, ADMIN)).doc;
+    await payNow(q.doc_id, { amount: 1000, paid_at: today, method: "โอนเงิน", updated_at_seen: q.updated_at }, ADMIN);
+    const prod0 = rows("DEVELOPER_PRODUCTS").length, job0 = rows("PRODUCTION_JOBS").length;
+    await A.startWork(q.doc_id, ADMIN);
+    assert.equal(rows("DEVELOPER_PRODUCTS").length, prod0 + 2); assert.equal(rows("PRODUCTION_JOBS").length, job0 + 2);
+    // จำลองล้มหลังสร้าง Product ของรายการที่ 2 แต่ก่อนสร้าง Job: ลบ Job ที่ 2 + ล้าง job_id และธงเริ่มงาน
+    const l2 = rows("ACC_LINES").filter((l) => l.doc_id === q.doc_id).sort((a, b) => Number(a.line_no) - Number(b.line_no))[1];
+    d1!.raw.prepare(`DELETE FROM "PRODUCTION_JOBS" WHERE "job_id"=?`).run(l2.job_id);
+    d1!.raw.prepare(`UPDATE "ACC_LINES" SET "job_id"='', "applied_at"='' WHERE "line_id"=?`).run(l2.line_id);
+    d1!.raw.prepare(`UPDATE "ACC_DOCS" SET "work_started_at"='' WHERE "doc_id"=?`).run(q.doc_id);
+    const r = await A.startWork(q.doc_id, ADMIN);
+    assert.equal(r.started.jobs.length, 1); assert.equal(rows("DEVELOPER_PRODUCTS").length, prod0 + 2); assert.equal(rows("PRODUCTION_JOBS").length, job0 + 2);
+    await fails(A.startWork(q.doc_id, ADMIN), "ALREADY_STARTED");
+  });
+  await t("(D1) แก้เอกสาร: หัวเอกสาร + รายการเขียนพร้อมกัน · เขียนรายการไม่สำเร็จ → หัวเอกสารคงเดิม (ไม่เหลือเอกสารไม่มีรายการ)", async () => {
+    const q = (await A.saveDoc(form(), ADMIN)).doc;
+    d1!.raw.exec(`CREATE TRIGGER boom BEFORE INSERT ON "ACC_LINES" WHEN NEW."description" = 'BOOM' BEGIN SELECT RAISE(ABORT, 'boom'); END`);
+    await assert.rejects(A.saveDoc({ ...form({ discount: 100, lines: [{ ...form().lines[0], description: "BOOM" }] }), doc_id: q.doc_id, updated_at_seen: q.updated_at }, ADMIN));
+    d1!.raw.exec(`DROP TRIGGER boom`);
+    const now = rows("ACC_DOCS").find((d) => d.doc_id === q.doc_id)!; assert.equal(now.total, q.total); assert.equal(now.updated_at, q.updated_at);
+    assert.equal(rows("ACC_LINES").filter((l) => l.doc_id === q.doc_id).length, 1);
+  });
+}
+await t("จำนวนเงินเป็นตัวอักษร: 1,000,001 = หนึ่งล้านเอ็ดบาทถ้วน", async () => {
+  const { bahtText } = await import("../src/lib/account");
+  assert.equal(bahtText(1000001), "หนึ่งล้านเอ็ดบาทถ้วน"); assert.equal(bahtText(2000021.5), "สองล้านยี่สิบเอ็ดบาทห้าสิบสตางค์"); assert.equal(bahtText(11000000), "สิบเอ็ดล้านบาทถ้วน"); assert.equal(bahtText(5000), "ห้าพันบาทถ้วน");
+});
 console.log("\nระบบบัญชี (Sheets จำลอง) ผ่านทั้งหมด");

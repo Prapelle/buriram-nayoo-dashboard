@@ -1,5 +1,6 @@
 import { logError } from "@/lib/log";
 import { NextResponse } from "next/server";
+import { migratingResponse } from "@/lib/http-errors";
 import { requireRole } from "@/lib/guard";
 import { AccError, deleteCustomer, listCustomers, saveCustomer } from "@/lib/account-service";
 
@@ -7,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 function fail(e: unknown) {
   if (e instanceof AccError) return NextResponse.json({ error: e.message, code: e.code, ...e.extra }, { status: e.status });
-  logError("/api/account/customers", e); return NextResponse.json({ error: e instanceof Error ? e.message : "unknown error" }, { status: 500 });
+  { const mg = migratingResponse(e); if (mg) return mg; } logError("/api/account/customers", e); return NextResponse.json({ error: e instanceof Error ? e.message : "unknown error" }, { status: 500 });
 }
 
 // รายชื่อลูกค้า: ดู / เพิ่ม / แก้ไข = Super Admin, Admin, AE · ลบ = Super Admin เท่านั้น

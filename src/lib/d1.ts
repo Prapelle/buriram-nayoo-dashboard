@@ -161,6 +161,52 @@ export async function updateRanges(db: D1Like, data: { range: string; values: (s
   if (stmts.length) await runChunked(db, stmts);
 }
 
+/**
+ * เขียนแบบปลอดภัยเมื่อใช้พร้อมกัน (5/11/2026)
+ * - casUpdate: แก้แถวตาม id เฉพาะเมื่อ updated_at ยังเท่าค่าที่เห็น (คำสั่ง UPDATE เดียว — คนที่มาทีหลังได้ false)
+ * - atomic: หลายคำสั่งในทรานแซกชันเดียว (สำเร็จทั้งหมดหรือไม่เขียนเลย)
+ */
+export type AtomicOp =
+  | { insert: string; rows: (string | number)[][] }
+  | { deleteWhere: string; col: string; value: string }
+  | { update: string; idCol: string; id: string; values: (string | number)[] };
+
+export async function casUpdate(db: D1Like, tab: string, idCol: string, id: string, expectUpdatedAt: string, values: (string | number)[]): Promise<boolean> {
+  const hdr = await mustHeaders(db, tab);
+  if (!hdr.includes(idCol) || !hdr.includes("updated_at")) throw new Error(`ตาราง ${tab} ไม่มีคอลัมน์ ${idCol} / updated_at`);
+  const r = await db.prepare(`UPDATE ${tabName(tab)} SET ${hdr.map((h) => `${q(h)}=?`).join(",")} WHERE ${q(idCol)}=? AND "updated_at"=?`)
+    .bind(...hdr.map((_, i) => str(values[i])), id, expectUpdatedAt).run();
+  return Number(r.meta.changes) === 1;
+}
+
+export async function atomicStmts(db: D1Like, ops: AtomicOp[]): Promise<D1Stmt[]> {
+  const out: D1Stmt[] = [];
+  for (const op of ops) {
+    if ("insert" in op) {
+      if (!op.rows.length) continue;
+      const hdr = await mustHeaders(db, op.insert);
+      const sql = `INSERT INTO ${tabName(op.insert)} (${hdr.map(q).join(",")}) VALUES (${hdr.map(() => "?").join(",")})`;
+      for (const r of op.rows) out.push(db.prepare(sql).bind(...hdr.map((_, i) => str(r[i]))));
+    } else if ("deleteWhere" in op) {
+      const hdr = await mustHeaders(db, op.deleteWhere);
+      if (!hdr.includes(op.col)) throw new Error(`ตาราง ${op.deleteWhere} ไม่มีคอลัมน์ ${op.col}`);
+      out.push(db.prepare(`DELETE FROM ${tabName(op.deleteWhere)} WHERE ${q(op.col)}=?`).bind(op.value));
+    } else {
+      const hdr = await mustHeaders(db, op.update);
+      if (!hdr.includes(op.idCol)) throw new Error(`ตาราง ${op.update} ไม่มีคอลัมน์ ${op.idCol}`);
+      out.push(db.prepare(`UPDATE ${tabName(op.update)} SET ${hdr.map((h) => `${q(h)}=?`).join(",")} WHERE ${q(op.idCol)}=?`).bind(...hdr.map((_, i) => str(op.values[i])), op.id));
+    }
+  }
+  return out;
+}
+
+/** ทรานแซกชันเดียว (D1 batch) — ถ้าเกินขนาดชุดเดียวจะแบ่งชุด (ไม่ใช่ทรานแซกชันเดียวแล้ว ใช้กับงานเล็กเท่านั้น) */
+export async function atomic(db: D1Like, ops: AtomicOp[]) {
+  const stmts = await atomicStmts(db, ops);
+  if (!stmts.length) return;
+  if (stmts.length > 500) await runChunked(db, stmts); else await db.batch(stmts);
+}
+
 /** ลบแถวตามเลขแถวแบบชีต (แถวถัดไปเลื่อนขึ้น) ห้ามลบแถว header */
 export async function deleteRowAt(db: D1Like, tab: string, rowNumber: number) {
   if (rowNumber < 2) throw new Error("ไม่สามารถลบแถว header");
@@ -181,10 +227,15 @@ export async function countRows(db: D1Like, tab: string): Promise<number> {
 }
 
 /** ล้างตารางแล้วใส่ข้อมูลใหม่ตามลำดับเดิม (ใช้ตอนย้ายจาก Sheets เท่านั้น — ตารางต้องมีคอลัมน์ครบก่อน) */
-export async function replaceAll(db: D1Like, tab: string, headers: string[], rows: string[][]) {
+export async function replaceAll(db: D1Like, tab: string, headers: string[], rows: string[][], onProgress?: () => Promise<void>) {
   const sql = headers.length ? `INSERT INTO ${tabName(tab)} (${headers.map(q).join(",")}) VALUES (${headers.map(() => "?").join(",")})` : "";
   await db.prepare(`DELETE FROM ${tabName(tab)}`).run();
-  if (sql) await runChunked(db, rows.map((r) => db.prepare(sql).bind(...headers.map((_, i) => str(r[i])))));
+  if (!sql) return;
+  const stmts = rows.map((r) => db.prepare(sql).bind(...headers.map((_, i) => str(r[i]))));
+  for (let i = 0; i < stmts.length; i += CHUNK) {
+    await db.batch(stmts.slice(i, i + CHUNK));
+    if (onProgress && (i / CHUNK) % 25 === 24) await onProgress(); // ตารางใหญ่: ต่ออายุธง "กำลังย้าย" ระหว่างคัดลอก
+  }
 }
 
 // ── โครงสร้างตาราง ──

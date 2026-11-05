@@ -148,11 +148,15 @@ await t("ล็อกระหว่างย้าย: เขียนกลุ
 
 await t("กลับไปใช้ Sheets (rollback): อ่าน/เขียนที่ Sheets อีกครั้ง · D1 ไม่ถูกลบ · ข้อมูลหลังสลับอยู่ใน D1 เท่านั้น", async () => {
   const d1Users = d1.rows("APP_USERS").length;
-  await AD.rollbackGroup("core", ADMIN);
+  // มีข้อมูลที่บันทึกบน D1 หลังสลับ (mk@example.com) → ย้อนกลับเฉย ๆ ไม่ได้ (ข้อมูลจะหายจากหน้าเว็บ) ต้องคัดลอกกลับ
+  await reject(AD.rollbackGroup("core", ADMIN, { waitMs: 0 }), /copyBack/);
+  assert.equal(((await AD.d1Status()) as { groups: { active: boolean }[] }).groups[0].active, true);
+  await reject(AD.checkGroup("core"), /ใช้ D1 อยู่แล้ว/);
+  const r = await AD.rollbackGroup("core", ADMIN, { copyBack: true, waitMs: 0 }); assert.equal(r.copied, true);
   assert.equal(((await AD.d1Status()) as { groups: { active: boolean }[] }).groups[0].active, false);
   const emails = (await S.readTab("APP_USERS")).rows.map((r) => r.email);
-  assert.ok(emails.includes("ae@example.com")); assert.ok(!emails.includes("mk@example.com"));
-  assert.equal(d1.rows("APP_USERS").length, d1Users);
+  assert.ok(emails.includes("ae@example.com")); assert.ok(emails.includes("mk@example.com")); // ข้อมูลหลังสลับถูกคัดลอกกลับไปที่ Sheets ไม่หาย
+  assert.equal(d1.rows("APP_USERS").length, d1Users); assert.equal((await G_readTab("APP_USERS")).rows.length, d1Users);
   await reject(AD.rollbackGroup("core", ADMIN), /ยังไม่ได้ใช้ D1/);
   assert.ok((await S.readTab("AUDIT_LOG")).rows.some((r) => r.action === "d1_rollback"));
 });
@@ -185,7 +189,15 @@ await t("กลุ่มที่เหลือ: ตรวจ → สลับ 
   assert.equal(d1.rows("LEADS").length, 2); assert.equal(await sheetN("LEADS"), before);
   assert.equal((await listLeads()).rows.length, 2); assert.ok(l1.lead_id && l2.lead_id);
   // ย้อนกลับ
-  await AD.rollbackGroup("leads", ADMIN); assert.equal((await S.readTab("LEADS")).rows.length, before);
+  await reject(AD.rollbackGroup("leads", ADMIN, { waitMs: 0 }), /copyBack/);
+  await AD.rollbackGroup("leads", ADMIN, { copyBack: true, waitMs: 0 }); assert.equal((await S.readTab("LEADS")).rows.length, before + 1); // Lead ที่เพิ่มบน D1 กลับมาอยู่ใน Sheets
+  assert.deepEqual((await listLeads()).rows.map((x) => x.customer_name).sort(), ["ผู้ซื้อ ก", "ผู้ซื้อ ข"]);
+  // กลุ่มที่ไม่ได้แก้อะไรบน D1 → ย้อนกลับได้เลยโดยไม่ต้องคัดลอก
+  assert.equal((await AD.rollbackGroup("fbposts", ADMIN, { waitMs: 0 })).copied, false);
+  // ธง "เคยใช้ D1 จริง" ค้างอยู่ (ไม่ได้ย้อนกลับแบบคัดลอก) → คัดลอกจาก Sheets ทับไม่ได้
+  await D.metaSet(d1 as never, "live:fbposts", "2026-11-05T00:00:00.000Z"); ST.invalidateD1State();
+  await reject(AD.checkGroup("fbposts"), /เคยใช้ D1 จริงแล้ว/);
+  await D.metaDelete(d1 as never, "live:fbposts"); ST.invalidateD1State();
 });
 
 await t("อ่านหลายคอลัมน์ในคำขอเดียวได้ผลเท่ากับอ่านทีละช่วง และสแกนตารางครั้งเดียวต่อแท็บ", async () => {

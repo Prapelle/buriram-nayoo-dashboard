@@ -8,7 +8,7 @@ import { addDays, CARD_COLUMNS, HISTORY_COLUMNS, isStage, isTrue, MEMBER_COLUMNS
 import { todayBkk } from "./developers";
 import { productTypesOf } from "./developers-service";
 import { normRole } from "./roles";
-import { guardRow } from "./row-guard";
+import { dedupeCode, guardRow } from "./row-guard";
 import { appendRows, batchUpdateValues, colLetter, deleteRow, listTabs, readTabs, toRow } from "./sheets";
 
 export class ContentError extends Error {
@@ -89,6 +89,7 @@ export async function saveCard(input: Record<string, unknown>, actor: string, id
   if (!id) {
     const rec: Rec = { ...blank(CARD_COLUMNS), ...fields, card_id: crypto.randomUUID(), card_code: nextCardCode(t.CONTENT_CARDS.rows.map((r) => r.card_code)), stage: S_FIRST, stage_at: now, created_by: actor, created_at: now, updated_by: actor, updated_at: now };
     await appendRows("CONTENT_CARDS", [toRow(CARD_COLUMNS, rec)]);
+    rec.card_code = await dedupeCode("CONTENT_CARDS", t.CONTENT_CARDS.headers.length ? t.CONTENT_CARDS.headers : CARD_COLUMNS, "card_code", "card_id", rec.card_id, rec.card_code, nextCardCode); // สร้างพร้อมกัน → รหัสไม่ซ้ำ
     await logMove(rec.card_id, "", S_FIRST, actor, now, "สร้างการ์ด");
     await replaceMembers(t, rec.card_id, c.members, now);
     await writeAudit(actor, "content_create", "content_card", rec.card_id, `${rec.card_code} ${rec.title}`);
@@ -187,6 +188,8 @@ export async function createCardsForJobs(jobs: { job_id: string; job_code: strin
   }
   if (!rows.length) return { created: 0 };
   await appendRows("CONTENT_CARDS", rows.map((r) => toRow(CARD_COLUMNS, r)));
+  const H = t.CONTENT_CARDS.headers.length ? t.CONTENT_CARDS.headers : CARD_COLUMNS;
+  for (const r of rows) r.card_code = await dedupeCode("CONTENT_CARDS", H, "card_code", "card_id", r.card_id, r.card_code, nextCardCode); // สร้างพร้อมกับที่อื่น → รหัสไม่ซ้ำ
   await appendRows("CONTENT_HISTORY", rows.map((r) => toRow(HISTORY_COLUMNS, { log_id: crypto.randomUUID(), card_id: r.card_id, from_stage: "", to_stage: S_FIRST, actor, at: now, note: `สร้างอัตโนมัติจาก ${r.job_code}` })));
   return { created: rows.length };
 }

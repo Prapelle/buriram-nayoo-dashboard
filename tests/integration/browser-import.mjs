@@ -255,9 +255,9 @@ try {
   assert.ok(/Qualified \(สัญญา \+ ขายแล้ว\)/.test(rs) && /ขายแล้ว/.test(rs) && !/Walk in/.test(rs), rs.slice(0, 600));
   if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/lead-report.png", fullPage: true });
   ok("รายงาน Lead แยกแท็บ: คนต้องการซื้อ (Walk in, %Conversion, สาเหตุที่กู้ไม่ผ่าน) / คนต้องการขาย (Qualified = สัญญา + ขายแล้ว, ไม่มี Walk in)");
-  await page.goto(BASE + "/settings"); await page.getByRole("heading", { name: "สำรองข้อมูล Google Sheet อัตโนมัติ" }).waitFor();
-  await page.getByRole("button", { name: "ดูสคริปต์" }).click(); assert.ok((await page.locator("pre").innerText()).includes("function installWeeklyBackup()"));
-  ok("ตั้งค่าระบบ: ส่วนสำรองข้อมูลอัตโนมัติ มีขั้นตอน + สคริปต์ Apps Script (installWeeklyBackup / backupNow)");
+  await page.goto(BASE + "/settings"); await page.getByRole("heading", { name: "สำรองข้อมูล", exact: true }).waitFor();
+  { const bt = await page.locator("main").innerText(); assert.ok(bt.includes("Time Travel") && bt.includes("wrangler d1 export"), "ส่วนสำรองข้อมูล D1"); }
+  ok("ตั้งค่าระบบ: ส่วนสำรองข้อมูล (D1) อธิบาย Time Travel + ส่งออกไฟล์ด้วย wrangler");
   assert.deepEqual(errors, []);
 
   // ---- Developer + Sale developer (31/10/2026) ----

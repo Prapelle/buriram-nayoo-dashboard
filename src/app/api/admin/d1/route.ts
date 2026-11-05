@@ -25,13 +25,13 @@ export async function POST(req: Request) {
   const g = await requireRole(["super_admin"]);
   if (!g.ok) return g.res;
   try {
-    const b = (await req.json().catch(() => ({}))) as { action?: string; group?: string };
+    const b = (await req.json().catch(() => ({}))) as { action?: string; group?: string; copyBack?: boolean };
     const group = String(b.group ?? "");
     switch (b.action) {
       case "init": return NextResponse.json(await initD1());
       case "check": return NextResponse.json(await checkGroup(group));
       case "cutover": return NextResponse.json(await cutoverGroup(group, g.email));
-      case "rollback": await rollbackGroup(group, g.email); return NextResponse.json({ ok: true });
+      case "rollback": return NextResponse.json({ ok: true, ...(await rollbackGroup(group, g.email, { copyBack: b.copyBack === true })) });
       case "unlock": await unlockMigration(); return NextResponse.json({ ok: true });
       default: return NextResponse.json({ error: "action ไม่ถูกต้อง" }, { status: 422 });
     }

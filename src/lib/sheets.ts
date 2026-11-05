@@ -11,6 +11,7 @@ import { d1SheetId, d1TabOfSheetId } from "./d1-groups";
 
 export type { TabMeta } from "./sheets-google";
 export { colLetter, toRow, firstRowOf } from "./sheets-google";
+import { colLetter } from "./sheets-google";
 
 const tabOf = (range: string) => (/^'((?:[^']|'')+)'/.exec(range)?.[1] ?? "").replace(/''/g, "'");
 
@@ -87,4 +88,48 @@ export async function readTab(tab: string): Promise<Tab> {
 export async function readTabs(tabs: string[]): Promise<Record<string, Tab>> {
   const all = await batchGet(tabs.map((t) => `'${t}'`));
   return Object.fromEntries(tabs.map((t, i) => [t, toTab(all[i] ?? [])]));
+}
+
+export type { AtomicOp } from "./d1";
+import type { AtomicOp } from "./d1";
+const opTab = (op: AtomicOp) => ("insert" in op ? op.insert : "deleteWhere" in op ? op.deleteWhere : op.update);
+
+/**
+ * แก้แถวตาม id เฉพาะเมื่อ updated_at ยังเท่าที่เห็น — คืน false ถ้ามีคนแก้ก่อน (ใช้กันกดพร้อมกัน เช่น ยืนยันชำระเงิน)
+ * D1: คำสั่งเดียว (ปลอดภัยจริง) · Google Sheets: ตรวจแถวแล้วเขียน (ลดโอกาสชน แต่ไม่ล็อกจริง)
+ */
+export async function casRow(tab: string, headers: string[], idCol: string, id: string, expectUpdatedAt: string, values: (string | number)[]): Promise<boolean> {
+  const { db, tabs, state } = await route();
+  assertWritable(state, tab);
+  if (tabs.has(tab)) return D.casUpdate(db!, tab, idCol, id, expectUpdatedAt, values);
+  const col = colLetter(headers.indexOf(idCol)), last = colLetter(headers.length - 1);
+  const [ids] = await G.batchGet([`'${tab}'!${col}:${col}`]);
+  const k = ids.findIndex((r, i) => i > 0 && String(r?.[0] ?? "") === id);
+  if (k < 0) return false;
+  const [row] = await G.batchGet([`'${tab}'!A${k + 1}:${last}${k + 1}`]);
+  if (String(row?.[0]?.[headers.indexOf("updated_at")] ?? "") !== expectUpdatedAt) return false;
+  await G.batchUpdateValues([{ range: `'${tab}'!A${k + 1}:${last}${k + 1}`, values: [values] }]);
+  return true;
+}
+
+/**
+ * หลายคำสั่งพร้อมกัน: ทุกตารางอยู่บน D1 → ทรานแซกชันเดียว (สำเร็จทั้งหมดหรือไม่เขียนเลย)
+ * มีตารางบน Google Sheets → ทำทีละคำสั่งตามลำดับ (เหมือนเดิม)
+ */
+export async function atomicWrite(ops: AtomicOp[]) {
+  const live = ops.filter((op) => !("insert" in op) || op.rows.length);
+  if (!live.length) return;
+  const { db, tabs, state } = await route();
+  for (const op of live) assertWritable(state, opTab(op));
+  if (live.every((op) => tabs.has(opTab(op)))) return D.atomic(db!, live);
+  for (const op of live) {
+    const tab = opTab(op);
+    if ("insert" in op) { await appendRows(tab, op.rows); continue; }
+    const t = await readTab(tab), col = "deleteWhere" in op ? op.col : op.idCol, val = "deleteWhere" in op ? op.value : op.id;
+    const hits = t.rows.map((r, i) => (r[col] === val ? i + 2 : 0)).filter(Boolean);
+    if ("update" in op) { if (hits[0]) await batchUpdateValues([{ range: `'${tab}'!A${hits[0]}:${colLetter(t.headers.length - 1)}${hits[0]}`, values: [op.values] }]); continue; }
+    const sid = (await listTabs()).find((m) => m.title === tab)?.sheetId;
+    if (sid === undefined) continue;
+    for (const r of hits.sort((a, b) => b - a)) await deleteRow(sid, r);
+  }
 }
