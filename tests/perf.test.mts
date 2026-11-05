@@ -104,4 +104,92 @@ await t("listLeads / listDevelopers ส่ง staffUsers (ชื่อผู้�
   const { listDevelopers } = await import("../src/lib/developers-service");
   const Dv = await listDevelopers("developer"); assert.ok(Dv.staffUsers.includes("เอไอ"));
 });
+// ── รายการตัวชี้วัด + หน้าตั้งค่า ──
+const OPT = await import("../src/lib/lead-options");
+const DEVM = await import("../src/lib/developers");
+await t("METRICS: คีย์ไม่ซ้ำ · ตำแหน่งมีจริง · สถานะที่อ้างตรงกับรายการสถานะจริง (กันพิมพ์ผิด)", async () => {
+  assert.equal(new Set(P.METRICS.map((m) => m.key)).size, P.METRICS.length);
+  for (const m of P.METRICS) {
+    assert.ok(P.POSITION_KEYS.includes(m.position), m.key); assert.ok(m.key.startsWith(m.position + "."), m.key);
+    const r = m.rule;
+    if (r.kind === "lead_move") { const list = r.field === "sell_status" ? OPT.SELL_STATUS : OPT.CALL_STATUS; for (const x of [...r.to, ...(r.from ? [r.from] : [])]) assert.ok(list.includes(x), `${m.key}: ${x}`); }
+    if (r.kind === "dev_status") assert.ok((DEVM.DEV_STATUS as readonly string[]).includes(r.to), `${m.key}: ${r.to}`);
+  }
+  for (const k of P.POSITION_KEYS) assert.ok(P.metricsOf(k).length > 0, k);
+});
+await t("สถานะเป็นบวก: ไม่รวม บ้านไม่พร้อมขาย / ยกเลิก / กู้ไม่ผ่าน / ติดต่อไม่ได้ / ไม่สนใจ", async () => {
+  for (const bad of ["บ้านไม่พร้อมขาย", "ยกเลิก", "กู้ไม่ผ่าน", "ติดต่อไม่ได้", "ไม่สนใจ", "รอติดต่อ"]) assert.ok(![...P.SELL_POSITIVE, ...P.BUY_POSITIVE].includes(bad), bad);
+  const contact = P.METRICS.find((m) => m.key === "ae_sell.contact")!; assert.ok(contact.rule.kind === "lead_move" && contact.rule.from === "รอติดต่อ");
+});
+const fail422 = (fn: () => unknown, code = "VALIDATION") => { try { fn(); } catch (e) { assert.equal((e as { code?: string }).code, code); return; } assert.fail("ควรผิดพลาด " + code); };
+await t("validateTarget: ว่าง=ไม่ตั้ง · จำนวนต้องเป็นจำนวนเต็ม · % ไม่เกิน 100 · ติดลบ/ตัวอักษร/ตัวชี้วัดแปลก → ผิด", async () => {
+  assert.equal(P.validateTarget({ user_email: "a", metric_key: "ae_buy.sold", value: "" }).value, null);
+  assert.equal(P.validateTarget({ user_email: "a", metric_key: "ae_buy.sold", value: "12" }).value, 12);
+  assert.equal(P.validateTarget({ user_email: "a", metric_key: "sale_developer.sales", value: "1,250,000.555" }).value, 1250000.56);
+  assert.equal(P.validateTarget({ user_email: "a", metric_key: "production.ontime", value: 95 }).value, 95);
+  fail422(() => P.validateTarget({ user_email: "a", metric_key: "ae_buy.sold", value: "2.5" }));
+  fail422(() => P.validateTarget({ user_email: "a", metric_key: "production.ontime", value: "101" }));
+  fail422(() => P.validateTarget({ user_email: "a", metric_key: "ae_buy.sold", value: "-1" }));
+  fail422(() => P.validateTarget({ user_email: "a", metric_key: "ae_buy.sold", value: "abc" }));
+  fail422(() => P.validateTarget({ user_email: "a", metric_key: "nope", value: "1" }));
+});
+await t("validateMonth / validateHoliday", async () => {
+  assert.equal(P.validateMonth("2026-11"), "2026-11"); fail422(() => P.validateMonth("2026-13")); fail422(() => P.validateMonth("พ.ย."));
+  assert.deepEqual(P.validateHoliday("2026-12-31", "  วันสิ้นปี  "), { date: "2026-12-31", name: "วันสิ้นปี" });
+  fail422(() => P.validateHoliday("2026-02-30", "x")); fail422(() => P.validateHoliday("2026-12-31", " "));
+});
+
+const dbHandle = makeD1(); D.setD1ForTest(dbHandle as never); ST.invalidateD1State();
+const PS = await import("../src/lib/perf-service");
+const { saveUser: saveU } = await import("../src/lib/users-service");
+const ADM = "admin@example.com";
+await saveU({ email: "ae1@example.com", display_name: "สมชาย", role: "ae" }, ADM);
+await saveU({ email: "ae2@example.com", display_name: "สมชาย", role: "ae" }, ADM);
+const rej = async (p: Promise<unknown>, code: string) => { try { await p; } catch (e) { assert.equal((e as { code?: string }).code, code, String((e as Error).message)); return; } assert.fail("ควรผิดพลาด " + code); };
+const S = async (m = "2026-11") => PS.getPerfSettings(m);
+
+await t("getPerfSettings: ผู้ใช้ที่ใช้งานอยู่ + รายการตำแหน่ง/ตัวชี้วัด · เตือนชื่อที่แสดงซ้ำ", async () => {
+  const s = await S(); assert.ok(s.users.some((u) => u.email === "ae1@example.com")); assert.equal(s.positions.length, 5); assert.ok(s.metrics.length > 10);
+  assert.deepEqual(s.duplicateNames, ["สมชาย"]);
+});
+await t("savePositions: ตำแหน่งแปลก → 422 · ผู้ใช้ไม่มี → 404 · บันทึกแล้วอ่านกลับได้ · บันทึกซ้ำ = แทนที่ (ไม่เพิ่มแถว)", async () => {
+  await rej(PS.savePositions("ae1@example.com", ["boss"], ADM), "VALIDATION");
+  await rej(PS.savePositions("nobody@example.com", ["ae_buy"], ADM), "NOT_FOUND");
+  await PS.savePositions("ae1@example.com", ["ae_buy", "sale_developer", "ae_buy"], ADM);
+  assert.deepEqual((await S()).users.find((u) => u.email === "ae1@example.com")!.positions, ["ae_buy", "sale_developer"]);
+  await PS.savePositions("AE1@example.com", ["production"], ADM);
+  assert.deepEqual((await S()).users.find((u) => u.email === "ae1@example.com")!.positions, ["production"]);
+  assert.equal((db2().rows("PERF_POSITIONS") as unknown[]).length, 1);
+});
+function db2() { return dbHandle; }
+await t("saveTargets: ผู้ใช้ไม่มีตำแหน่งนั้น → 422 และไม่บันทึกอะไรเลย (ทั้งชุด)", async () => {
+  await PS.savePositions("ae1@example.com", ["ae_buy"], ADM);
+  await rej(PS.saveTargets("2026-11", [{ user_email: "ae1@example.com", metric_key: "ae_buy.sold", value: "5" }, { user_email: "ae1@example.com", metric_key: "production.done", value: "3" }], ADM), "VALIDATION");
+  assert.equal((await S()).targets.length, 0);
+});
+await t("saveTargets: บันทึก → อ่านกลับ · ซ้ำค่าเดิม changed=0 · แก้ค่า changed=1 ไม่เพิ่มแถว · เดือนอื่นไม่ปน", async () => {
+  const r = await PS.saveTargets("2026-11", [{ user_email: "ae1@example.com", metric_key: "ae_buy.sold", value: "5" }, { user_email: "ae1@example.com", metric_key: "ae_buy.contact", value: "40" }], ADM);
+  assert.equal(r.changed, 2);
+  assert.deepEqual((await S()).targets.map((x) => [x.metric_key, x.value]).sort(), [["ae_buy.contact", 40], ["ae_buy.sold", 5]]);
+  assert.equal((await PS.saveTargets("2026-11", [{ user_email: "ae1@example.com", metric_key: "ae_buy.sold", value: "5" }], ADM)).changed, 0);
+  assert.equal((await PS.saveTargets("2026-11", [{ user_email: "ae1@example.com", metric_key: "ae_buy.sold", value: "8" }], ADM)).changed, 1);
+  assert.equal((db2().rows("PERF_TARGETS") as unknown[]).length, 2);
+  assert.equal((await S("2026-12")).targets.length, 0);
+});
+await t("saveTargets: ค่าว่าง = ยกเลิกเป้านั้น · ว่างที่ไม่เคยตั้ง = ไม่สร้างแถว", async () => {
+  await PS.saveTargets("2026-11", [{ user_email: "ae1@example.com", metric_key: "ae_buy.contact", value: "" }, { user_email: "ae1@example.com", metric_key: "ae_buy.booked", value: "" }], ADM);
+  assert.deepEqual((await S()).targets.map((x) => x.metric_key), ["ae_buy.sold"]);
+  assert.equal((db2().rows("PERF_TARGETS") as unknown[]).length, 2);
+});
+await t("วันหยุดบริษัท: เพิ่ม · ซ้ำ 409 · วันที่ผิด 422 · ลบ · ลบที่ไม่มี 404", async () => {
+  await PS.addHoliday("2026-12-31", "วันสิ้นปี", ADM); await PS.addHoliday("2026-12-05", "วันพ่อ", ADM);
+  await rej(PS.addHoliday("2026-12-31", "ซ้ำ", ADM), "DUPLICATE"); await rej(PS.addHoliday("2026-02-30", "ผิด", ADM), "VALIDATION");
+  assert.deepEqual((await S()).holidays.map((h) => h.date), ["2026-12-31", "2026-12-05"]);
+  await PS.deleteHoliday("2026-12-31", ADM);
+  assert.deepEqual((await S()).holidays.map((h) => h.date), ["2026-12-05"]);
+  await rej(PS.deleteHoliday("2026-12-31", ADM), "NOT_FOUND");
+});
+await t("ไม่มี D1 → 409 DB_NOT_READY (ไม่ใช่ error ดิบ)", async () => {
+  D.setD1ForTest(null); ST.invalidateD1State(); await rej(S(), "DB_NOT_READY");
+});
 console.log("perf: ผ่านทั้งหมด");

@@ -3,9 +3,14 @@
  * การบันทึกประวัติ "ต้องไม่ทำให้การบันทึก Lead ล้ม" — ถ้าเขียนไม่สำเร็จ แค่ log error แล้วไปต่อ
  * (Lead เปลี่ยนสถานะสำเร็จแล้วตอนนี้ ผู้ใช้ไม่ควรเห็น error เพราะตารางประวัติ)
  */
+import { writeAudit } from "./audit";
 import { logError } from "./log";
-import { LEAD_LOG_COLUMNS, type LeadStatusChange } from "./perf";
-import { appendRows, toRow } from "./sheets";
+import {
+  LEAD_LOG_COLUMNS, METRICS, parsePositions, PerfError, POSITIONS, POSITION_KEYS, STAFF_ROLES, staffNameOf, validateHoliday, validateMonth, validateTarget,
+  type LeadStatusChange, type TargetInput,
+} from "./perf";
+import { normRole } from "./roles";
+import { appendRows, batchUpdateValues, colLetter, deleteRow, listTabs, readTabs, toRow } from "./sheets";
 
 export async function logLeadStatus(changes: LeadStatusChange[], lead: Record<string, string>, actor: string, at: string) {
   if (!changes.length) return;
@@ -15,4 +20,109 @@ export async function logLeadStatus(changes: LeadStatusChange[], lead: Record<st
       staff: lead.staff ?? "", changed_by: actor, changed_at: at,
     })));
   } catch (e) { logError("perf.logLeadStatus", e); }
+}
+
+// ── หน้าตั้งค่า: ตำแหน่ง / เป้ารายเดือน / วันหยุดบริษัท (Super Admin) ──
+const POS = "PERF_POSITIONS", TGT = "PERF_TARGETS", HOL = "PERF_HOLIDAYS";
+type Tab = { headers: string[]; rows: Record<string, string>[] };
+const norm = (e: unknown) => String(e ?? "").trim().toLowerCase();
+const isActive = (v: unknown) => String(v ?? "").toUpperCase() === "TRUE";
+const monthNowBkk = () => new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 7);
+
+async function load(): Promise<Record<string, Tab>> {
+  try {
+    const t = await readTabs([POS, TGT, HOL, "APP_USERS"]);
+    if (!t[POS]?.headers.includes("user_email") || !t[TGT]?.headers.includes("metric_key") || !t[HOL]?.headers.includes("holiday_date") || !t.APP_USERS?.headers.includes("email")) throw new Error("missing");
+    return t;
+  } catch { throw new PerfError(409, "ฐานข้อมูล D1 ยังไม่พร้อม — ตารางประสิทธิภาพรายคนอยู่บน D1 (ตรวจว่าผูก binding DB แล้ว)", "DB_NOT_READY"); }
+}
+const activeUser = (t: Record<string, Tab>, email: string) => t.APP_USERS.rows.find((u) => u.email && norm(u.email) === email && isActive(u.active));
+
+export async function getPerfSettings(monthRaw?: string) {
+  const month = monthRaw ? validateMonth(monthRaw) : monthNowBkk();
+  const t = await load();
+  const posBy = new Map(t[POS].rows.filter((r) => r.user_email).map((r) => [norm(r.user_email), parsePositions(r.positions)]));
+  const users = t.APP_USERS.rows.filter((u) => u.email && isActive(u.active)).map((u) => ({ email: norm(u.email), name: staffNameOf(u), role: normRole(u.role) ?? String(u.role ?? ""), positions: posBy.get(norm(u.email)) ?? [] }))
+    .sort((a, b) => a.name.localeCompare(b.name, "th"));
+  // ช่อง Staff เก็บเป็นชื่อที่แสดง → ถ้าสองคนชื่อซ้ำกัน ตัวเลขจะปนกัน: แจ้งเตือนให้แก้ชื่อ
+  const count = new Map<string, number>();
+  for (const u of users) if (STAFF_ROLES.includes(u.role)) count.set(u.name, (count.get(u.name) ?? 0) + 1);
+  const duplicateNames = [...count].filter(([, n]) => n > 1).map(([name]) => name);
+  const targets = t[TGT].rows.filter((r) => r.month === month && r.metric_key && r.target_value !== "").map((r) => ({ user_email: norm(r.user_email), metric_key: r.metric_key, value: Number(r.target_value) }));
+  const holidays = t[HOL].rows.filter((r) => r.holiday_date).map((r) => ({ date: r.holiday_date, name: r.name })).sort((a, b) => b.date.localeCompare(a.date));
+  return { month, positions: POSITIONS, metrics: METRICS, users, targets, holidays, duplicateNames };
+}
+
+export async function savePositions(emailRaw: string, positions: unknown, actor: string) {
+  const email = norm(emailRaw);
+  const list = Array.isArray(positions) ? positions.map(String) : [];
+  const bad = list.filter((p) => !POSITION_KEYS.includes(p));
+  if (bad.length) throw new PerfError(422, "ตำแหน่งไม่ถูกต้อง", "VALIDATION", { positions: "ตำแหน่งไม่ถูกต้อง" });
+  const t = await load();
+  if (!activeUser(t, email)) throw new PerfError(404, "ไม่พบผู้ใช้นี้ (หรือถูกระงับ)", "NOT_FOUND");
+  const value = POSITION_KEYS.filter((k) => list.includes(k)).join(",");
+  const now = new Date().toISOString();
+  const idx = t[POS].rows.findIndex((r) => norm(r.user_email) === email);
+  const rec = { user_email: email, positions: value, updated_by: actor, updated_at: now };
+  if (idx >= 0) { const row = idx + 2; await batchUpdateValues([{ range: `'${POS}'!A${row}:${colLetter(t[POS].headers.length - 1)}${row}`, values: [toRow(t[POS].headers, rec)] }]); }
+  else await appendRows(POS, [toRow(t[POS].headers, rec)]);
+  await writeAudit(actor, "perf_positions", "app_user", email, `ตำแหน่ง ${email}: ${value ? parsePositions(value).map((k) => POSITIONS.find((p) => p.key === k)!.label).join(", ") : "(ไม่มี)"}`);
+  return { email, positions: parsePositions(value) };
+}
+
+/** บันทึกเป้าหมายของเดือนหนึ่งหลายรายการ: ตรวจทั้งชุดก่อน (ผิดข้อเดียว = ไม่บันทึกเลย) · ค่าว่าง = ยกเลิกเป้านั้น */
+export async function saveTargets(monthRaw: unknown, items: TargetInput[], actor: string) {
+  const month = validateMonth(monthRaw);
+  if (!Array.isArray(items) || !items.length) throw new PerfError(422, "ไม่มีเป้าหมายให้บันทึก", "VALIDATION");
+  if (items.length > 500) throw new PerfError(422, "บันทึกครั้งละไม่เกิน 500 รายการ", "VALIDATION");
+  const t = await load();
+  const posBy = new Map(t[POS].rows.filter((r) => r.user_email).map((r) => [norm(r.user_email), parsePositions(r.positions)]));
+  const checked = items.map((it) => {
+    const email = norm(it.user_email);
+    if (!activeUser(t, email)) throw new PerfError(404, `ไม่พบผู้ใช้ ${email || "(ว่าง)"}`, "NOT_FOUND");
+    const v = validateTarget(it);
+    if (!(posBy.get(email) ?? []).includes(v.metric.position)) throw new PerfError(422, `${email} ไม่มีตำแหน่งที่ใช้ตัวชี้วัด "${v.metric.label}"`, "VALIDATION", { [it.metric_key]: "ผู้ใช้ไม่มีตำแหน่งนี้" });
+    return { email, ...v };
+  });
+  const now = new Date().toISOString();
+  const H = t[TGT].headers;
+  const at = new Map(t[TGT].rows.map((r, i) => [`${r.month}|${norm(r.user_email)}|${r.metric_key}`, { i, r }]));
+  const updates: { range: string; values: (string | number)[][] }[] = [], adds: (string | number)[][] = [];
+  let changed = 0;
+  for (const c of checked) {
+    const ex = at.get(`${month}|${c.email}|${c.metric.key}`);
+    const val = c.value === null ? "" : String(c.value);
+    if (ex) {
+      if ((ex.r.target_value ?? "") === val) continue;
+      const row = ex.i + 2;
+      updates.push({ range: `'${TGT}'!A${row}:${colLetter(H.length - 1)}${row}`, values: [toRow(H, { ...ex.r, target_value: val, updated_by: actor, updated_at: now })] }); changed++;
+    } else if (c.value !== null) {
+      adds.push(toRow(H, { target_id: crypto.randomUUID(), month, user_email: c.email, position: c.metric.position, metric_key: c.metric.key, target_value: val, updated_by: actor, updated_at: now })); changed++;
+    }
+  }
+  if (updates.length) await batchUpdateValues(updates);
+  if (adds.length) await appendRows(TGT, adds);
+  if (changed) await writeAudit(actor, "perf_targets", "perf_target", month, `ตั้งเป้ารายคน ${month}: เปลี่ยน ${changed} รายการ`);
+  return { month, changed };
+}
+
+export async function addHoliday(date: unknown, name: unknown, actor: string) {
+  const h = validateHoliday(date, name);
+  const t = await load();
+  if (t[HOL].rows.some((r) => r.holiday_date === h.date)) throw new PerfError(409, "วันนี้ตั้งเป็นวันหยุดแล้ว", "DUPLICATE", { holiday_date: "ซ้ำ" });
+  await appendRows(HOL, [toRow(t[HOL].headers, { holiday_date: h.date, name: h.name, created_by: actor, created_at: new Date().toISOString() })]);
+  await writeAudit(actor, "perf_holiday_add", "perf_holiday", h.date, `เพิ่มวันหยุด ${h.date} ${h.name}`);
+  return h;
+}
+
+export async function deleteHoliday(date: unknown, actor: string) {
+  const d = String(date ?? "").trim();
+  const t = await load();
+  const idx = t[HOL].rows.findIndex((r) => r.holiday_date === d);
+  if (idx < 0) throw new PerfError(404, "ไม่พบวันหยุดนี้ (อาจถูกลบไปแล้ว)", "NOT_FOUND");
+  const sheetId = (await listTabs()).find((x) => x.title === HOL)?.sheetId;
+  if (sheetId === undefined) throw new PerfError(409, "ไม่พบตารางวันหยุด", "DB_NOT_READY");
+  await deleteRow(sheetId, idx + 2);
+  await writeAudit(actor, "perf_holiday_delete", "perf_holiday", d, `ลบวันหยุด ${d} ${t[HOL].rows[idx].name}`);
+  return { date: d };
 }

@@ -29,6 +29,7 @@ const EXPECT: Record<string, string[] | "public" | Record<string, string[]>> = {
   "src/app/api/account/files/route.ts": { GET: ["admin", "ae"], POST: ["admin"], DELETE: ["super_admin"] }, "src/app/api/account/customers/route.ts": { GET: ["admin", "ae"], POST: ["admin", "ae"], DELETE: ["super_admin"] }, "src/app/api/account/products/route.ts": { GET: ["admin", "ae"], POST: ["admin", "ae"], PATCH: ["admin", "ae"], DELETE: ["admin"] }, "src/app/api/production/route.ts": { GET: ["admin", "ae", "production"], PATCH: ["admin"] },
   "src/app/api/content/route.ts": { GET: ["admin", "ae", "production"], POST: ["admin", "ae", "production"], PATCH: ["admin", "ae", "production"], DELETE: ["ae"] }, "src/app/api/content/history/route.ts": ["admin", "ae", "production"], "src/app/api/content/match/route.ts": ["admin", "ae", "production"], "src/app/api/content/report/route.ts": { GET: ["admin", "ae", "production"], POST: ["admin", "ae", "production"] }, "src/app/api/content/metrics/route.ts": ["admin", "ae", "production"], "src/app/api/content/products/route.ts": { GET: ["admin", "ae"], PUT: ["admin", "ae"] },
   "src/app/api/targets/route.ts": { GET: ["admin", "marketing", "ae", "production"], POST: ["admin"] },
+  "src/app/api/perf/settings/route.ts": ["super_admin"], // ประสิทธิภาพรายคน: ตำแหน่ง / เป้า / วันหยุด (5/11/2026)
 };
 assert.deepEqual(routes.filter((r) => !(r in EXPECT)), [], "พบ API Route ใหม่ที่ยังไม่ได้กำหนดสิทธิ์ในเทสต์นี้ — ต้องตรวจสอบก่อน");
 for (const r of routes) {
@@ -60,6 +61,8 @@ for (const p of ["/dashboard", "/dashboard/facebook-ads", "/dashboard/performanc
 for (const p of ["/dashboard", "/dashboard/facebook-ads", "/dashboard/facebook-page", "/dashboard/google-ads", "/dashboard/line-oa", "/dashboard/website", "/dashboard/performance", "/lead-report", "/settings/metrics"]) assert.ok(can("marketing", p), `Marketing ต้องเข้า ${p} ได้`);
 for (const p of ["/work/leads", "/work/buyer-leads", "/work/developers", "/account/revenue", "/dashboard/import", "/dashboard/export", "/settings", "/settings/targets", "/settings/import-guide"]) assert.ok(!can("marketing", p), `Marketing ต้องเข้า ${p} ไม่ได้`);
 for (const p of ["/dashboard", "/work/leads", "/work/developers", "/account/revenue", "/account/revenue/import", "/dashboard/import", "/dashboard/export", "/settings/targets", "/settings/metrics", "/dashboard/facebook-ads"]) assert.ok(can("admin", p), `Admin ต้องเข้า ${p} ได้`);
+for (const r of ["admin", "ae", "marketing", "production"] as const) assert.ok(!can(r, "/settings/performance"), `${r} ต้องเข้า /settings/performance ไม่ได้ (Super Admin เท่านั้น)`);
+assert.ok(can("super_admin", "/settings/performance"));
 assert.ok(!can("admin", "/settings"), "Admin ต้องเข้าตั้งค่าระบบไม่ได้");
 for (const n of NAV.flatMap((x) => ("children" in x && x.children ? x.children : [x]) as { href: string }[])) assert.ok(can("super_admin", n.href), `Super Admin ต้องเข้า ${n.href} ได้`);
 assert.equal(normRole("sales"), "ae"); assert.equal(normRole("Admin"), "admin"); assert.equal(normRole("x"), null); assert.equal(homeFor("marketing"), "/"); assert.equal(homeFor("ae"), "/");
@@ -142,7 +145,7 @@ assert.equal(csvSafe(5), 5); ok("ข้อความที่ขึ้นต�
 {
   const { navFor } = await import("../src/lib/roles");
   const kids = (r: "super_admin" | "admin" | "marketing" | "ae") => navFor(r).find((n) => n.label === "ตั้งค่า");
-  assert.deepEqual(kids("super_admin")!.children!.map((c) => c.href), ["/settings", "/settings/targets", "/settings/import-guide", "/settings/metrics"]); assert.equal(kids("super_admin")!.href, "/settings");
+  assert.deepEqual(kids("super_admin")!.children!.map((c) => c.href), ["/settings", "/settings/targets", "/settings/performance", "/settings/import-guide", "/settings/metrics"]); assert.equal(kids("super_admin")!.href, "/settings");
   assert.deepEqual(kids("admin")!.children!.map((c) => c.href), ["/settings/targets", "/settings/import-guide", "/settings/metrics"]);
   assert.deepEqual(kids("marketing")!.children!.map((c) => c.href), ["/settings/metrics"]); assert.equal(kids("ae"), undefined);
   ok("เมนู ตั้งค่า: Super Admin เห็นทั้งหมด · Admin ไม่เห็น ตั้งค่าระบบ · Marketing เห็นเฉพาะคำอธิบายตัวเลข · AE ไม่เห็นเมนูตั้งค่า");

@@ -68,6 +68,7 @@ export const NAV: NavItem[] = [
   { href: "/settings", label: "ตั้งค่า", roles: ALL, icon: "gear", system: "shared", children: [
     { href: "/settings", label: "ตั้งค่าระบบ", roles: SUPER, icon: "gear", system: "shared" },
     { href: "/settings/targets", label: "เป้าหมายรายเดือน", roles: DATA, icon: "target", system: "dashboard" },
+    { href: "/settings/performance", label: "ประสิทธิภาพรายคน", roles: SUPER, icon: "target", system: "shared" }, // ตำแหน่ง / เป้ารายคน / วันหยุด (5/11/2026)
     { href: "/settings/import-guide", label: "คู่มือนำเข้าข้อมูล", roles: DATA, icon: "book", system: "dashboard" },
     { href: "/settings/metrics", label: "คำอธิบายตัวเลข", roles: MKT, icon: "info", system: "shared" },
   ] },
