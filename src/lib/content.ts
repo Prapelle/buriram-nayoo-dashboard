@@ -2,6 +2,8 @@
  * บอร์ด Content (Production) — กติกาล้วน ๆ ไม่แตะฐานข้อมูล (ทดสอบง่าย)
  * บอร์ดเดียว 11 คอลัมน์: ช่วงผลิต (ทุก Content) ต่อด้วยช่วงรายงานลูกค้า (เฉพาะ Content ที่ติดแท็ก "งานขาย")
  */
+import { PERF_DEFS } from "./perf";
+
 export const PROD_STAGES = ["IDEA", "CONTENT PLANS", "ART WORK / VIDEO", "เสร็จ ART / VIDEO", "REVIEW", "SCHEDULED", "PUBLISHED"] as const;
 export const REPORT_STAGES = ["รอครบเพื่อทำรายงาน", "กำลังทำรายงาน", "รายงานเสร็จแล้ว", "ส่งให้ลูกค้าแล้ว"] as const;
 export const STAGES = [...PROD_STAGES, ...REPORT_STAGES] as const;
@@ -131,7 +133,9 @@ export function reportDue(card: Rec, today: string): "none" | "upcoming" | "due"
 
 export const nextCardCode = (codes: string[]) => `CT-${String(codes.reduce((m, c) => { const x = /^CT-(\d+)$/.exec(c); return x ? Math.max(m, Number(x[1])) : m; }, 0) + 1).padStart(4, "0")}`;
 
+/** ตารางที่เกิดบน D1 (สร้างอัตโนมัติ): Content + ประสิทธิภาพรายคน (perf.ts, 5/11/2026) */
 export const NATIVE_DEFS = [
   { name: "CONTENT_CARDS", headers: CARD_COLUMNS }, { name: "CONTENT_MEMBERS", headers: MEMBER_COLUMNS },
   { name: "CONTENT_HISTORY", headers: HISTORY_COLUMNS }, { name: "PRODUCT_SETTINGS", headers: SETTING_COLUMNS },
+  ...PERF_DEFS,
 ];
