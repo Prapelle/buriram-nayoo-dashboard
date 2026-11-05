@@ -11,6 +11,7 @@ import { CONTENT_TYPES, DUTIES, PROD_STAGES, REPORT_STAGES, SALES_GOALS, isRepor
 type Member = { email: string; name: string; duty: string; is_main: boolean };
 type Card = Record<string, string> & { due: "none" | "upcoming" | "due" | "overdue"; members: Member[] };
 type Board = { cards: Card[]; today: string; products: string[]; users: { email: string; name: string }[]; customers: { developer_id: string; name: string }[]; settings: { product: string; content_count: number; report_days: number }[] };
+type Metrics = { scope: "lifetime" | "daily" | "none"; as_of: string; permalink: string; views: number; reach: number; reactions: number; comments: number; shares: number; link_clicks: number; total_clicks: number };
 type Hist = { from_stage: string; to_stage: string; actor_name: string; at: string; note: string };
 
 const HEAD: Record<string, string> = { IDEA: "bg-slate-200", "CONTENT PLANS": "bg-sky-200", "ART WORK / VIDEO": "bg-violet-200", "เสร็จ ART / VIDEO": "bg-indigo-200", REVIEW: "bg-amber-200", SCHEDULED: "bg-yellow-200", PUBLISHED: "bg-green-200",
@@ -34,6 +35,12 @@ export function ContentBoard({ canDelete }: { canDelete: boolean }) {
   const [tab, setTab] = useState(""); const [dragId, setDragId] = useState(""); const [over, setOver] = useState("");
   const [busy, setBusy] = useState<Set<string>>(new Set());
   const [edit, setEdit] = useState<Card | "new" | null>(null);
+  const [matching, setMatching] = useState(false);
+  async function matchFb() {
+    setMatching(true); setMsg(null);
+    try { const r = await api("/api/content/match", { method: "POST" }); setMsg({ type: "ok", text: r.matched ? `จับคู่โพสต์ Facebook ได้ ${r.matched} การ์ด (จาก ${r.checked} ที่ยังไม่มี Post ID)` : r.checked ? `ยังจับคู่ไม่ได้ (${r.checked} การ์ดที่ยังไม่มี Post ID — ต้องนำเข้าสถิติโพสต์ก่อน และชื่อ Content ต้องคล้ายข้อความโพสต์ในวันเดียวกัน) · ใส่ Post ID เองที่การ์ดได้` : "ไม่มีการ์ดที่รอจับคู่ (ต้องมีวันกำหนด/เผยแพร่ และยังไม่มี Post ID)" }); await load(true); }
+    catch (e) { setMsg({ type: "error", text: e instanceof Error ? e.message : "จับคู่ไม่สำเร็จ" }); } finally { setMatching(false); }
+  }
 
   const load = useCallback(async (silent = false) => {
     try { setB(await api("/api/content")); setState("ok"); }
@@ -92,7 +99,8 @@ export function ContentBoard({ canDelete }: { canDelete: boolean }) {
         <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">ผู้รับผิดชอบ</span><select value={who} onChange={(e) => setWho(e.target.value)} className="h-9 max-w-40 rounded-lg border border-slate-300 bg-white px-2.5 text-sm"><option value="">ทั้งหมด</option>{b?.users.map((u) => <option key={u.email} value={u.email}>{u.name}</option>)}</select></label>
         <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">ลูกค้า</span><select value={cust} onChange={(e) => setCust(e.target.value)} className="h-9 max-w-44 rounded-lg border border-slate-300 bg-white px-2.5 text-sm"><option value="">ทั้งหมด</option>{b?.customers.map((u) => <option key={u.developer_id} value={u.developer_id}>{u.name}</option>)}</select></label>
         <label className="flex h-9 items-center gap-1.5 text-sm"><input type="checkbox" checked={salesOnly} onChange={(e) => setSalesOnly(e.target.checked)} />เฉพาะงานขาย</label>
-        <button type="button" onClick={() => setEdit("new")} className={`${btn.primary} ml-auto`}>＋ เพิ่ม Content</button>
+        <button type="button" disabled={matching} onClick={matchFb} className={`${btn.secondary} ml-auto`} title="จับคู่การ์ดที่ยังไม่มี Post ID กับโพสต์ Facebook ที่นำเข้าแล้ว (ตามวันที่ + ข้อความ)">{matching ? "กำลังจับคู่…" : "🔗 จับคู่โพสต์ Facebook"}</button>
+        <button type="button" onClick={() => setEdit("new")} className={btn.primary}>＋ เพิ่ม Content</button>
       </div>
 
       {state === "loading" && <Skeleton kind="board" />}
@@ -136,6 +144,8 @@ function CardDialog({ board, card, canDelete, onClose, onDone }: { board: Board;
   const [members, setMembers] = useState<{ email: string; duty: string; is_main: boolean }[]>((card?.members ?? []).map((m) => ({ email: m.email, duty: m.duty, is_main: m.is_main })));
   const [err, setErr] = useState<Record<string, string>>({}); const [top, setTop] = useState(""); const [saving, setSaving] = useState(false);
   const [hist, setHist] = useState<Hist[] | null>(null);
+  const [mx, setMx] = useState<Metrics | null | undefined>(undefined);
+  useEffect(() => { if (card?.post_id) api(`/api/content/metrics?post_id=${encodeURIComponent(card.post_id)}`).then((j) => setMx(j.metrics)).catch(() => setMx(null)); }, [card]);
   useEffect(() => { if (card) api(`/api/content/history?id=${card.card_id}`).then((j) => setHist(j.history)).catch(() => setHist([])); }, [card]);
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => { setF((p) => ({ ...p, [k]: v })); setErr((e) => ({ ...e, [k]: "" })); };
   const inReport = !!card && isReportStage(card.stage);
@@ -199,6 +209,17 @@ function CardDialog({ board, card, canDelete, onClose, onDone }: { board: Board;
           {f.sales_tag && field("report_link", "ลิงก์ไฟล์รายงาน (Drive)", <input value={f.report_link} onChange={(e) => set("report_link", e.target.value)} placeholder="https://" className={cls("report_link")} />)}
           {field("post_id", "Facebook Post ID (ถ้ามี)", <input value={f.post_id} onChange={(e) => set("post_id", e.target.value)} className={cls("post_id")} />)}
         </div>
+        {card?.post_id && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+            <div className="mb-1 flex items-center justify-between text-xs text-slate-600"><span>ผลโพสต์ Facebook</span>{mx?.permalink && <a href={mx.permalink} target="_blank" rel="noopener noreferrer" className="underline">เปิดโพสต์</a>}</div>
+            {mx === undefined ? <span className="text-xs text-slate-500">กำลังโหลด…</span> : !mx || mx.scope === "none" ? <span className="text-xs text-slate-500">ยังไม่พบสถิติของ Post ID นี้ในข้อมูลที่นำเข้า</span> : (
+              <>
+                <dl className="grid grid-cols-3 gap-2 text-center sm:grid-cols-6">
+                  {([["Views", mx.views], ["Reach", mx.reach], ["Reactions", mx.reactions], ["Comments", mx.comments], ["Shares", mx.shares], ["Link clicks", mx.link_clicks]] as const).map(([k, v]) => <div key={k}><dt className="text-[11px] text-slate-500">{k}</dt><dd className="font-semibold tabular-nums">{v.toLocaleString("en-US")}</dd></div>)}
+                </dl>
+                <p className="mt-1 text-[11px] text-slate-500">{mx.scope === "lifetime" ? `ยอดสะสม ณ ${dmy(mx.as_of)}` : `รวมรายวันถึง ${dmy(mx.as_of)} (Reach รวมข้ามวันอาจนับคนซ้ำ)`}</p>
+              </>)}
+          </div>)}
         {card && <details className="text-xs text-slate-600"><summary className="cursor-pointer">ประวัติสถานะ{hist ? ` (${hist.length})` : ""}</summary>
           <ul className="mt-1 space-y-0.5">{(hist ?? []).map((h, i) => <li key={i}>{thDateTime(h.at)} · {h.actor_name} · {h.from_stage || "สร้าง"} → {h.to_stage}{h.note && ` · ${h.note}`}</li>)}</ul></details>}
         <div className="flex items-center gap-2 pt-1">

@@ -190,7 +190,10 @@ export async function runCommit(input: ImportInput, actor: string, role: Role) {
     try { await setStatus("failed", msg.slice(0, 500)); await audit(actor, "import_failed", batchId, `${spec.id}: ${msg.slice(0, 200)}`, now); } catch { /* ignore */ }
     throw new HttpError(500, `นำเข้าไม่สำเร็จ: ${msg} (ข้อมูลที่เขียนไปแล้วบางส่วนจะไม่ซ้ำเมื่อนำเข้าไฟล์เดิมอีกครั้ง)`, "WRITE_FAILED");
   }
-  return { batchId, counts: plan.counts, errors: plan.errors.slice(0, 1000), warnings: plan.warnings };
+  // นำเข้าสถิติโพสต์ Facebook สำเร็จ → จับคู่การ์ด Content ที่ยังไม่มี Post ID (best-effort ไม่กระทบผลนำเข้า)
+  let fbMatched = 0;
+  if (spec.id === "fb_page") { try { fbMatched = (await (await import("../fb-match")).matchFacebookPosts(actor)).matched; } catch { /* จับคู่เองทีหลังได้ที่บอร์ด Content */ } }
+  return { batchId, counts: plan.counts, errors: plan.errors.slice(0, 1000), warnings: plan.warnings, fbMatched };
 }
 
 /**

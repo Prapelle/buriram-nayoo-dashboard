@@ -119,4 +119,19 @@ await t("ลบการ์ด: ลบผู้ร่วมงาน + ประ
   assert.ok(!db.rows("CONTENT_CARDS").some((c) => c.card_id === id)); assert.equal(db.rows("CONTENT_MEMBERS").filter((m) => m.card_id === id).length, 0); assert.equal(db.rows("CONTENT_HISTORY").filter((h) => h.card_id === id).length, 0);
   await fails(CS.deleteCard(id, ADMIN), "NOT_FOUND");
 });
+await t("Facebook: คล้ายข้อความ + จับคู่เฉพาะที่มั่นใจ + ตัวเลขโพสต์", async () => {
+  const F = await import("../src/lib/fb-match"); const S = await import("../src/lib/sheets");
+  assert.ok(F.similarity("โปรโมชั่นบ้านหลังใหม่ ลดพิเศษ", "ประกาศ โปรโมชั่นบ้านหลังใหม่ ลดพิเศษ วันนี้ถึงสิ้นเดือน") >= 0.9); assert.ok(F.similarity("โปรโมชั่นบ้านหลังใหม่", "สูตรอาหารเช้า") < 0.2);
+  const cards = [{ card_id: "c1", card_code: "CT-1", title: "โปรโมชั่นบ้านหลังใหม่ ลดพิเศษ", planned_date: "2026-11-03" }, { card_id: "c2", card_code: "CT-2", title: "ความรู้เรื่องกู้บ้าน", planned_date: "2026-11-03" }] as never[];
+  const posts = [{ post_id: "P1", page_id: "pg", publish_time: "2026-11-03 10:00", text: "โปรโมชั่นบ้านหลังใหม่ ลดพิเศษ ถึงสิ้นเดือน", permalink: "u" }, { post_id: "P2", page_id: "pg", publish_time: "2026-11-09 10:00", text: "ความรู้เรื่องกู้บ้าน", permalink: "u" }];
+  assert.deepEqual(F.pickMatches(cards, posts).map((m) => m.post_id), ["P1"]); // c2 โพสต์ห่างเกิน 1 วัน ไม่จับ
+  // ครบทาง: เขียนแถวลงแท็บ FB_PAGE_POSTS ของ Sheets จำลอง แล้วจับคู่
+  const r = await CS.saveCard({ title: "โปรโมชั่นบ้านหลังใหม่ ลดพิเศษ", planned_date: "2026-11-03" }, ADMIN);
+  const h = (await S.readTab("FB_PAGE_POSTS")).headers; const row = (o: Record<string, string>) => h.map((k) => o[k] ?? "");
+  await S.appendRows("FB_PAGE_POSTS", [row({ post_id: "P1", page_id: "pg", publish_time: "2026-11-03 10:00", title: "โปรโมชั่นบ้านหลังใหม่ ลดพิเศษ ถึงสิ้นเดือน", metric_date: "2026-11-04", metric_scope: "daily", reach: "100", reactions: "5", permalink: "https://fb/p1" }), row({ post_id: "P1", page_id: "pg", publish_time: "2026-11-03 10:00", metric_date: "2026-11-05", metric_scope: "daily", reach: "50", reactions: "3" })]);
+  const m = await F.matchFacebookPosts(ADMIN); assert.equal(m.matched, 1);
+  assert.equal(db.rows("CONTENT_CARDS").find((c) => c.card_id === r.card_id)?.post_id, "P1");
+  assert.equal((await F.matchFacebookPosts(ADMIN)).matched, 0); // ไม่จับซ้ำ
+  const mx = await F.metricsForPost("P1"); assert.ok(mx); assert.equal(mx.scope, "daily"); assert.equal(mx.reach, 150); assert.equal(mx.reactions, 8); assert.equal(mx.permalink, "https://fb/p1");
+});
 console.log("content: ผ่านทั้งหมด");
