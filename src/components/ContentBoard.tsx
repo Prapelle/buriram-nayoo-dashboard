@@ -141,6 +141,13 @@ function CardDialog({ board, card, canDelete, onClose, onDone }: { board: Board;
   const inReport = !!card && isReportStage(card.stage);
   const field = (k: string, label: string, el: React.ReactNode) => <label className="block text-sm"><span className="mb-0.5 block text-xs text-slate-600">{label}</span>{el}{err[k] && <span role="alert" className="mt-0.5 block text-xs font-medium text-red-600">⚠ {err[k]}</span>}</label>;
   const cls = (k: string) => `${inp} ${err[k] ? "border-red-500 bg-red-50" : ""}`;
+  const [prods, setProds] = useState(board.products); const [newP, setNewP] = useState<string | null>(null); const [addingP, setAddingP] = useState(false);
+  async function addProduct() {
+    const name = (newP ?? "").trim(); if (!name) { setErr((e) => ({ ...e, product: "ใส่ชื่อ Product" })); return; }
+    setAddingP(true);
+    try { const r = await api("/api/account/products", send("POST", { name })); const list = (r.products as { name: string }[]).map((x) => x.name); setProds(list); set("product", name); setNewP(null); }
+    catch (e) { setErr((x) => ({ ...x, product: e instanceof Error ? e.message : "เพิ่มไม่สำเร็จ" })); } finally { setAddingP(false); }
+  }
   const pickProduct = (p: string) => { set("product", p); const s = board.settings.find((x) => x.product === p); if (s?.report_days && !f.follow_days) set("follow_days", String(s.report_days)); };
 
   async function save() {
@@ -163,7 +170,9 @@ function CardDialog({ board, card, canDelete, onClose, onDone }: { board: Board;
           {field("content_type", "ประเภท Content", <select value={f.content_type} onChange={(e) => set("content_type", e.target.value)} className={cls("content_type")}><option value="">—</option>{CONTENT_TYPES.map((x) => <option key={x}>{x}</option>)}</select>)}
           {field("planned_date", "กำหนดเผยแพร่", <input type="date" value={f.planned_date} onChange={(e) => set("planned_date", e.target.value)} className={cls("planned_date")} />)}
           {field("developer_id", "ลูกค้า", <select value={f.developer_id} onChange={(e) => set("developer_id", e.target.value)} className={cls("developer_id")}><option value="">—</option>{board.customers.map((c) => <option key={c.developer_id} value={c.developer_id}>{c.name}</option>)}</select>)}
-          {field("product", "Product", <select value={f.product} onChange={(e) => pickProduct(e.target.value)} className={cls("product")}><option value="">—</option>{board.products.map((p) => <option key={p}>{p}</option>)}</select>)}
+          {field("product", "Product", newP === null
+            ? <select value={f.product} onChange={(e) => { if (e.target.value === "__new") setNewP(""); else pickProduct(e.target.value); }} className={cls("product")}><option value="">—</option>{prods.map((p) => <option key={p}>{p}</option>)}<option value="__new">＋ เพิ่ม Product ใหม่…</option></select>
+            : <div className="flex gap-1"><input autoFocus value={newP} onChange={(e) => setNewP(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void addProduct(); } }} placeholder="ชื่อ Product ใหม่" className={cls("product")} /><button type="button" disabled={addingP} onClick={addProduct} className={`${btn.primary} !h-9 !px-3`}>เพิ่ม</button><button type="button" onClick={() => setNewP(null)} className="px-1.5 text-slate-500" aria-label="ยกเลิก">✕</button></div>)}
         </div>
         <fieldset className="space-y-2 rounded-lg border border-slate-200 p-3">
           <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" checked={f.sales_tag} disabled={inReport} onChange={(e) => set("sales_tag", e.target.checked)} />แท็ก “งานขาย” (เข้าช่วงรายงานลูกค้าได้){inReport && <span className="text-xs font-normal text-slate-500"> — ล็อกขณะอยู่ช่วงรายงาน</span>}</label>
