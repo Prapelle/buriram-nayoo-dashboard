@@ -9,7 +9,7 @@ import { thDate, thMonth } from "@/lib/thdate";
 type User = { email: string; name: string; role: string; positions: string[] };
 type Settings = {
   month: string; users: User[]; targets: { user_email: string; metric_key: string; value: number }[];
-  holidays: { date: string; name: string }[]; duplicateNames: string[];
+  holidays: { date: string; name: string }[]; duplicateNames: string[]; waitKinds: string[];
 };
 const UNIT: Record<Metric["unit"], string> = { count: "ครั้ง/งาน", baht: "บาท", percent: "%" };
 const monthNow = () => new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 7);
@@ -30,6 +30,7 @@ export function PerfSettings() {
   const [msg, setMsg] = useState<Msg>(null);
   const [busy, setBusy] = useState("");
   const [hol, setHol] = useState({ date: "", name: "" });
+  const [kinds, setKinds] = useState<string[] | null>(null); // null = ยังไม่แก้ (ใช้ค่าจากเซิร์ฟเวอร์)
 
   const load = useCallback(async (m: string) => {
     try {
@@ -62,11 +63,14 @@ export function PerfSettings() {
     return `อัปเดตตำแหน่งของ ${u.name} แล้ว`;
   });
   const saveTargets = () => run("targets", async () => { const j = await call({ action: "targets", month, items: changes }); return `บันทึกเป้า ${thMonth(month)} แล้ว (เปลี่ยน ${j.changed} รายการ)`; });
+  const saveKinds = () => run("kinds", async () => { await call({ action: "wait_kinds", kinds: shownKinds }); setKinds(null); return "บันทึกรายการสิ่งที่รอจากลูกค้าแล้ว"; });
   const addHoliday = () => run("hol", async () => { await call({ action: "holiday_add", date: hol.date, name: hol.name }); setHol({ date: "", name: "" }); return "เพิ่มวันหยุดแล้ว"; });
   const delHoliday = (h: { date: string; name: string }) => { if (confirm(`ลบวันหยุด ${thDate(h.date)} ${h.name} ?`)) run(`del:${h.date}`, async () => { await call({ action: "holiday_delete", date: h.date }); return "ลบวันหยุดแล้ว"; }); };
 
   if (!data) return <><Notice msg={msg} onClose={() => setMsg(null)} /><Skeleton kind={"rows"} /></>;
   const withPos = data.users.filter((u) => u.positions.length);
+  const shownKinds = kinds ?? data.waitKinds;
+  const kindsChanged = kinds !== null && kinds.map((k) => k.trim()).filter(Boolean).join("|") !== data.waitKinds.join("|");
   const card = "space-y-3 rounded-xl border border-slate-200 bg-white p-5";
 
   return (
@@ -140,6 +144,21 @@ export function PerfSettings() {
               <button onClick={() => delHoliday(h)} disabled={busy === `del:${h.date}`} className="text-xs text-red-600 underline disabled:opacity-40">ลบ</button></li>
           ))}</ul>
         )}
+      </section>
+
+      <section className={card}>
+        <h2 className="font-semibold">4. สิ่งที่รอจากลูกค้า (การ์ด Content งานขาย)</h2>
+        <p className="text-xs text-slate-500">รายการที่ให้เลือกตอนกด “เริ่มรอลูกค้า” — เพิ่ม/แก้ชื่อ/ลบได้ 1–12 รายการ · ที่เคยบันทึกไปแล้วยังนับวันรอตามเดิม</p>
+        <div className="space-y-1.5">{shownKinds.map((k, i) => (
+          <div key={i} className="flex gap-1.5">
+            <input aria-label={`รายการที่ ${i + 1}`} value={k} maxLength={40} onChange={(e) => setKinds(shownKinds.map((x, j) => (j === i ? e.target.value : x)))} className="w-64 rounded-md border border-slate-300 px-2 py-1.5 text-sm" />
+            <button type="button" aria-label="ลบรายการ" disabled={shownKinds.length <= 1} onClick={() => setKinds(shownKinds.filter((_, j) => j !== i))} className="px-2 text-slate-500 disabled:opacity-30">✕</button>
+          </div>))}
+        </div>
+        <div className="flex gap-2">
+          <button type="button" disabled={shownKinds.length >= 12} onClick={() => setKinds([...shownKinds, ""])} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm disabled:opacity-40">＋ เพิ่มรายการ</button>
+          <button type="button" onClick={saveKinds} disabled={busy === "kinds" || !kindsChanged} className="rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-40">{busy === "kinds" ? "กำลังบันทึก..." : "บันทึกรายการ"}</button>
+        </div>
       </section>
     </div>
   );

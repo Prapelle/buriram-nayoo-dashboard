@@ -20,7 +20,22 @@ export const CARD_COLUMNS = ["card_id", "card_code", "title", "stage", "stage_at
 export const MEMBER_COLUMNS = ["member_id", "card_id", "email", "display_name", "duty", "is_main", "created_at"];
 export const HISTORY_COLUMNS = ["log_id", "card_id", "from_stage", "to_stage", "actor", "at", "note"];
 /** ช่วงที่รอลูกค้า (รอบรีฟ / ตรวจบอร์ด / คอนเฟิร์มงาน) — ใครก็ได้ในการ์ดกดเริ่มรอ / ลูกค้าตอบแล้ว · ended_at ว่าง = ยังรออยู่ */
-export const WAIT_KINDS = ["รอบรีฟ", "ตรวจบอร์ด", "คอนเฟิร์มงาน", "อื่น ๆ"] as const;
+export const DEFAULT_WAIT_KINDS = ["รอบรีฟ", "ตรวจบอร์ด", "คอนเฟิร์มงาน", "อื่น ๆ"];
+export const WAIT_KINDS_KEY = "content_wait_kinds"; // APP_CONFIG: คั่นด้วย | — Super Admin แก้ได้ที่ ตั้งค่า → ตั้งเป้าประสิทธิภาพรายคน
+export const waitKindsOf = (config: Record<string, string>[]) => {
+  const v = config.find((r) => r.config_key === WAIT_KINDS_KEY)?.config_value;
+  const list = v ? v.split("|").map((x) => x.trim()).filter(Boolean) : [];
+  return list.length ? list : DEFAULT_WAIT_KINDS;
+};
+/** ตรวจรายการสิ่งที่รอจากลูกค้า: 1–12 รายการ · ยาว 1–40 ตัวอักษร · ไม่มี | · ไม่ซ้ำ */
+export function validateWaitKinds(raw: unknown): { ok: true; value: string[] } | { ok: false; error: string } {
+  if (!Array.isArray(raw)) return { ok: false, error: "รายการไม่ถูกต้อง" };
+  const list = raw.map((x) => String(x ?? "").trim().replace(/\s+/g, " ")).filter(Boolean);
+  if (list.length < 1 || list.length > 12) return { ok: false, error: "ต้องมี 1–12 รายการ" };
+  if (list.some((x) => x.length > 40 || x.includes("|"))) return { ok: false, error: "แต่ละรายการยาวไม่เกิน 40 ตัวอักษร และห้ามมีเครื่องหมาย |" };
+  if (new Set(list.map((x) => x.toLowerCase())).size !== list.length) return { ok: false, error: "มีรายการซ้ำกัน" };
+  return { ok: true, value: list };
+}
 export const WAIT_COLUMNS = ["wait_id", "card_id", "kind", "started_at", "started_by", "ended_at", "ended_by"];
 export const SETTING_COLUMNS = ["product", "content_count", "report_days", "updated_by", "updated_at"];
 

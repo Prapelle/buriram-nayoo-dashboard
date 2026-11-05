@@ -130,6 +130,18 @@ await t("รอลูกค้า: เฉพาะผู้ร่วมงาน
   await fails(CS.startWait(plain.card_id, kind, "ae@example.com"), "NOT_SALES");
   await CS.startWait(id, "คอนเฟิร์มงาน", "ae@example.com"); // ค้างไว้ → ลบการ์ดต้องลบแถวรอด้วย
 });
+await t("Super Admin แก้รายการสิ่งที่รอจากลูกค้าได้ · ตรวจรูปแบบ · ใช้กับการ์ดทันที", async () => {
+  const PS = await import("../src/lib/perf-service");
+  assert.deepEqual((await CS.getBoard()).waitKinds, C.DEFAULT_WAIT_KINDS);
+  await fails(PS.saveWaitKinds([], ADMIN), "VALIDATION"); await fails(PS.saveWaitKinds(["a", "A"], ADMIN), "VALIDATION"); await fails(PS.saveWaitKinds(["a|b"], ADMIN), "VALIDATION");
+  assert.deepEqual((await PS.saveWaitKinds([" รอรูปจริง ", "ตรวจบอร์ด", ""], ADMIN)).kinds, ["รอรูปจริง", "ตรวจบอร์ด"]);
+  assert.deepEqual((await CS.getBoard()).waitKinds, ["รอรูปจริง", "ตรวจบอร์ด"]);
+  assert.deepEqual((await PS.getPerfSettings()).waitKinds, ["รอรูปจริง", "ตรวจบอร์ด"]);
+  await CS.endWait(id, "ae@example.com"); // ปิดที่ค้างอยู่ก่อน
+  await fails(CS.startWait(id, "รอบรีฟ", "ae@example.com"), "VALIDATION"); // ไม่อยู่ในรายการใหม่แล้ว
+  await CS.startWait(id, "รอรูปจริง", "ae@example.com");
+  await PS.saveWaitKinds(["x1"], ADMIN); assert.equal((await (await import("../src/lib/sheets")).readTabs(["APP_CONFIG"])).APP_CONFIG.rows.filter((r: Record<string, string>) => r.config_key === "content_wait_kinds").length, 1); // อัปเดตแถวเดิม ไม่เพิ่ม
+});
 await t("ลบการ์ด: ลบผู้ร่วมงาน + ประวัติด้วย", async () => {
   await CS.deleteCard(id, ADMIN);
   assert.ok(!db.rows("CONTENT_CARDS").some((c) => c.card_id === id)); assert.equal(db.rows("CONTENT_MEMBERS").filter((m) => m.card_id === id).length, 0); assert.equal(db.rows("CONTENT_HISTORY").filter((h) => h.card_id === id).length, 0);

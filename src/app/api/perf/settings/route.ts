@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { migratingResponse } from "@/lib/http-errors";
 import { requireRole } from "@/lib/guard";
 import { PerfError } from "@/lib/perf";
-import { addHoliday, deleteHoliday, getPerfSettings, savePositions, saveTargets } from "@/lib/perf-service";
+import { addHoliday, deleteHoliday, getPerfSettings, savePositions, saveTargets, saveWaitKinds } from "@/lib/perf-service";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +21,7 @@ export async function GET(req: Request) {
   try { return NextResponse.json(await getPerfSettings(new URL(req.url).searchParams.get("month") ?? undefined)); } catch (e) { return fail(e); }
 }
 
-type Body = { action?: string; email?: string; positions?: unknown; month?: unknown; items?: { user_email: string; metric_key: string; value: unknown }[]; date?: unknown; name?: unknown };
+type Body = { action?: string; kinds?: unknown; email?: string; positions?: unknown; month?: unknown; items?: { user_email: string; metric_key: string; value: unknown }[]; date?: unknown; name?: unknown };
 export async function POST(req: Request) {
   const g = await requireRole(["super_admin"]);
   if (!g.ok) return g.res;
@@ -30,6 +30,7 @@ export async function POST(req: Request) {
     switch (b.action) {
       case "positions": return NextResponse.json(await savePositions(String(b.email ?? ""), b.positions, g.email));
       case "targets": return NextResponse.json(await saveTargets(b.month, b.items ?? [], g.email));
+      case "wait_kinds": return NextResponse.json(await saveWaitKinds(b.kinds, g.email));
       case "holiday_add": return NextResponse.json(await addHoliday(b.date, b.name, g.email));
       case "holiday_delete": return NextResponse.json(await deleteHoliday(b.date, g.email));
       default: return NextResponse.json({ error: "action ไม่ถูกต้อง", code: "BAD_REQUEST" }, { status: 400 });

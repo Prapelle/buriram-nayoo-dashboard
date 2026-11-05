@@ -6,12 +6,12 @@ import { BoardScroller, BoardTabs } from "@/components/Board";
 import { btn } from "@/components/PageHeader";
 import { thDate, thDateTime } from "@/lib/thdate";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CONTENT_TYPES, DUTIES, WAIT_KINDS, PROD_STAGES, REPORT_STAGES, SALES_GOALS, isReportStage } from "@/lib/content";
+import { CONTENT_TYPES, DUTIES, PROD_STAGES, REPORT_STAGES, SALES_GOALS, isReportStage } from "@/lib/content";
 
 type Member = { email: string; name: string; duty: string; is_main: boolean };
 type Wait = { open: { kind: string; since: string; days: number } | null; alert: boolean; prod_days: number; report_days: number; planned_eff: string; report_due_eff: string };
 type Card = Record<string, string> & { due: "none" | "upcoming" | "due" | "overdue"; members: Member[]; wait: Wait };
-type Board = { cards: Card[]; today: string; products: string[]; users: { email: string; name: string }[]; customers: { developer_id: string; name: string }[]; settings: { product: string; content_count: number; report_days: number }[] };
+type Board = { waitKinds: string[]; cards: Card[]; today: string; products: string[]; users: { email: string; name: string }[]; customers: { developer_id: string; name: string }[]; settings: { product: string; content_count: number; report_days: number }[] };
 type Metrics = { scope: "lifetime" | "daily" | "none"; as_of: string; permalink: string; views: number; reach: number; reactions: number; comments: number; shares: number; link_clicks: number; total_clicks: number };
 type Hist = { from_stage: string; to_stage: string; actor_name: string; at: string; note: string };
 
@@ -154,7 +154,7 @@ function CardDialog({ board, card, canDelete, onClose, onDone }: { board: Board;
   useEffect(() => { if (card) api(`/api/content/history?id=${card.card_id}`).then((j) => setHist(j.history)).catch(() => setHist([])); }, [card]);
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => { setF((p) => ({ ...p, [k]: v })); setErr((e) => ({ ...e, [k]: "" })); };
   const inReport = !!card && isReportStage(card.stage);
-  const [waitKind, setWaitKind] = useState<string>(WAIT_KINDS[0]);
+  const [waitKind, setWaitKind] = useState<string>(board.waitKinds[0] ?? "");
   const isMember = !!card && card.members.length > 0; // ปุ่มใช้ได้เสมอ — server ตรวจว่าเป็นผู้ร่วมงานจริง และตอบเหตุผลกลับมา
   async function waitAct(start: boolean) {
     if (!card) return; setSaving(true); setTop("");
@@ -212,7 +212,7 @@ function CardDialog({ board, card, canDelete, onClose, onDone }: { board: Board;
                 </div>
               ) : (
                 <div className="flex flex-wrap items-center gap-2">
-                  <select aria-label="รออะไรจากลูกค้า" value={waitKind} onChange={(e) => setWaitKind(e.target.value)} className={`${inp} !w-auto`}>{WAIT_KINDS.map((k) => <option key={k}>{k}</option>)}</select>
+                  <select aria-label="รออะไรจากลูกค้า" value={waitKind} onChange={(e) => setWaitKind(e.target.value)} className={`${inp} !w-auto`}>{board.waitKinds.map((k) => <option key={k}>{k}</option>)}</select>
                   <button type="button" disabled={saving || !isMember} onClick={() => void waitAct(true)} className={btn.secondary}>เริ่มรอลูกค้า</button>
                 </div>)}
               {(card.wait.prod_days > 0 || card.wait.report_days > 0) && <p className="text-xs text-slate-600">รอมาแล้ว: ช่วงผลิต {card.wait.prod_days} วัน · ช่วงรายงาน {card.wait.report_days} วัน{card.wait.planned_eff && card.wait.planned_eff !== card.planned_date && ` · วันลงใหม่ ${dmy(card.wait.planned_eff)}`}{card.wait.report_due_eff && card.wait.report_due_eff !== card.report_due_date && ` · รายงานครบกำหนดใหม่ ${dmy(card.wait.report_due_eff)}`}</p>}

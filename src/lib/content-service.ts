@@ -5,7 +5,7 @@
 import { writeAudit } from "./audit";
 import { getD1 } from "./d1";
 import { workdaysBetween, waitSummary, type WaitRow } from "./workdays";
-import { addDays, CARD_COLUMNS, WAIT_COLUMNS, WAIT_KINDS, HISTORY_COLUMNS, isStage, isTrue, MEMBER_COLUMNS, nextCardCode, planMove, reportDue, SETTING_COLUMNS, S_FIRST, validateCard, STAGES, type Rec } from "./content";
+import { addDays, CARD_COLUMNS, WAIT_COLUMNS, waitKindsOf, HISTORY_COLUMNS, isStage, isTrue, MEMBER_COLUMNS, nextCardCode, planMove, reportDue, SETTING_COLUMNS, S_FIRST, validateCard, STAGES, type Rec } from "./content";
 import { todayBkk } from "./developers";
 import { productTypesOf } from "./developers-service";
 import { normRole } from "./roles";
@@ -50,7 +50,7 @@ export async function getBoard() {
   }));
   const products = productTypesOf(t.APP_CONFIG.rows);
   return {
-    cards, stages: STAGES, today, products,
+    cards, stages: STAGES, today, products, waitKinds: waitKindsOf(t.APP_CONFIG.rows),
     users: activeUsers(t).map((u) => ({ email: u.email.toLowerCase(), name: nameOf(u) })).sort((a, b) => a.name.localeCompare(b.name, "th")),
     customers: t.DEVELOPERS.rows.filter((d) => d.developer_id).map((d) => ({ developer_id: d.developer_id, name: d.company_name || d.project_main || d.dev_code })),
     settings: products.map((p) => { const s = settingOf(t, p); return { product: p, content_count: Number(s?.content_count || 0), report_days: Number(s?.report_days || 0) }; }),
@@ -148,8 +148,8 @@ async function waitGuard(t: Record<string, Tab>, id: string, actor: string) {
 }
 export async function startWait(id: string, kindRaw: unknown, actor: string) {
   const kind = String(kindRaw ?? "").trim();
-  if (!(WAIT_KINDS as readonly string[]).includes(kind)) throw new ContentError(422, "เลือกว่ารออะไรจากลูกค้า", "VALIDATION", { fields: { kind: "เลือกว่ารออะไรจากลูกค้า" } });
   const t = await load(), c = await waitGuard(t, id, actor);
+  if (!waitKindsOf(t.APP_CONFIG.rows).includes(kind)) throw new ContentError(422, "เลือกว่ารออะไรจากลูกค้า", "VALIDATION", { fields: { kind: "เลือกว่ารออะไรจากลูกค้า" } });
   if (t.CONTENT_WAITS.rows.some((w) => w.card_id === id && !w.ended_at)) throw new ContentError(409, "การ์ดนี้กำลังรอลูกค้าอยู่แล้ว — กด “ลูกค้าตอบแล้ว” ก่อน", "ALREADY_WAITING");
   await appendRows("CONTENT_WAITS", [toRow(WAIT_COLUMNS, { wait_id: crypto.randomUUID(), card_id: id, kind, started_at: new Date().toISOString(), started_by: actor, ended_at: "", ended_by: "" })]);
   await writeAudit(actor, "content_wait_start", "content_card", id, `${c.card_code} รอลูกค้า: ${kind}`);

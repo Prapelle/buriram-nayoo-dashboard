@@ -9,6 +9,7 @@ import {
   LEAD_LOG_COLUMNS, METRICS, parsePositions, PerfError, POSITIONS, POSITION_KEYS, STAFF_ROLES, staffNameOf, validateHoliday, validateMonth, validateTarget,
   type LeadStatusChange, type TargetInput,
 } from "./perf";
+import { validateWaitKinds, waitKindsOf, WAIT_KINDS_KEY } from "./content";
 import { buildReport, computeMonth, type DevData } from "./perf-calc";
 import { listDevelopers } from "./developers-service";
 import { normRole } from "./roles";
@@ -33,7 +34,7 @@ const monthNowBkk = () => new Date(Date.now() + 7 * 3600_000).toISOString().slic
 
 async function load(): Promise<Record<string, Tab>> {
   try {
-    const t = await readTabs([POS, TGT, HOL, "APP_USERS"]);
+    const t = await readTabs([POS, TGT, HOL, "APP_USERS", "APP_CONFIG"]);
     if (!t[POS]?.headers.includes("user_email") || !t[TGT]?.headers.includes("metric_key") || !t[HOL]?.headers.includes("holiday_date") || !t.APP_USERS?.headers.includes("email")) throw new Error("missing");
     return t;
   } catch { throw new PerfError(409, "ฐานข้อมูล D1 ยังไม่พร้อม — ตารางประสิทธิภาพรายคนอยู่บน D1 (ตรวจว่าผูก binding DB แล้ว)", "DB_NOT_READY"); }
@@ -52,7 +53,20 @@ export async function getPerfSettings(monthRaw?: string) {
   const duplicateNames = [...count].filter(([, n]) => n > 1).map(([name]) => name);
   const targets = t[TGT].rows.filter((r) => r.month === month && r.metric_key && r.target_value !== "").map((r) => ({ user_email: norm(r.user_email), metric_key: r.metric_key, value: Number(r.target_value) }));
   const holidays = t[HOL].rows.filter((r) => r.holiday_date).map((r) => ({ date: r.holiday_date, name: r.name })).sort((a, b) => b.date.localeCompare(a.date));
-  return { month, positions: POSITIONS, metrics: METRICS, users, targets, holidays, duplicateNames };
+  return { month, positions: POSITIONS, metrics: METRICS, users, targets, holidays, duplicateNames, waitKinds: waitKindsOf(t.APP_CONFIG?.rows ?? []) };
+}
+
+/** แก้รายการสิ่งที่รอจากลูกค้า (Super Admin) — รายการเก่าที่เคยใช้แล้วยังอยู่ในประวัติ ไม่กระทบวันที่ที่นับไปแล้ว */
+export async function saveWaitKinds(raw: unknown, actor: string) {
+  const v = validateWaitKinds(raw);
+  if (!v.ok) throw new PerfError(422, v.error, "VALIDATION", { kinds: v.error });
+  const t = await load(), rows = t.APP_CONFIG?.rows ?? [], headers = t.APP_CONFIG?.headers ?? [];
+  const i = rows.findIndex((r) => r.config_key === WAIT_KINDS_KEY);
+  const row = { config_key: WAIT_KINDS_KEY, config_value: v.value.join("|"), description: "สิ่งที่รอจากลูกค้าในการ์ด Content (คั่นด้วย |)", updated_at: new Date().toISOString() };
+  if (i >= 0) await batchUpdateValues([{ range: `'APP_CONFIG'!A${i + 2}:${colLetter(headers.length - 1)}${i + 2}`, values: [toRow(headers, row)] }]);
+  else await appendRows("APP_CONFIG", [toRow(headers, row)]);
+  await writeAudit(actor, "content_wait_kinds", "config", WAIT_KINDS_KEY, v.value.join(" | "));
+  return { kinds: v.value };
 }
 
 export async function savePositions(emailRaw: string, positions: unknown, actor: string) {
