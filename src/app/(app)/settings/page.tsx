@@ -1,7 +1,6 @@
 import { requirePage } from "@/lib/page-guard";
 import { HealthCheck } from "@/components/HealthCheck";
 import { UsersManager } from "@/components/UsersManager";
-import { BackupGuide } from "@/components/BackupGuide";
 
 export default async function SettingsPage() {
   await requirePage("/settings");
@@ -12,11 +11,6 @@ export default async function SettingsPage() {
         <h2 className="mb-1 font-semibold">สมาชิกและสิทธิ์</h2>
         <p className="mb-4 text-sm text-slate-600">เพิ่มสมาชิกด้วยอีเมล Google แล้วเลือก Role · ข้อมูลเก็บในแท็บ APP_USERS ของ Google Sheet</p>
         <UsersManager />
-      </div>
-      <div className="rounded-xl border border-slate-200 bg-white p-5">
-        <h2 className="mb-1 font-semibold">สำรองข้อมูล</h2>
-        <p className="mb-4 text-sm text-slate-600">วิธีสำรอง / กู้คืนข้อมูลบน Cloudflare D1</p>
-        <BackupGuide />
       </div>
       <div className="rounded-xl border border-slate-200 bg-white p-5">
         <h2 className="mb-1 font-semibold">ตรวจสอบระบบ</h2>
