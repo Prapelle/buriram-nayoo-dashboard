@@ -6,13 +6,24 @@ import { install, tabs } from "./integration/fake-sheets.mjs";
 const { privateKey } = generateKeyPairSync("rsa", { modulusLength: 2048, privateKeyEncoding: { type: "pkcs8", format: "pem" }, publicKeyEncoding: { type: "spki", format: "pem" } });
 Object.assign(process.env, { GOOGLE_SHEET_ID: "SHEET", GOOGLE_SERVICE_ACCOUNT_EMAIL: "sa@x.iam.gserviceaccount.com", GOOGLE_PRIVATE_KEY: privateKey, INITIAL_ADMIN_EMAIL: "admin@example.com" });
 install("SHEET");
+// D1_MODE=1: รันชุดเทสต์เดียวกันโดยให้กลุ่ม core ใช้ D1 จำลอง (Sheets จำลองต้องไม่ถูกเขียนเลย) — ใช้ตรวจว่าย้ายแล้วพฤติกรรมไม่เปลี่ยน
+const D1MODE = process.env.D1_MODE === "1";
+let d1: { rows: (t: string) => Record<string, string>[]; raw: { exec: (s: string) => void; prepare: (s: string) => { run: (...a: unknown[]) => unknown } } } | null = null;
+if (D1MODE) {
+  const { makeD1 } = await import("./integration/fake-d1.mjs");
+  const D = await import("../src/lib/d1");
+  const { TABS } = await import("../src/lib/schema");
+  d1 = makeD1(); D.setD1ForTest(d1 as never);
+  await D.ensureSchema(d1 as never, TABS.map((x) => ({ name: x.name, headers: x.headers })));
+  await D.metaSet(d1 as never, "active_groups", JSON.stringify(["core"]));
+}
 const { initializeSpreadsheet } = await import("../src/lib/init-sheet");
 const { saveDeveloper, addProductType } = await import("../src/lib/developers-service");
 const A = await import("../src/lib/account-service");
 const { todayBkk } = await import("../src/lib/developers");
 
 const t = async (name: string, fn: () => Promise<void>) => { await fn(); console.log("  ✓", name); };
-const rows = (tab: string) => { const r = tabs.get(tab)!.rows as string[][]; const h = r[0]; return r.slice(1).map((x) => Object.fromEntries(h.map((k, i) => [k, x[i] ?? ""])) as Record<string, string>); };
+const rows = (tab: string) => { if (d1) return d1.rows(tab); const r = tabs.get(tab)!.rows as string[][]; const h = r[0]; return r.slice(1).map((x) => Object.fromEntries(h.map((k, i) => [k, x[i] ?? ""])) as Record<string, string>); };
 const fails = async (p: Promise<unknown>, code: string) => { try { await p; } catch (e) { assert.ok(e instanceof A.AccError, String(e)); assert.equal((e as InstanceType<typeof A.AccError>).code, code); return; } assert.fail("ควรผิดพลาด " + code); };
 const ADMIN = "admin@example.com", today = todayBkk();
 
@@ -111,7 +122,7 @@ await t("หัก ณ ที่จ่าย 3%: ยอดที่ต้อง�
 await t("ลูกค้าถูกลบก่อนเริ่มงาน → เริ่มงานไม่ได้ (CUSTOMER_GONE) และไม่สร้าง Product/Job", async () => {
   const q5 = (await A.saveDoc(form({ customer_id: dev2.developer_id }), ADMIN)).doc;
   await payNow(q5.doc_id, { amount: 100, paid_at: today, method: "เงินสด", updated_at_seen: q5.updated_at }, ADMIN);
-  const dt = tabs.get("DEVELOPERS")!.rows as string[][]; const idCol = dt[0].indexOf("developer_id"); const k = dt.findIndex((r, i) => i > 0 && r[idCol] === dev2.developer_id); dt.splice(k, 1);
+  if (d1) d1.raw.prepare(`DELETE FROM "DEVELOPERS" WHERE developer_id = ?`).run(dev2.developer_id); else { const dt = tabs.get("DEVELOPERS")!.rows as string[][]; const idCol = dt[0].indexOf("developer_id"); const k = dt.findIndex((r, i) => i > 0 && r[idCol] === dev2.developer_id); dt.splice(k, 1); }
   const before = rows("PRODUCTION_JOBS").length; await fails(A.startWork(q5.doc_id, ADMIN), "CUSTOMER_GONE"); assert.equal(rows("PRODUCTION_JOBS").length, before);
 });
 await t("Job: เปลี่ยนสถานะ · ติ๊กเช็กลิสต์ (ตัดค่านอกช่วง) · ข้อมูลเก่า → STALE", async () => {

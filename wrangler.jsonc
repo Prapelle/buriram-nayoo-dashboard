@@ -8,6 +8,8 @@
   "observability": { "enabled": true, "head_sampling_rate": 1 },
   // ที่เก็บไฟล์แนบของระบบบัญชี (Cloudflare KV แผนฟรี ไม่ต้องผูกบัตร) — namespace: nayoo-account-files
   "kv_namespaces": [{ "binding": "ACC_FILES", "id": "acd34b4ff9084821b7604a181deb5762" }],
+  // ฐานข้อมูลหลัก Cloudflare D1 (ชื่อ nayoo-db) — ตารางสร้าง/ย้ายข้อมูลจากหน้า ตั้งค่า → ฐานข้อมูล D1 (Super Admin)
+  "d1_databases": [{ "binding": "DB", "database_name": "nayoo-db", "database_id": "450e7217-8998-4d59-9fcf-da19d336019e" }],
   "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
   // ค่าที่ไม่ลับ ตั้งตรงนี้ได้; ค่าลับ (AUTH_SECRET, AUTH_GOOGLE_SECRET, GOOGLE_PRIVATE_KEY) ใช้ `wrangler secret put`
   "vars": {
