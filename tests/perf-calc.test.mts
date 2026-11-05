@@ -122,6 +122,17 @@ await t("waitSummary: รอที่คาบเกี่ยววันเผ�
   const open = W.waitSummary(card, [{ card_id: "k", kind: "x", started_day: "2026-11-09", ended_day: "" }], "2026-11-16", none);
   assert.equal(open.prod, 3); assert.equal(open.report, 3); assert.equal(open.open?.days, 6); // ป้ายบนการ์ดนับรวมทั้งช่วง
 });
+await t("waitSummary: ช่วงรอซ้อนกัน (กดพร้อมกัน) ไม่นับซ้ำ", () => {
+  const card = { planned_date: "2026-11-10" };
+  const s = W.waitSummary(card, [{ card_id: "k", kind: "a", started_day: "2026-11-02", ended_day: "" }, { card_id: "k", kind: "a", started_day: "2026-11-02", ended_day: "" }], "2026-11-05", none);
+  assert.equal(s.prod, 3); // จ. อ. พ. = 3 ไม่ใช่ 6
+});
+await t("Production: ย้ายกลับมา PUBLISHED จากช่วงรายงาน (แก้ไข) ไม่นับเป็นงานเสร็จซ้ำ", () => {
+  const x = C.computeMonth({ month: M, users, leadLogs: [], developers: { devs: [], products: [], logs: [], contacts: [] }, homeBuilders: { devs: [], products: [], logs: [], contacts: [] },
+    cards: [{ card_id: "z1", planned_date: "" }], members: [mem("z1", "c@x.com")],
+    history: [{ card_id: "z1", from_stage: "รายงานเสร็จแล้ว", to_stage: "PUBLISHED", at: "2026-11-08T05:00:00.000Z" }] });
+  assert.equal(x.actuals["c@x.com"]["production.done"], 0);
+});
 await t("Production: วันที่รอลูกค้าเลื่อนวันลง (เลยวันลงแต่รอลูกค้า = ยังทัน) · รายงานส่งทันเวลา · ทุกคนได้เต็ม", () => {
   const cards = [
     { card_id: "w1", planned_date: "2026-11-10", stage: "PUBLISHED" },   // เผยแพร่ 11-12 แต่รอลูกค้า 2 วันทำการ → due 11-12 → ทัน

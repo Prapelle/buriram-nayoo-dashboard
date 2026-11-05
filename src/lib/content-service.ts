@@ -157,10 +157,10 @@ export async function startWait(id: string, kindRaw: unknown, actor: string) {
 }
 export async function endWait(id: string, actor: string) {
   const t = await load(), c = await waitGuard(t, id, actor);
-  const i = t.CONTENT_WAITS.rows.findIndex((w) => w.card_id === id && !w.ended_at);
-  if (i < 0) throw new ContentError(409, "การ์ดนี้ไม่ได้รอลูกค้าอยู่", "NOT_WAITING");
-  const w = t.CONTENT_WAITS.rows[i], now = new Date().toISOString();
-  await batchUpdateValues([{ range: rowRange("CONTENT_WAITS", t.CONTENT_WAITS.headers, i + 2), values: [toRow(t.CONTENT_WAITS.headers, { ...w, ended_at: now, ended_by: actor })] }]);
+  const open = t.CONTENT_WAITS.rows.map((w, i) => ({ w, i })).filter((x) => x.w.card_id === id && !x.w.ended_at); // ปกติมีแถวเดียว · กดพร้อมกันอาจได้สองแถว → ปิดทั้งหมด
+  if (!open.length) throw new ContentError(409, "การ์ดนี้ไม่ได้รอลูกค้าอยู่", "NOT_WAITING");
+  const w = open[0].w, now = new Date().toISOString();
+  await batchUpdateValues(open.map((x) => ({ range: rowRange("CONTENT_WAITS", t.CONTENT_WAITS.headers, x.i + 2), values: [toRow(t.CONTENT_WAITS.headers, { ...x.w, ended_at: now, ended_by: actor })] })));
   const days = workdaysBetween(dayOf(w.started_at), dayOf(now), holidaysOf(t));
   await writeAudit(actor, "content_wait_end", "content_card", id, `${c.card_code} ลูกค้าตอบ: ${w.kind} (${days} วันทำการ)`);
   return { ok: true, days };

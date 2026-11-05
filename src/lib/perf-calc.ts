@@ -7,6 +7,7 @@
  * คนที่ได้ผลงาน = Staff ของ Lead / Developer (จับคู่กับ "ชื่อที่แสดง" ของผู้ใช้) · Lead ที่ไม่มี Staff ให้คนที่กดย้าย
  */
 import { bkkDay, monthlyReport, type Dev, type DevProduct } from "./developers";
+import { REPORT_STAGES } from "./content";
 import { addWorkdays, waitSummary, type WaitRow } from "./workdays";
 import { METRICS, metricsOf, positionLabel, type Metric } from "./perf";
 
@@ -76,7 +77,7 @@ export function computeMonth(inp: CalcInput): CalcResult {
 
   // ── Production (บอร์ด Content) ──
   const pubDay = new Map<string, string>(); // card_id → วันที่ย้ายถึง PUBLISHED ครั้งล่าสุดในเดือนนี้
-  for (const h of inp.history) if (h.card_id && h.to_stage === "PUBLISHED" && inMonth(h.at, month)) { const d = bkkDay(h.at); if (d > (pubDay.get(h.card_id) ?? "")) pubDay.set(h.card_id, d); }
+  for (const h of inp.history) if (h.card_id && h.to_stage === "PUBLISHED" && !(REPORT_STAGES as readonly string[]).includes(h.from_stage) && inMonth(h.at, month)) { const d = bkkDay(h.at); if (d > (pubDay.get(h.card_id) ?? "")) pubDay.set(h.card_id, d); }
   const membersOf = new Map<string, string[]>();
   for (const m of inp.members) if (m.card_id && m.email) (membersOf.get(m.card_id) ?? membersOf.set(m.card_id, []).get(m.card_id)!).push(lc(m.email));
   const hol = new Set(inp.holidays ?? []), today = inp.today ?? bkkDay(new Date().toISOString());

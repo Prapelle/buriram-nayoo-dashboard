@@ -28,12 +28,15 @@ export type WaitRow = { card_id: string; kind: string; started_day: string; ende
 /** รวมวันทำการที่รอลูกค้าของการ์ดหนึ่งใบ แยกช่วงผลิต (เริ่มรอก่อนเผยแพร่) กับช่วงรายงาน (เริ่มรอตั้งแต่วันเผยแพร่) */
 export function waitSummary(card: { published_at?: string; planned_date?: string; report_due_date?: string }, waits: WaitRow[], today: string, holidays: ReadonlySet<string>) {
   let prod = 0, report = 0, open: { kind: string; since: string; days: number } | null = null;
-  for (const w of waits) {
+  let covered = ""; // วันที่นับไปแล้วถึงไหน — ถ้าเผลอมีช่วงรอซ้อนกัน (กดพร้อมกัน) ไม่นับซ้ำ
+  for (const w0 of [...waits].sort((a, b) => a.started_day.localeCompare(b.started_day))) {
+    const w = { ...w0, started_day: w0.started_day < covered ? covered : w0.started_day };
     const end = w.ended_day || today, pub = card.published_at;
+    if (end > covered) covered = end;
     // รอที่คาบเกี่ยววันเผยแพร่: ก่อนเผยแพร่นับเป็นช่วงผลิต · ตั้งแต่วันเผยแพร่นับเป็นช่วงรายงาน (กันวันรอหลังเผยแพร่ไปเลื่อนวันลงจนงานที่ช้าดูเหมือนทัน)
     if (pub && end > pub) { prod += workdaysBetween(w.started_day, pub, holidays); report += workdaysBetween(w.started_day > pub ? w.started_day : pub, end, holidays); }
     else prod += workdaysBetween(w.started_day, end, holidays);
-    if (!w.ended_day) open = { kind: w.kind, since: w.started_day, days: workdaysBetween(w.started_day, today, holidays) };
+    if (!w.ended_day) open = { kind: w.kind, since: w0.started_day, days: workdaysBetween(w0.started_day, today, holidays) };
   }
   return {
     prod, report, open, alert: !!open && open.days > WAIT_ALERT_DAYS,
