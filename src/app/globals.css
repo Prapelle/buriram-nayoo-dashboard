@@ -49,3 +49,9 @@ table:not([data-nosort]) > thead > tr:last-child > th:not(:empty):not(:has(a, bu
 table:not([data-nosort]) > thead > tr:last-child > th[aria-sort="ascending"]:not(:empty):not(:has(a, button, input, select))::after { content: "▲"; opacity: 0.9; }
 table:not([data-nosort]) > thead > tr:last-child > th[aria-sort="descending"]:not(:empty):not(:has(a, button, input, select))::after { content: "▼"; opacity: 0.9; }
 th[data-sortable]:focus-visible { outline: 2px solid var(--color-brand-500); outline-offset: -2px; }
+
+/* พิมพ์ / บันทึก PDF (รายงานลูกค้า): ซ่อนแถบบนและเมนูข้าง เหลือเนื้อหาเต็มหน้า */
+@media print {
+  body > div header, #side-menu, nav[aria-label="เมนูลัด"] { display: none !important; }
+  main { padding: 0 !important; }
+}

@@ -134,4 +134,19 @@ await t("Facebook: คล้ายข้อความ + จับคู่เ�
   assert.equal((await F.matchFacebookPosts(ADMIN)).matched, 0); // ไม่จับซ้ำ
   const mx = await F.metricsForPost("P1"); assert.ok(mx); assert.equal(mx.scope, "daily"); assert.equal(mx.reach, 150); assert.equal(mx.reactions, 8); assert.equal(mx.permalink, "https://fb/p1");
 });
+await t("รายงานลูกค้า: รวมเฉพาะงานขายที่เผยแพร่ + ตัวเลขโพสต์ · บันทึกเสร็จ/ส่งแล้ว", async () => {
+  const R = await CS.saveCard({ title: "รายงานทดสอบ", sales_tag: true, follow_days: "7", developer_id: dev.developer_id, post_id: "P1" }, ADMIN);
+  for (const s of ["CONTENT PLANS", "REVIEW", "SCHEDULED", "PUBLISHED"]) await CS.moveCard(R.card_id, s, ADMIN);
+  await CS.saveCard({ title: "ไม่ใช่งานขาย", developer_id: dev.developer_id }, ADMIN);
+  await fails(CS.getReport("", "", "", false), "VALIDATION"); await fails(CS.getReport(dev.developer_id, "2026-13-01", "", false), "VALIDATION");
+  const rep = await CS.getReport(dev.developer_id, today, today, false);
+  assert.deepEqual(rep.rows.map((r) => r.card_id), [R.card_id].filter((x) => rep.rows.some((r) => r.card_id === x))); // เฉพาะงานขายที่เผยแพร่
+  assert.ok(rep.rows.every((r) => r.published_at === today)); const mine = rep.rows.find((r) => r.card_id === R.card_id)!;
+  assert.equal(mine.metrics?.reach, 150); assert.equal(rep.totals.reach, rep.rows.reduce((s, r) => s + (r.metrics?.reach ?? 0), 0));
+  await fails(CS.markReports([R.card_id], "REVIEW", "", ADMIN), "VALIDATION"); await fails(CS.markReports([R.card_id], "ส่งให้ลูกค้าแล้ว", "ftp://x", ADMIN), "VALIDATION");
+  const r = await CS.markReports([R.card_id, "ghost"], "ส่งให้ลูกค้าแล้ว", "https://drive.google.com/x", ADMIN); assert.equal(r.done, 1); assert.equal(r.skipped.length, 1);
+  const c = db.rows("CONTENT_CARDS").find((x) => x.card_id === R.card_id)!; assert.equal(c.stage, "ส่งให้ลูกค้าแล้ว"); assert.equal(c.report_link, "https://drive.google.com/x"); assert.equal(c.report_sent_at, today);
+  assert.equal((await CS.getReport(dev.developer_id, today, today, false)).rows.some((x) => x.card_id === R.card_id), false); // ส่งแล้วไม่รวมโดยปริยาย
+  assert.equal((await CS.getReport(dev.developer_id, today, today, true)).rows.some((x) => x.card_id === R.card_id), true);
+});
 console.log("content: ผ่านทั้งหมด");

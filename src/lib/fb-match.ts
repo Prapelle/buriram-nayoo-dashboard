@@ -83,10 +83,23 @@ const N = (v: string | undefined) => Number(v) || 0;
 
 /** ตัวเลขโพสต์: ใช้แถว lifetime ล่าสุด ถ้าไม่มีรวมแถวรายวัน (reach รายวันรวมข้ามวันอาจนับคนซ้ำ — เป็นค่าประมาณ) */
 export async function metricsForPost(postId: string): Promise<PostMetrics | null> {
-  const h = await header(); if (!postId || !h.includes("post_id")) return null;
-  const ids = (await batchGet([`'${TAB}'!${colLetter(h.indexOf("post_id"))}:${colLetter(h.indexOf("post_id"))}`]))[0];
-  const rowNos = ids.map((r, i) => (i > 0 && String(r?.[0] ?? "") === postId ? i + 1 : 0)).filter(Boolean);
-  if (!rowNos.length) return null;
+  if (!postId) return null;
+  return (await metricsForPosts([postId])).get(postId) ?? null;
+}
+
+/** หลาย Post ID ในครั้งเดียว (อ่านคอลัมน์ post_id ครั้งเดียว แล้วอ่านเฉพาะแถวที่เกี่ยว) */
+export async function metricsForPosts(postIds: string[]): Promise<Map<string, PostMetrics>> {
+  const out = new Map<string, PostMetrics>(); const want0 = new Set(postIds.filter(Boolean));
+  const h = await header(); if (!want0.size || !h.includes("post_id")) return out;
+  const c = colLetter(h.indexOf("post_id"));
+  const ids = (await batchGet([`'${TAB}'!${c}:${c}`]))[0];
+  const byPost = new Map<string, number[]>();
+  ids.forEach((r, i) => { const id = String(r?.[0] ?? ""); if (i > 0 && want0.has(id)) (byPost.get(id) ?? byPost.set(id, []).get(id)!).push(i + 1); });
+  for (const [id, rowNos] of byPost) { const m = await oneMetrics(h, id, rowNos); if (m) out.set(id, m); }
+  return out;
+}
+
+async function oneMetrics(h: string[], postId: string, rowNos: number[]): Promise<PostMetrics | null> {
   const want = ["metric_date", "metric_scope", "publish_time", "permalink", "views", "reach", "reactions", "comments", "shares", "link_clicks", "total_clicks"].filter((k) => h.includes(k));
   const data = await batchGet(rowNos.map((n) => `'${TAB}'!A${n}:${colLetter(h.length - 1)}${n}`));
   const rows = data.map((d) => Object.fromEntries(want.map((k) => [k, String(d[0]?.[h.indexOf(k)] ?? "")])));
