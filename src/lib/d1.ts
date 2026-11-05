@@ -88,6 +88,37 @@ export async function getRange(db: D1Like, range: string): Promise<string[][]> {
   return out;
 }
 
+/**
+ * อ่านหลาย range พร้อมกัน: range ที่เป็น "ทั้งคอลัมน์/ทั้งแท็บ" ของตารางเดียวกันรวมเป็น SELECT เดียว (สแกนตารางครั้งเดียว)
+ * — Dashboard อ่านเป็นร้อย range ต่อคำขอ ถ้าแยกคำสั่งทีละคอลัมน์ ตารางใหญ่จะถูกสแกนซ้ำร้อยรอบ (ช้าและเสียโควตาอ่านแถว)
+ * ผลลัพธ์ตรงตัวกับ getRange ทีละอัน · range แบบอื่น (แถวเดียว/ช่วงแถว) ยังอ่านแยกตามเดิม
+ */
+export async function getRanges(db: D1Like, ranges: string[]): Promise<string[][][]> {
+  const out: string[][][] = new Array(ranges.length);
+  const parsed = ranges.map(parseRange);
+  const groups = new Map<string, number[]>();
+  parsed.forEach((g, i) => { if (g.r2 === Infinity && g.r1 <= 2) (groups.get(g.tab) ?? groups.set(g.tab, []).get(g.tab)!).push(i); });
+  await Promise.all([...groups].map(async ([tab, idx]) => {
+    if (idx.length < 2) return;
+    const hdr = await mustHeaders(db, tab);
+    const want = new Set<number>();
+    for (const i of idx) { const g = parsed[i]; for (let c = g.c1; c <= Math.min(g.c2, hdr.length - 1); c++) want.add(c); }
+    const cols = [...want].sort((a, b) => a - b);
+    const rows = cols.length ? (await db.prepare(`SELECT ${cols.map((c) => q(hdr[c])).join(",")} FROM ${tabName(tab)} ORDER BY _id`).all<Record<string, unknown>>()).results : [];
+    for (const i of idx) {
+      const g = parsed[i], hi = Math.min(g.c2, hdr.length - 1);
+      const names = hi >= g.c1 ? hdr.slice(g.c1, hi + 1) : [];
+      const res: string[][] = [];
+      if (g.r1 <= 1) res.push(names.slice());
+      if (names.length) for (const r of rows) res.push(names.map((n) => str(r[n])));
+      out[i] = res;
+    }
+  })); // ตารางต่างกันอ่านขนานกัน
+  const left = ranges.map((_, i) => i).filter((i) => !out[i]);
+  await Promise.all(left.map(async (i) => { out[i] = await getRange(db, ranges[i]); }));
+  return out;
+}
+
 async function idsAt(db: D1Like, tab: string, firstRow: number, count: number): Promise<number[]> {
   if (firstRow < 2) throw new Error("แถวที่ 1 คือ header ของตาราง ไม่ใช่ข้อมูล");
   const r = await db.prepare(`SELECT _id FROM ${tabName(tab)} ORDER BY _id LIMIT ? OFFSET ?`).bind(count, firstRow - 2).all<{ _id: number }>();

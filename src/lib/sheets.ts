@@ -47,11 +47,9 @@ export async function batchGet(ranges: string[]): Promise<string[][][]> {
   const { db, tabs } = await route();
   if (!tabs.size) return G.batchGet(ranges);
   const out: string[][][] = new Array(ranges.length);
-  const rest: number[] = [];
-  for (let i = 0; i < ranges.length; i++) {
-    if (tabs.has(tabOf(ranges[i]))) out[i] = await D.getRange(db!, ranges[i]);
-    else rest.push(i);
-  }
+  const rest: number[] = [], mine: number[] = [];
+  for (let i = 0; i < ranges.length; i++) (tabs.has(tabOf(ranges[i])) ? mine : rest).push(i);
+  if (mine.length) (await D.getRanges(db!, mine.map((i) => ranges[i]))).forEach((v, k) => { out[mine[k]] = v; });
   if (rest.length) (await G.batchGet(rest.map((i) => ranges[i]))).forEach((v, k) => { out[rest[k]] = v; });
   return out;
 }
