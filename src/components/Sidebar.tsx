@@ -70,7 +70,7 @@ export function AppShell({ items: allItems, systems, email, role, signOutAction,
   }, [mobileOpen]);
   // ตัวเลขบนเมนู: หน้าอื่นโหลดใหม่ไม่เกินทุก 1 นาที (เก็บไว้ในแท็บนี้) — ทุก Role ที่เห็น Lead
   useEffect(() => {
-    if (role === "marketing" || role === "production") return;
+    if (role === "marketing") return;
     let cached: { at: number; v: Record<string, number> } | null = null;
     try { cached = JSON.parse(window.sessionStorage.getItem(BADGE_KEY) ?? "null"); } catch { /* ไม่มีค่าเก็บ */ }
     if (cached?.v) setBadges(cached.v);

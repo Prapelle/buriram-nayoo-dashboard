@@ -3,6 +3,7 @@ export type TabDef = { name: string; group: "system" | "marketing" | "manual"; h
 import { SPECS, headersFromSpec } from "./import/specs";
 import { SALES_LOG_COLUMNS, SALES_TX_COLUMNS } from "./sales/model";
 import { DEV_COLUMNS, LOG_COLUMNS, CONTACT_COLUMNS, PRODUCT_COLUMNS } from "./developers";
+import { DOC_COLUMNS, LINE_COLUMNS, PAYMENT_COLUMNS, FILE_COLUMNS, JOB_COLUMNS, CUSTOMER_COLUMNS } from "./account";
 
 // แท็บ Google Ads รายละเอียดสร้างจาก spec เดียวกับตัว Import เพื่อให้คอลัมน์ตรงกันเสมอ
 const gads = (id: string): TabDef => {
@@ -27,6 +28,13 @@ export const TABS: TabDef[] = [
   // Developer (ลูกค้าโครงการหมู่บ้านที่ซื้อโฆษณา) — เพิ่ม 31/10/2026
   { name: "DEVELOPERS", group: "manual", headers: DEV_COLUMNS },
   { name: "DEVELOPER_PRODUCTS", group: "manual", headers: PRODUCT_COLUMNS },
+  // ระบบบัญชี + Production (5/11/2026) — แท็บใหม่ทั้งหมด ไม่แตะแท็บเดิม
+  { name: "ACC_DOCS", group: "manual", headers: DOC_COLUMNS },
+  { name: "ACC_LINES", group: "manual", headers: LINE_COLUMNS },
+  { name: "ACC_PAYMENTS", group: "manual", headers: PAYMENT_COLUMNS },
+  { name: "ACC_FILES", group: "manual", headers: FILE_COLUMNS },
+  { name: "ACC_CUSTOMERS", group: "manual", headers: CUSTOMER_COLUMNS }, // ผู้ติดต่อ/เบอร์/ที่อยู่/เลขผู้เสียภาษี ที่ระบบจำตามลูกค้า (5/11/2026)
+  { name: "PRODUCTION_JOBS", group: "manual", headers: JOB_COLUMNS },
   { name: "DEVELOPER_STATUS_LOG", group: "manual", headers: LOG_COLUMNS },
   { name: "DEVELOPER_CONTACTS", group: "manual", headers: CONTACT_COLUMNS }, // ประวัติการติดต่อ โทร / Line / เจอหน้า (31/10/2026)
   { name: "MONTHLY_TARGETS", group: "manual", headers: ["month","ad_budget_thb","lead_target","notes","updated_by","updated_at"] },

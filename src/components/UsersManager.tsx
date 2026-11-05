@@ -4,7 +4,7 @@ import { Notice } from "@/components/Toast";
 import { useCallback, useEffect, useState } from "react";
 
 type User = { user_id: string; email: string; display_name: string; role: string; active: boolean; updated_at: string; bootstrap: boolean };
-const ROLE_LABEL: Record<string, string> = { super_admin: "Super Admin — ทำได้ทุกอย่าง", admin: "Admin — นำเข้า / เพิ่ม / แก้ไข (ลบไม่ได้, ไม่เข้าตั้งค่า)", ae: "AE — ฝ่ายขาย + Project", marketing: "Marketing — ดูข้อมูลการตลาด (ดูอย่างเดียว)", production: "Production — ดู Dashboard (ดูอย่างเดียว) + ระบบ Production" };
+const ROLE_LABEL: Record<string, string> = { super_admin: "Super Admin — ทำได้ทุกอย่าง", admin: "Admin — นำเข้า / เพิ่ม / แก้ไข (ลบไม่ได้, ไม่เข้าตั้งค่า)", ae: "AE — ฝ่ายขาย + Project", marketing: "Marketing — ดูข้อมูลการตลาด (ดูอย่างเดียว)" };
 const empty = { email: "", display_name: "", role: "marketing", active: true };
 
 export function UsersManager() {

@@ -89,7 +89,7 @@ export function buildSummary(d: { meta: Row[]; google: Row[]; posts: Row[]; line
   gp.forEach((v, m) => { get(m).gross_profit_thb = v; });
 
   const fm = f.from?.slice(0, 7), tm = f.to?.slice(0, 7);
-  const restricted = (role === "marketing" || role === "production");
+  const restricted = role === "marketing";
   const columns = SUMMARY_COLUMNS.filter((c) => !(restricted && SUMMARY_FINANCIAL.includes(c)));
   const rows = [...months.keys()].filter((m) => /^\d{4}-\d{2}$/.test(m) && (!fm || m >= fm) && (!tm || m <= tm)).sort().map((m) => {
     const o = months.get(m)!;
@@ -116,7 +116,7 @@ export async function exportDataset(id: string, f: ExportFilters, role: Role, ac
         read("META_ADS", ["report_start", "report_end", "amount_spent_thb", "area"]), read("GOOGLE_ADS_CAMPAIGNS", ["report_start", "report_end", "cost_thb", "clicks", "area"]),
         read("FB_PAGE_POSTS", ["page_id", "post_id", "page_name", "publish_time", "metric_date", "metric_scope", "snapshot_date", "reach", "link_clicks", "reactions_comments_shares", "seconds_viewed"]), read("LINE_OA_MONTHLY", ["report_month", "new_friends", "inquiries", "leads"]),
         read("LEADS", ["lead_id", "received_at", "status", "qualified_at", "area", "source_channel", "need", "call_status"]),
-        (role === "marketing" || role === "production") ? read("SALES", ["closing_date", "payment_status"]) : read("SALES", ["closing_date", "revenue_date", "payment_status", "deal_value_thb", "company_revenue_thb", "direct_cost_thb"]),
+        role === "marketing" ? read("SALES", ["closing_date", "payment_status"]) : read("SALES", ["closing_date", "revenue_date", "payment_status", "deal_value_thb", "company_revenue_thb", "direct_cost_thb"]),
         getExcludedPages(DEFAULT_EXCLUDED_PAGES),
         read("FB_PAGE_INSIGHTS", ["metric", "metric_date", "value", "imported_at"]).catch(() => [] as Row[]), // แท็บใหม่ ยังไม่เตรียม Sheet → ข้าม
       ]);
@@ -166,7 +166,7 @@ export function buildDictionary(role: Role) {
   const columns = DATASET_BY_ID.data_dictionary.columns;
   const rows: (string | number)[][] = [];
   for (const ds of DATASETS.filter((d) => d.roles.includes(role))) {
-    const cols = ds.special === "summary" ? SUMMARY_COLUMNS.filter((c) => !((role === "marketing" || role === "production") && SUMMARY_FINANCIAL.includes(c)))
+    const cols = ds.special === "summary" ? SUMMARY_COLUMNS.filter((c) => !(role === "marketing" && SUMMARY_FINANCIAL.includes(c)))
       : ds.id === "sales_transactions" ? SALES_EXPORT_COLUMNS : ds.derive ? [...ds.columns, ...ds.derive.columns] : ds.columns;
     const tab = ds.id === "sales_transactions" ? "SALES_TRANSACTIONS" : ds.tab;
     cols.forEach((c, i) => {

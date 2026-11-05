@@ -11,7 +11,7 @@ const fail = (e: unknown) => e instanceof WebError
 
 // Website Analytics — Admin / Marketing (ไม่มีข้อมูลส่วนบุคคล)
 export async function GET(req: Request) {
-  const g = await requireRole(["admin", "marketing", "production"]);
+  const g = await requireRole(["admin", "marketing"]);
   if (!g.ok) return g.res;
   const u = new URL(req.url); const start = u.searchParams.get("start") ?? "", end = u.searchParams.get("end") ?? "";
   try { return NextResponse.json(await websiteOverview(start && end ? { start, end } : undefined)); } catch (e) { return fail(e); }

@@ -1,5 +1,5 @@
 import { requirePage } from "@/lib/page-guard";
-import { canEditMarketing, isMktViewer } from "@/lib/roles";
+import { canEditMarketing } from "@/lib/roles";
 import { RangeFields } from "@/components/RangeFields";
 import { logError } from "@/lib/log";
 import { rangeOf } from "@/lib/range-memory";
@@ -48,14 +48,14 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
     const [data, salesDates] = await Promise.all([
       fetchDashboardData(role),
       // Checklist ของ Admin รวมยอดขาย FlowAccount (วันที่เอกสารเท่านั้น) · แท็บยังไม่มี = ข้าม
-      !isMktViewer(role) ? readColumns("SALES_TRANSACTIONS", { only: ["invoice_date"] }).then((t) => t.rows.map((r) => String(r.invoice_date ?? "").slice(0, 10))).catch(() => undefined) : Promise.resolve(undefined),
+      role !== "marketing" ? readColumns("SALES_TRANSACTIONS", { only: ["invoice_date"] }).then((t) => t.rows.map((r) => String(r.invoice_date ?? "").slice(0, 10))).catch(() => undefined) : Promise.resolve(undefined),
     ]);
     progress = targetProgress(data, progressMonth(f.from, f.to, today), today, role);
     if (role !== "ae") {
       const prevMonth = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 2, 1)).toISOString().slice(0, 7);
       lists = [buildChecklist(data, prevMonth, today, { salesDates }), buildChecklist(data, today.slice(0, 7), today, { salesDates })].filter((x): x is Checklist => !!x);
     }
-    if (!isMktViewer(role)) { const x = followUps(data.leads, today); fu = { overdue: x.overdue.length, today: x.today.length, stale: x.stale.length }; }
+    if (role !== "marketing") { const x = followUps(data.leads, today); fu = { overdue: x.overdue.length, today: x.today.length, stale: x.stale.length }; }
     ({ dash, prevRange, note: cmpNote } = computeDashboardCompared(data, f, role, mode));
     campaigns = [...new Set([...data.google.map((r) => r.campaign_name), ...data.meta.map((r) => r.ad_set_name), ...data.leads.map((r) => r.campaign_name)].filter(Boolean))].sort();
   } catch (e) { logError("page /", e);

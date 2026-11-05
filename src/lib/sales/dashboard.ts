@@ -36,7 +36,21 @@ export type SalesView = {
   options: { periods: string[]; projects: string[]; people: string[]; statuses: string[] };
 };
 
-export function computeSales(all: TxRow[], f: SalesFilters): SalesView {
+/** เลขที่เอกสารเดียวกัน = เอกสารเดียวกัน: เหลือแถวเดียวต่อเลขที่ (ใช้แถวที่นำเข้าล่าสุด) เพื่อไม่ให้ยอดสุทธิถูกบวกซ้ำ · แถวที่ไม่มีเลขที่เอกสารคงไว้ทุกแถว */
+export function dedupeByDocNo(rows: TxRow[]): TxRow[] {
+  const best = new Map<string, TxRow>(), out: (TxRow | string)[] = [];
+  for (const r of rows) {
+    const k = (r.invoice_no ?? "").trim();
+    if (!k) { out.push(r); continue; }
+    const cur = best.get(k);
+    if (!cur) out.push(k);
+    if (!cur || (r.imported_at ?? "") >= (cur.imported_at ?? "")) best.set(k, r);
+  }
+  return out.map((x) => (typeof x === "string" ? best.get(x)! : x));
+}
+
+export function computeSales(source: TxRow[], f: SalesFilters): SalesView {
+  const all = dedupeByDocNo(source);
   const rows = filterSales(all, f);
   const has = rows.length > 0;
   const docs = new Set(rows.map((r) => r.invoice_no)).size;
