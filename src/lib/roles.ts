@@ -73,6 +73,10 @@ export const NAV: NavItem[] = [
     { href: "/settings/metrics", label: "คำอธิบายตัวเลข", roles: MKT, icon: "info", system: "shared" },
     { href: "/settings/performance", label: "ตั้งเป้าประสิทธิภาพรายคน", roles: SUPER, icon: "target", system: "shared" }, // ตำแหน่ง / เป้ารายคน / วันหยุด (5/11/2026)
   ] },
+  // คู่มือการใช้งานแบบเป็นขั้นตอน (5/11/2026): อยู่ล่างสุดของเมนูแต่ละระบบ · Dashboard ไม่มี (มี คู่มือนำเข้าข้อมูล / คำอธิบายตัวเลข อยู่แล้ว)
+  { href: "/work/manual", label: "คู่มือการใช้งาน", roles: SALES, icon: "book", system: "work" },
+  { href: "/account/manual", label: "คู่มือการใช้งาน", roles: SALES, icon: "book", system: "account" },
+  { href: "/production/manual", label: "คู่มือการใช้งาน", roles: [...SALES, "production"], icon: "book", system: "production" },
 ];
 
 /** เมนูตาม Role: ตัดเมนูย่อยที่ไม่มีสิทธิ์ · เมนูหลักชี้ไปเมนูย่อยแรกที่เข้าได้ (ไม่มีเมนูย่อยเหลือ = ซ่อน) */

@@ -64,6 +64,15 @@ for (const p of ["/work/leads", "/work/buyer-leads", "/work/developers", "/accou
 for (const p of ["/dashboard", "/work/leads", "/work/developers", "/account/revenue", "/account/revenue/import", "/dashboard/import", "/dashboard/export", "/settings/targets", "/settings/metrics", "/dashboard/facebook-ads"]) assert.ok(can("admin", p), `Admin ต้องเข้า ${p} ได้`);
 for (const r of ["admin", "ae", "marketing", "production"] as const) assert.ok(!can(r, "/settings/performance"), `${r} ต้องเข้า /settings/performance ไม่ได้ (Super Admin เท่านั้น)`);
 assert.ok(can("super_admin", "/settings/performance"));
+// คู่มือการใช้งาน: ล่างสุดของเมนูแต่ละระบบ · ไม่มีใน Dashboard · สิทธิ์ตามระบบ
+for (const [sys, role] of [["work", "ae"], ["account", "ae"], ["production", "production"], ["production", "ae"]] as const) {
+  const items = navOfSystem(navFor(role), sys), last = items[items.length - 1];
+  assert.equal(last.href, `/${sys}/manual`, `${sys}/${role}: คู่มือต้องอยู่ล่างสุดของเมนู`); assert.equal(last.label, "คู่มือการใช้งาน");
+}
+assert.ok(!navOfSystem(navFor("super_admin"), "dashboard").some((n) => n.href.endsWith("/manual")), "Dashboard ต้องไม่มีคู่มือการใช้งาน");
+for (const p of ["/work/manual", "/account/manual"]) { for (const r of ["super_admin", "admin", "ae"]) assert.ok(can(r, p), `${r} ต้องเข้า ${p} ได้`); for (const r of ["marketing", "production"]) assert.ok(!can(r, p), `${r} ต้องเข้า ${p} ไม่ได้`); }
+for (const r of ["super_admin", "admin", "ae", "production"]) assert.ok(can(r, "/production/manual"));
+assert.ok(!can("marketing", "/production/manual"));
 // หน้าประสิทธิภาพรายคน: ห้ามใช้ /performance (next.config redirect ไป /dashboard/performance) — ต้องไม่ชนกับ redirect เดิมทุกตัว
 for (const r of ["super_admin", "admin", "ae", "production"] as const) assert.ok(can(r, "/staff-performance"), `${r} ต้องเข้า /staff-performance ได้`);
 assert.ok(!can("marketing", "/staff-performance"));
