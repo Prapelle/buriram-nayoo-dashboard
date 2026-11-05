@@ -50,6 +50,7 @@ export const NAV: NavItem[] = [
   { href: "/work/leads", label: "Leads", roles: SALES, group: "ฝ่ายขาย", icon: "users", system: "work" },
   { href: "/work/seller-leads", label: "คนต้องการขาย", roles: SALES, group: "ฝ่ายขาย", icon: "board", system: "work" },
   { href: "/work/buyer-leads", label: "คนต้องการซื้อ", roles: SALES, group: "ฝ่ายขาย", icon: "board", system: "work" },
+  { href: "/performance", label: "ประสิทธิภาพรายคน", roles: ["super_admin", "admin", "ae", "production"], icon: "target", system: "shared" }, // ผลงานเทียบเป้ารายเดือน (5/11/2026) — Admin เห็นทุกคน / AE, Production เห็นของตัวเอง
   { href: "/lead-report", label: "รายงาน Lead", roles: ALL, group: "รายงาน", icon: "report", system: "shared", hideIn: ["account", "production"] }, // ไม่แสดงในระบบบัญชี / Production (5/11/2026)
   { href: "/work/developers", label: "Developer", roles: SALES, group: "Project", icon: "building", system: "work" },
   { href: "/work/sale-developer", label: "Sale developer", roles: SALES, group: "Project", icon: "board", system: "work" },
@@ -68,6 +69,7 @@ export const NAV: NavItem[] = [
   { href: "/settings", label: "ตั้งค่า", roles: ALL, icon: "gear", system: "shared", children: [
     { href: "/settings", label: "ตั้งค่าระบบ", roles: SUPER, icon: "gear", system: "shared" },
     { href: "/settings/targets", label: "เป้าหมายรายเดือน", roles: DATA, icon: "target", system: "dashboard" },
+    { href: "/settings/performance", label: "ตั้งเป้าประสิทธิภาพรายคน", roles: SUPER, icon: "target", system: "shared" }, // ตำแหน่ง / เป้ารายคน / วันหยุด (5/11/2026)
     { href: "/settings/import-guide", label: "คู่มือนำเข้าข้อมูล", roles: DATA, icon: "book", system: "dashboard" },
     { href: "/settings/metrics", label: "คำอธิบายตัวเลข", roles: MKT, icon: "info", system: "shared" },
   ] },

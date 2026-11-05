@@ -4,6 +4,7 @@
  * รอบถัดไปเพิ่มกลุ่มใหม่ที่นี่ (Leads, ข้อมูลนำเข้าการตลาด, Sales ฯลฯ)
  */
 import { TABS } from "./schema";
+import { PERF_TABS } from "./perf";
 
 const MARKETING_TABS = ["IMPORT_BATCHES", "IMPORT_ERRORS", ...TABS.filter((t) => t.group === "marketing" && t.name !== "FB_PAGE_POSTS").map((t) => t.name)];
 
@@ -21,7 +22,7 @@ export const GROUP_TABS: Record<string, string[]> = {
 };
 
 /** ตารางที่ "เกิดบน D1" ไม่มีต้นทางใน Google Sheets — ใช้ D1 เสมอเมื่อผูก binding DB (ไม่ต้องย้าย/สลับ) */
-export const NATIVE_TABS = ["CONTENT_CARDS", "CONTENT_MEMBERS", "CONTENT_HISTORY", "PRODUCT_SETTINGS"];
+export const NATIVE_TABS = ["CONTENT_CARDS", "CONTENT_MEMBERS", "CONTENT_HISTORY", "PRODUCT_SETTINGS", "CONTENT_WAITS", ...PERF_TABS];
 
 export const tabsOfGroups = (groups: string[]) => groups.flatMap((g) => GROUP_TABS[g] ?? []);
 

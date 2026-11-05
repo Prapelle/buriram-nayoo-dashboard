@@ -4,7 +4,8 @@
  */
 import { writeAudit } from "./audit";
 import { getD1 } from "./d1";
-import { addDays, CARD_COLUMNS, HISTORY_COLUMNS, isStage, isTrue, MEMBER_COLUMNS, nextCardCode, planMove, reportDue, SETTING_COLUMNS, S_FIRST, validateCard, STAGES, type Rec } from "./content";
+import { workdaysBetween, waitSummary, type WaitRow } from "./workdays";
+import { addDays, CARD_COLUMNS, WAIT_COLUMNS, waitKindsOf, HISTORY_COLUMNS, isStage, isTrue, MEMBER_COLUMNS, nextCardCode, planMove, reportDue, SETTING_COLUMNS, S_FIRST, validateCard, STAGES, type Rec } from "./content";
 import { todayBkk } from "./developers";
 import { productTypesOf } from "./developers-service";
 import { normRole } from "./roles";
@@ -15,7 +16,7 @@ export class ContentError extends Error {
   constructor(public status: number, message: string, public code: string, public extra: { fields?: Record<string, string> } = {}) { super(message); }
 }
 type Tab = { headers: string[]; rows: Rec[] };
-const TABS = ["CONTENT_CARDS", "CONTENT_MEMBERS", "CONTENT_HISTORY", "PRODUCT_SETTINGS", "APP_USERS", "DEVELOPERS", "APP_CONFIG"];
+const TABS = ["CONTENT_CARDS", "CONTENT_MEMBERS", "CONTENT_HISTORY", "PRODUCT_SETTINGS", "CONTENT_WAITS", "PERF_HOLIDAYS", "APP_USERS", "DEVELOPERS", "APP_CONFIG"];
 const rowRange = (tab: string, headers: string[], row: number) => `'${tab}'!A${row}:${colLetter(headers.length - 1)}${row}`;
 const blank = (cols: string[]): Rec => Object.fromEntries(cols.map((c) => [c, ""]));
 const nameOf = (u: Rec) => (u.display_name || u.email.split("@")[0]).trim();
@@ -23,7 +24,7 @@ const nameOf = (u: Rec) => (u.display_name || u.email.split("@")[0]).trim();
 async function load(): Promise<Record<string, Tab>> {
   if (!(await getD1())) throw new ContentError(409, "ฟีเจอร์ Content ต้องใช้ฐานข้อมูล D1 — ผูก D1 (binding DB) แล้ว Deploy ใหม่", "NO_D1");
   const t = await readTabs(TABS);
-  for (const [tab, cols] of [["CONTENT_CARDS", CARD_COLUMNS], ["CONTENT_MEMBERS", MEMBER_COLUMNS], ["CONTENT_HISTORY", HISTORY_COLUMNS], ["PRODUCT_SETTINGS", SETTING_COLUMNS]] as const)
+  for (const [tab, cols] of [["CONTENT_CARDS", CARD_COLUMNS], ["CONTENT_MEMBERS", MEMBER_COLUMNS], ["CONTENT_HISTORY", HISTORY_COLUMNS], ["PRODUCT_SETTINGS", SETTING_COLUMNS], ["CONTENT_WAITS", WAIT_COLUMNS]] as const)
     if (!t[tab].headers.length) t[tab] = { headers: cols, rows: [] };
   return t;
 }
@@ -32,17 +33,24 @@ const activeUsers = (t: Record<string, Tab>) => t.APP_USERS.rows.filter((u) => u
 const settingOf = (t: Record<string, Tab>, product: string) => t.PRODUCT_SETTINGS.rows.find((s) => s.product === product);
 const userName = (t: Record<string, Tab>, email: string) => { const u = t.APP_USERS.rows.find((x) => x.email.toLowerCase() === email.toLowerCase()); return u ? nameOf(u) : email.split("@")[0]; };
 
+const holidaysOf = (t: Record<string, Tab>) => new Set(t.PERF_HOLIDAYS.rows.map((h) => h.holiday_date).filter(Boolean));
+const dayOf = (iso: string) => (iso ? new Date(new Date(iso).getTime() + 7 * 3600_000).toISOString().slice(0, 10) : "");
+const waitsOf = (t: Record<string, Tab>, cardId: string): WaitRow[] => t.CONTENT_WAITS.rows.filter((w) => w.card_id === cardId).map((w) => ({ card_id: w.card_id, kind: w.kind, started_day: dayOf(w.started_at), ended_day: dayOf(w.ended_at) }));
+
 export async function getBoard() {
-  const t = await load(), today = todayBkk();
+  const t = await load(), today = todayBkk(), hol = holidaysOf(t);
   const members = new Map<string, Rec[]>();
   for (const m of t.CONTENT_MEMBERS.rows) if (m.card_id) (members.get(m.card_id) ?? members.set(m.card_id, []).get(m.card_id)!).push(m);
   const cards = t.CONTENT_CARDS.rows.filter((c) => c.card_id).sort((a, b) => (a.stage_at || "").localeCompare(b.stage_at || "") || a.card_code.localeCompare(b.card_code)).map((c) => ({
-    ...c, due: reportDue(c, today),
+    ...c, ...(() => {
+      const w = waitSummary(c, waitsOf(t, c.card_id), today, hol);
+      return { wait: { open: w.open, alert: w.alert, prod_days: w.prod, report_days: w.report, planned_eff: w.plannedEff, report_due_eff: w.reportDueEff }, due: reportDue({ ...c, report_due_date: w.reportDueEff || c.report_due_date }, today) };
+    })(),
     members: (members.get(c.card_id) ?? []).map((m) => ({ email: m.email, name: userName(t, m.email), duty: m.duty, is_main: isTrue(m.is_main) })),
   }));
   const products = productTypesOf(t.APP_CONFIG.rows);
   return {
-    cards, stages: STAGES, today, products,
+    cards, stages: STAGES, today, products, waitKinds: waitKindsOf(t.APP_CONFIG.rows),
     users: activeUsers(t).map((u) => ({ email: u.email.toLowerCase(), name: nameOf(u) })).sort((a, b) => a.name.localeCompare(b.name, "th")),
     customers: t.DEVELOPERS.rows.filter((d) => d.developer_id).map((d) => ({ developer_id: d.developer_id, name: d.company_name || d.project_main || d.dev_code })),
     settings: products.map((p) => { const s = settingOf(t, p); return { product: p, content_count: Number(s?.content_count || 0), report_days: Number(s?.report_days || 0) }; }),
@@ -130,6 +138,34 @@ export async function moveCard(id: string, to: string, actor: string, updatedAtS
   return { stage: final, auto: final !== to };
 }
 
+/** เริ่มรอลูกค้า / ลูกค้าตอบแล้ว — เฉพาะการ์ดงานขาย และเฉพาะผู้ร่วมงานในการ์ด · รอได้ทีละเรื่อง */
+async function waitGuard(t: Record<string, Tab>, id: string, actor: string) {
+  const c = t.CONTENT_CARDS.rows.find((r) => r.card_id === id);
+  if (!c) throw new ContentError(404, "ไม่พบการ์ด (อาจถูกลบ)", "NOT_FOUND");
+  if (!isTrue(c.sales_tag)) throw new ContentError(422, "การรอลูกค้าใช้ได้เฉพาะการ์ดที่ติดแท็กงานขาย", "NOT_SALES");
+  if (!t.CONTENT_MEMBERS.rows.some((m) => m.card_id === id && m.email.toLowerCase() === actor.toLowerCase())) throw new ContentError(403, "เฉพาะผู้ร่วมงานในการ์ดนี้เท่านั้นที่กดได้", "NOT_MEMBER");
+  return c;
+}
+export async function startWait(id: string, kindRaw: unknown, actor: string) {
+  const kind = String(kindRaw ?? "").trim();
+  const t = await load(), c = await waitGuard(t, id, actor);
+  if (!waitKindsOf(t.APP_CONFIG.rows).includes(kind)) throw new ContentError(422, "เลือกว่ารออะไรจากลูกค้า", "VALIDATION", { fields: { kind: "เลือกว่ารออะไรจากลูกค้า" } });
+  if (t.CONTENT_WAITS.rows.some((w) => w.card_id === id && !w.ended_at)) throw new ContentError(409, "การ์ดนี้กำลังรอลูกค้าอยู่แล้ว — กด “ลูกค้าตอบแล้ว” ก่อน", "ALREADY_WAITING");
+  await appendRows("CONTENT_WAITS", [toRow(WAIT_COLUMNS, { wait_id: crypto.randomUUID(), card_id: id, kind, started_at: new Date().toISOString(), started_by: actor, ended_at: "", ended_by: "" })]);
+  await writeAudit(actor, "content_wait_start", "content_card", id, `${c.card_code} รอลูกค้า: ${kind}`);
+  return { ok: true };
+}
+export async function endWait(id: string, actor: string) {
+  const t = await load(), c = await waitGuard(t, id, actor);
+  const i = t.CONTENT_WAITS.rows.findIndex((w) => w.card_id === id && !w.ended_at);
+  if (i < 0) throw new ContentError(409, "การ์ดนี้ไม่ได้รอลูกค้าอยู่", "NOT_WAITING");
+  const w = t.CONTENT_WAITS.rows[i], now = new Date().toISOString();
+  await batchUpdateValues([{ range: rowRange("CONTENT_WAITS", t.CONTENT_WAITS.headers, i + 2), values: [toRow(t.CONTENT_WAITS.headers, { ...w, ended_at: now, ended_by: actor })] }]);
+  const days = workdaysBetween(dayOf(w.started_at), dayOf(now), holidaysOf(t));
+  await writeAudit(actor, "content_wait_end", "content_card", id, `${c.card_code} ลูกค้าตอบ: ${w.kind} (${days} วันทำการ)`);
+  return { ok: true, days };
+}
+
 export async function deleteCard(id: string, actor: string) {
   const t = await load(), i = t.CONTENT_CARDS.rows.findIndex((r) => r.card_id === id);
   if (i < 0) throw new ContentError(404, "ไม่พบการ์ด (อาจถูกลบแล้ว)", "NOT_FOUND");
@@ -138,6 +174,7 @@ export async function deleteCard(id: string, actor: string) {
   if ("error" in g) throw new ContentError(404, "ไม่พบการ์ด (อาจถูกลบแล้ว)", "NOT_FOUND");
   const tabs = await listTabs(), sid = (n: string) => tabs.find((x) => x.title === n)!.sheetId;
   await replaceMembers(t, id, [], new Date().toISOString());
+  for (const w of t.CONTENT_WAITS.rows.map((r, k) => ({ r, row: k + 2 })).filter((x) => x.r.card_id === id).reverse()) await deleteRow(sid("CONTENT_WAITS"), w.row);
   const hist = t.CONTENT_HISTORY.rows.map((r, k) => ({ r, row: k + 2 })).filter((x) => x.r.card_id === id).reverse();
   for (const h of hist) await deleteRow(sid("CONTENT_HISTORY"), h.row);
   await deleteRow(sid("CONTENT_CARDS"), g.row);

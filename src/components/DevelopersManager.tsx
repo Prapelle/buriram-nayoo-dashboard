@@ -15,7 +15,7 @@ import {
   type Dev, type DevProduct,
 } from "@/lib/developers";
 
-type Data = { devs: Dev[]; products: DevProduct[]; logs: Record<string, string>[]; contacts?: Record<string, string>[]; staff: string[]; productTypes: string[]; today: string };
+type Data = { devs: Dev[]; products: DevProduct[]; logs: Record<string, string>[]; contacts?: Record<string, string>[]; staff: string[]; staffUsers: string[]; productTypes: string[]; today: string };
 type Dup = { dev_code: string; company_name: string; project_main: string; matched: string[] };
 const dmy = (s?: string) => (s && /^\d{4}-\d{2}-\d{2}/.test(s) ? thDate(s) : "");
 const thb = (n: number) => `฿${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
@@ -174,8 +174,7 @@ export function DevelopersManager({ kind = "developer", canDelete = true }: { ki
           <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
             {fld("company_name")}{!hb && <>{fld("project_main")}{fld("project_sub1")}{fld("project_sub2")}</>}
             {fld("contact_name")}{fld("phone", LABEL.phone, { type: "tel" })}{fld("line_id")}{sel("tier", "Tier", TIERS)}
-            {fld("nayoo_url", LABEL.nayoo_url, { type: "url" })}{fld("staff", "Staff", { list: "dev-staff" })}
-            <datalist id="dev-staff">{data.staff.map((s) => <option key={s} value={s} />)}</datalist>
+            {fld("nayoo_url", LABEL.nayoo_url, { type: "url" })}{sel("staff", "Staff", form!.staff && !data.staffUsers.includes(form!.staff) ? [...data.staffUsers, form!.staff] : data.staffUsers)}
             {lockedStatus ? <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">Status</span><input disabled value={editing!.status} className="w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm" /><span className="text-xs text-slate-500">เปลี่ยนเองตามวันของ Product</span></label>
               : sel("status", "Status", DEV_STATUS.filter((s) => !AUTO_STATUS.includes(s)), "")}
             {fld("last_contacted_at", LABEL.last_contacted_at, { type: "date" })}{fld("next_follow_up_at", LABEL.next_follow_up_at, { type: "date" })}

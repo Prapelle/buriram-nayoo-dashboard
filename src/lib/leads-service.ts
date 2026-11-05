@@ -2,12 +2,19 @@ import { normRole } from "./roles";
 import { canonChannel } from "./dashboard";
 import { dedupeCode, guardRow } from "./row-guard";
 import { writeAudit } from "./audit";
+import { leadStatusChanges, mergeStaff, staffUserNames } from "./perf";
+import { logLeadStatus } from "./perf-service";
 import { CALL_DEFAULT, CALL_STATUS, isSellerLead, normCall, SELL_DEFAULT, SELL_STATUS } from "./lead-options";
 import { areaLabel, AREA_SUGGEST, contactableFor, findDuplicates, LEAD_COLUMNS, leadStatusOf, nextLeadCode, normalizeEmail, normalizeLine, normalizePhone, pipelineOf, resolveNeedStatus, stampStatus, statusFieldOf, todayBkk, validateLead, type DupMatch, type Lead } from "./leads";
 import { appendRows, batchUpdateValues, colLetter, deleteRow, listTabs, readTab, readTabs, toRow } from "./sheets";
 import { readColumns } from "./tabdata";
 import { diffProps, PROP_COLUMNS, validateProps, type LeadProperty } from "./lead-properties";
 import type { Role } from "./roles";
+
+/** ค่าเริ่มต้นของช่องสถานะ (ใช้เทียบก่อน/หลังเพื่อบันทึกประวัติ) */
+const STATUS_DEFAULTS = { sell_status: SELL_DEFAULT, call_status: CALL_DEFAULT } as const;
+/** ช่องสถานะที่นับผลงานของ Lead นี้: ขาย = sell_status · ซื้อ/เช่า/สร้าง = call_status · ยังไม่ระบุ Need = ไม่นับ */
+const logFieldOf = (r: { need?: string }) => (isSellerLead(r) ? "sell_status" : r.need ? "call_status" : "") as "sell_status" | "call_status" | "";
 
 export class LeadError extends Error {
   constructor(public status: number, message: string, public code: string, public extra: { fields?: Record<string, string>; matches?: DupMatch[]; conflict?: { field: string; value: string } } = {}) { super(message); }
@@ -47,7 +54,8 @@ const pick = (r: Record<string, string>): Lead => { const o: Lead = Object.fromE
 
 export async function listLeads() {
   const [t, props] = await Promise.all([load(), loadProps()]);
-  const staff = [...new Set(t.LEADS.rows.map((r) => String(r.staff ?? "").trim()).filter(Boolean))].sort();
+  const staffUsers = staffUserNames(t.APP_USERS.rows, normRole);
+  const staff = mergeStaff(staffUsers, t.LEADS.rows.map((r) => String(r.staff ?? "")));
   const owners = [...new Set(t.APP_USERS.rows.filter((u) => String(u.active).toUpperCase() === "TRUE" && ["super_admin", "admin", "ae"].includes(normRole(u.role) ?? "")).map((u) => u.email))].sort();
   const rows = t.LEADS.rows.filter((r) => r.lead_id).map((r) => { const l = pick(r); l.source_channel = canonChannel(l.source_channel); return l; }) // ชื่อช่องทางเก่า → Unknown (แก้ใน Sheet เมื่อบันทึก Lead นั้น)
     .sort((a, b) => b.received_at.localeCompare(a.received_at) || b.lead_code.localeCompare(a.lead_code));
@@ -55,7 +63,7 @@ export async function listLeads() {
   const areas = [...new Set([...AREA_SUGGEST, ...rows.map((r) => areaLabel(r.area)).filter(Boolean)])];
   const byLead: Record<string, LeadProperty[]> = {};
   for (const p of props.rows) (byLead[p.lead_id] ??= []).push(p);
-  return { rows, owners, staff, areas, properties: byLead, propertiesReady: props.ready };
+  return { rows, owners, staff, staffUsers, areas, properties: byLead, propertiesReady: props.ready };
 }
 
 /** สร้าง/แก้ไข Lead: Lead Code สร้างฝั่ง Server, เตือนซ้ำจากเบอร์/อีเมลแต่ไม่ merge อัตโนมัติ */
@@ -125,6 +133,7 @@ export async function saveLead(input: Record<string, unknown>, actor: string, ro
       created_by: actor, created_at: now, updated_by: actor, updated_at: now,
     };
     await appendRows("LEADS", [toRow(tab.headers, rec)]);
+    await logLeadStatus(leadStatusChanges(null, rec, STATUS_DEFAULTS, logFieldOf(rec)), rec, actor, now);
     rec.lead_code = await dedupeCode("LEADS", tab.headers, "lead_code", "lead_id", rec.lead_id, rec.lead_code, (codes) => nextLeadCode(codes, Number(today.slice(0, 4)), Number(t.APP_CONFIG.rows.find((r) => r.config_key === `lead_code_floor_${today.slice(0, 4)}`)?.config_value) || 0));
     if (pd) await applyProps(rec.lead_id, pd, actor, now);
     await writeAudit(actor, "lead_create", "lead", rec.lead_id, `สร้าง ${rec.lead_code} (${rec.source_channel}, ${rec.need}${leadStatusOf(rec) ? ` / ${leadStatusOf(rec)}` : ""})${pd && propSummary(pd) ? ` · ${propSummary(pd)}` : ""}`);
@@ -134,6 +143,7 @@ export async function saveLead(input: Record<string, unknown>, actor: string, ro
   rowNo = await safeRow(tab.headers, prev.lead_id, rowNo, prev.updated_at);
   await batchUpdateValues([{ range: `'LEADS'!A${rowNo}:${colLetter(tab.headers.length - 1)}${rowNo}`, values: [toRow(tab.headers, rec)] }]);
   if (pd) await applyProps(rec.lead_id, pd, actor, now);
+  await logLeadStatus(leadStatusChanges(prev, rec, STATUS_DEFAULTS, logFieldOf(rec)), rec, actor, now);
   const ps = leadStatusOf(prev), cs = leadStatusOf(rec);
   const parts = [prev.need !== rec.need ? `Need ${prev.need || "(ว่าง)"} → ${rec.need}` : "", ps !== cs ? `สถานะ ${ps || "(ว่าง)"} → ${cs || "(ว่าง)"}` : "",
     ns.conflict ? `ล้าง ${ns.conflict.field}="${ns.conflict.value}"` : "", prev.call_status !== rec.call_status ? `Call ${prev.call_status || "(ว่าง)"} → ${rec.call_status}` : "", propSummary(pd)].filter(Boolean);
@@ -213,6 +223,7 @@ export async function changeLeadStatus(leadId: string, field: StatusField, value
   Object.assign(rec, stampStatus(prev, rec, todayBkk()), { updated_by: actor, updated_at: new Date().toISOString() });
   const at = await safeRow(tab.headers, leadId, rowNo, prev.updated_at);
   await batchUpdateValues([{ range: `'LEADS'!A${at}:${colLetter(tab.headers.length - 1)}${at}`, values: [toRow(tab.headers, rec)] }]);
+  await logLeadStatus(leadStatusChanges(prev, rec, STATUS_DEFAULTS, logFieldOf(rec)), rec, actor, rec.updated_at);
   if (field === "sell_status") await writeAudit(actor, "lead_status_change", "lead", rec.lead_id, `${rec.lead_code}: สถานะ ${before} → ${value}`);
   else await writeAudit(actor, "lead_update", "lead", rec.lead_id, `${rec.lead_code}: Call ${before} → ${value}`);
   return { changed: true, lead: rec };
