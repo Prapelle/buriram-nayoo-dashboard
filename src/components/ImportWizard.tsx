@@ -77,6 +77,21 @@ export function ImportWizard({ role = "admin" }: { role?: Role }) {
     } catch (e) { setHistory({ state: "error", rows: [], error: e instanceof Error ? e.message : "error" }); }
   }, []);
 
+  /** ลบข้อมูลของรายงานที่นำเข้า (Super Admin): นับก่อน → ยืนยัน → ลบ → โหลดประวัติใหม่ */
+  const [delBusy, setDelBusy] = useState("");
+  async function deleteBatch(b: Batch) {
+    setDelBusy(b.batch_id);
+    try {
+      const post = async (confirm: boolean) => { const r = await fetch("/api/import/history", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ batchId: b.batch_id, confirm }) }); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`); return j as { rows: number; batches: number; label: string; period: string }; };
+      const pre = await post(false);
+      if (!window.confirm(`ลบข้อมูลรายงาน ${pre.label}${pre.period ? ` ช่วง ${pre.period}` : ""}\nจำนวน ${pre.rows.toLocaleString()} แถว (จากการนำเข้า ${pre.batches} ครั้ง)\n\nลบแล้วกู้คืนไม่ได้ ต้องนำเข้าไฟล์ใหม่ถ้าต้องการข้อมูลกลับมา — ยืนยันลบ?`)) return;
+      const done = await post(true);
+      window.alert(`ลบแล้ว ${done.rows.toLocaleString()} แถว`);
+      setHistory({ state: "loading", rows: [] }); await loadHistory();
+    } catch (e) { window.alert(`ลบไม่ได้: ${e instanceof Error ? e.message : "error"}`); }
+    finally { setDelBusy(""); }
+  }
+
   async function call(path: string, body: object) {
     const r = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     const j = await r.json();
@@ -351,7 +366,7 @@ export function ImportWizard({ role = "admin" }: { role?: Role }) {
 
       <details className="group" onToggle={(e) => { const o = e.currentTarget.open; setHistOpen(o); if (o) loadHistory(); }}>
         <summary className="flex cursor-pointer list-none items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 [&::-webkit-details-marker]:hidden">
-          <span className="text-lg font-semibold">ประวัติการนำเข้า</span><span className="text-xs text-slate-500">30 รายการล่าสุด · กดเพื่อแสดง</span>
+          <span className="text-lg font-semibold">ประวัติการนำเข้า</span><span className="text-xs text-slate-500">100 รายการล่าสุด · กดเพื่อแสดง</span>
           <span aria-hidden="true" className="ml-auto text-slate-400 transition-transform group-open:rotate-180">▾</span></summary>
         <div className="mt-2">
         {canEditMarketing(role) && <p className="mb-2 text-xs text-slate-500">ประวัติการนำเข้ายอดขาย (FlowAccount) ดูที่หน้า <a href="/account/revenue" className="underline">Sales</a></p>}
@@ -361,13 +376,14 @@ export function ImportWizard({ role = "admin" }: { role?: Role }) {
         {history.state === "ok" && history.rows.length > 0 && (
           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
             <table className="w-full text-left text-sm">
-              <thead><tr className="border-b bg-slate-50 text-xs text-slate-500"><th className="p-2">เวลา</th><th>ไฟล์</th><th>ประเภท</th><th>ช่วง</th><th>สถานะ</th><th>เพิ่ม/อัปเดต/ข้าม/ผิด</th><th>โดย</th></tr></thead>
+              <thead><tr className="border-b bg-slate-50 text-xs text-slate-500"><th className="p-2">เวลา</th><th>ไฟล์</th><th>ประเภท</th><th>ช่วง</th><th>สถานะ</th><th>เพิ่ม/อัปเดต/ข้าม/ผิด</th><th>โดย</th>{role === "super_admin" && <th className="pr-2"></th>}</tr></thead>
               <tbody>{history.rows.map((b) => (
                 <tr key={b.batch_id} className="border-b border-slate-100">
                   <td className="whitespace-nowrap p-2">{dmyTime(b.uploaded_at)}</td><td className="max-w-56 truncate">{b.filename}</td><td>{b.report_type}</td>
                   <td className="whitespace-nowrap">{dmy(b.report_start)}–{dmy(b.report_end)}</td>
-                  <td><span className={`rounded px-1.5 py-0.5 text-xs ${b.status === "success" ? "bg-green-100 text-green-800" : b.status === "failed" ? "bg-red-100 text-red-800" : "bg-amber-100 text-amber-800"}`}>{b.status}</span></td>
+                  <td><span className={`rounded px-1.5 py-0.5 text-xs ${b.status === "success" ? "bg-green-100 text-green-800" : b.status === "failed" ? "bg-red-100 text-red-800" : b.status === "deleted" ? "bg-slate-100 text-slate-500 line-through" : "bg-amber-100 text-amber-800"}`} title={b.status === "deleted" ? b.error_summary : undefined}>{b.status === "deleted" ? "ลบข้อมูลแล้ว" : b.status}</span></td>
                   <td className="whitespace-nowrap">{b.rows_inserted}/{b.rows_updated}/{b.rows_skipped}/{b.rows_invalid}</td><td className="max-w-40 truncate">{b.uploaded_by}</td>
+                  {role === "super_admin" && <td className="whitespace-nowrap pr-2">{b.status === "success" && <button type="button" disabled={!!delBusy} onClick={() => deleteBatch(b)} className="rounded border border-red-200 px-2 py-0.5 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50">{delBusy === b.batch_id ? "กำลังลบ..." : "ลบข้อมูล"}</button>}</td>}
                 </tr>))}</tbody>
             </table>
           </div>

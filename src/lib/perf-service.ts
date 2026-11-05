@@ -6,7 +6,7 @@
 import { writeAudit } from "./audit";
 import { logError } from "./log";
 import {
-  LEAD_LOG_COLUMNS, METRICS, parsePositions, PerfError, POSITIONS, POSITION_KEYS, STAFF_ROLES, staffNameOf, validateHoliday, validateMonth, validateTarget,
+  LEAD_LOG_COLUMNS, METRICS, parsePositions, PerfError, POSITIONS, POSITION_KEYS, staffNameOf, validateHoliday, validateMonth, validateTarget,
   type LeadStatusChange, type TargetInput,
 } from "./perf";
 import { validateWaitKinds, waitKindsOf, WAIT_KINDS_KEY } from "./content";
@@ -49,8 +49,9 @@ export async function getPerfSettings(monthRaw?: string) {
     .sort((a, b) => a.name.localeCompare(b.name, "th"));
   // ช่อง Staff เก็บเป็นชื่อที่แสดง → ถ้าสองคนชื่อซ้ำกัน ตัวเลขจะปนกัน: แจ้งเตือนให้แก้ชื่อ
   const count = new Map<string, number>();
-  for (const u of users) if (STAFF_ROLES.includes(u.role)) count.set(u.name, (count.get(u.name) ?? 0) + 1);
-  const duplicateNames = [...count].filter(([, n]) => n > 1).map(([name]) => name);
+  // นับทุก Role (ตัวคำนวณจับชื่อกับผู้ใช้ทุกคน — แก้ 5/11/2026: เดิมนับเฉพาะ Super Admin / Admin / AE ทำให้ชื่อซ้ำกับ Production ไม่ถูกเตือน) · ไม่สนตัวพิมพ์เล็ก-ใหญ่ / ช่องว่างหัวท้าย
+  for (const u of users) { const k = u.name.trim().toLowerCase(); if (k) count.set(k, (count.get(k) ?? 0) + 1); }
+  const duplicateNames = [...new Set(users.filter((u) => (count.get(u.name.trim().toLowerCase()) ?? 0) > 1).map((u) => u.name))];
   const targets = t[TGT].rows.filter((r) => r.month === month && r.metric_key && r.target_value !== "").map((r) => ({ user_email: norm(r.user_email), metric_key: r.metric_key, value: Number(r.target_value) }));
   const holidays = t[HOL].rows.filter((r) => r.holiday_date).map((r) => ({ date: r.holiday_date, name: r.name })).sort((a, b) => b.date.localeCompare(a.date));
   return { month, positions: POSITIONS, metrics: METRICS, users, targets, holidays, duplicateNames, waitKinds: waitKindsOf(t.APP_CONFIG?.rows ?? []) };

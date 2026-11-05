@@ -2,7 +2,7 @@ import { normRole } from "./roles";
 import { canonChannel } from "./dashboard";
 import { dedupeCode, guardRow } from "./row-guard";
 import { writeAudit } from "./audit";
-import { leadStatusChanges, mergeStaff, staffUserNames } from "./perf";
+import { checkStaff, leadStatusChanges, mergeStaff, staffUserNames } from "./perf";
 import { logLeadStatus } from "./perf-service";
 import { CALL_DEFAULT, CALL_STATUS, isSellerLead, normCall, SELL_DEFAULT, SELL_STATUS } from "./lead-options";
 import { areaLabel, AREA_SUGGEST, contactableFor, findDuplicates, LEAD_COLUMNS, leadStatusOf, nextLeadCode, normalizeEmail, normalizeLine, normalizePhone, pipelineOf, resolveNeedStatus, stampStatus, statusFieldOf, todayBkk, validateLead, type DupMatch, type Lead } from "./leads";
@@ -90,6 +90,11 @@ export async function saveLead(input: Record<string, unknown>, actor: string, ro
     prev = pick(rows[i]); rowNo = i + 2;
     if (input.updated_at_seen !== prev.updated_at) throw new LeadError(409, "Lead นี้ถูกแก้ไขโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่ก่อนแก้ไข", "STALE");
   }
+
+  // Staff ต้องเลือกจากรายชื่อผู้ใช้ (ค่าเดิมของ Lead นี้ยังคงไว้ได้)
+  const staffOk = checkStaff(v.rec.staff, prev?.staff, staffUserNames(t.APP_USERS.rows, normRole));
+  if (staffOk === null) throw new LeadError(422, "Staff ต้องเลือกจากรายชื่อผู้ใช้", "VALIDATION", { fields: { staff: "เลือก Staff จากรายชื่อผู้ใช้" } });
+  v.rec.staff = staffOk;
 
   const contactChanged = !prev || normalizePhone(prev.phone) !== normalizePhone(v.rec.phone) || normalizeEmail(prev.email) !== normalizeEmail(v.rec.email) || normalizeLine(prev.line_id) !== normalizeLine(v.rec.line_id);
   // Lead ฝั่งเดียวกัน (ซื้อ/เช่า/สร้าง vs ขาย) ห้ามซ้ำเบอร์ / Line / อีเมล — คนเดียวกันมีได้ฝั่งละ 1 รายการ (4/11/2026)

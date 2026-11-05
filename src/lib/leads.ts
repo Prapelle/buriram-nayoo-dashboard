@@ -17,7 +17,7 @@ export function areaLabel(v: unknown): string {
   return AREA_OPTIONS.find(([c]) => c === s)?.[1] ?? s;
 }
 export const AREA_SUGGEST = ["บุรีรัมย์", "สุรินทร์", "หลายจังหวัด"];
-import { CALL_DEFAULT, isContactedCall, normCall, NEEDS, BUY_NEEDS, SELL_NEEDS, BUY_STATUS, SELL_STATUS, CALL_STATUS, PROPERTY_TYPES, CONDITIONS, PRICE_RANGES } from "./lead-options";
+import { CALL_DEFAULT, isContactedCall, normCall, QUALIFIED_CALL, NEEDS, BUY_NEEDS, SELL_NEEDS, BUY_STATUS, SELL_STATUS, CALL_STATUS, PROPERTY_TYPES, CONDITIONS, PRICE_RANGES } from "./lead-options";
 export { NEEDS, BUY_NEEDS, SELL_NEEDS, BUY_STATUS, SELL_STATUS, CALL_STATUS, PROPERTY_TYPES, CONDITIONS, PRICE_RANGES };
 
 /** ช่องสถานะที่ใช้กับ Need นั้น */
@@ -26,18 +26,27 @@ export const statusOptionsOf = (need: string) => (statusFieldOf(need) === "buy_s
 /** สถานะที่แสดง (ตาม Need) */
 export const leadStatusOf = (r: Lead) => { const k = statusFieldOf(r.need ?? ""); return k ? r[k] ?? "" : ""; };
 
-/** แปลง Buy/Sell Status → ขั้น Pipeline เดิมที่ Dashboard ใช้ (ตามที่ผู้ใช้เลือก) */
+/**
+ * ขั้น Pipeline (ช่อง status) — ใช้นิยามเดียวกับ KPI ของ Dashboard (แก้ 5/11/2026: เดิมใช้ Hot/Warm และนับ สนใจขาย / นัดทำสัญญา เป็น Qualified)
+ * - คนต้องการขาย (Sell Status): ขายแล้ว = Won · ยกเลิก / บ้านไม่พร้อมขาย = Lost · เซ็นสัญญา / สัญญาเปิด = Qualified · สนใจขาย / นัดทำสัญญา = Contacted
+ * - คนต้องการซื้อ / เช่า / สร้าง (Call Status): ซื้อสำเร็จ = Won · ไม่สนใจ = Lost · รอเข้าชม / เข้าชมแล้ว / จอง / กู้ไม่ผ่าน = Qualified · ติดต่อได้แล้ว = Contacted
+ *   (Buy Status เดิม: Close = Won · Archive = Lost ยังใช้ได้ · Hot / Warm ไม่ทำให้เป็น Qualified แล้ว)
+ */
 const WON = ["Close", "ขายแล้ว"];
 const LOST = ["Archive", "ยกเลิก", "บ้านไม่พร้อมขาย"];
-const QUALIFIED = ["Hot", "Warm", "สนใจขาย", "นัดทำสัญญา", "เซ็นสัญญา", "สัญญาเปิด"];
+const SELL_Q = ["เซ็นสัญญา", "สัญญาเปิด"];
+const SELL_CONTACTED = ["สนใจขาย", "นัดทำสัญญา"];
 export function pipelineOf(r: Lead): "Won" | "Lost" | "Qualified" | "Contacted" | "New" {
-  const st = leadStatusOf(r);
-  if (WON.includes(st)) return "Won";
-  if (LOST.includes(st)) return "Lost";
-  if (QUALIFIED.includes(st)) return "Qualified";
+  const st = leadStatusOf(r), call = normCall(r.call_status);
+  if (WON.includes(st) || (statusFieldOf(r.need ?? "") !== "sell_status" && call === "ซื้อสำเร็จ")) return "Won";
+  if (LOST.includes(st) || (statusFieldOf(r.need ?? "") !== "sell_status" && call === "ไม่สนใจ")) return "Lost";
+  if (statusFieldOf(r.need ?? "") === "sell_status") {
+    if (SELL_Q.includes(st)) return "Qualified";
+    if (SELL_CONTACTED.includes(st)) return "Contacted";
+  } else if (QUALIFIED_CALL.includes(call)) return "Qualified";
   return isContactedCall(r.call_status) ? "Contacted" : "New";
 }
-export const PIPELINE_MAP = { Qualified: [...QUALIFIED, ...WON], Won: WON, Lost: LOST };
+export const PIPELINE_MAP = { Qualified: [...SELL_Q, ...QUALIFIED_CALL, ...WON], Won: WON, Lost: LOST };
 
 export const LEAD_COLUMNS = ["lead_id", "lead_code", "received_at", "customer_name", "company_name", "phone", "email", "source_channel", "campaign_name", "utm_source", "utm_medium", "utm_campaign", "area", "service_category", "service_interest", "need_description", "owner_email", "status", "contactable", "last_contacted_at", "next_follow_up_at", "qualified_at", "won_at", "lost_reason", "notes", "created_by", "created_at", "updated_by", "updated_at",
   "need", "buy_status", "sell_status", "property_type", "property_condition", "price_range", "call_status", "staff", "line_id", "interest"];

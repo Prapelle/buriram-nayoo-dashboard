@@ -4,7 +4,7 @@
  *   Seller / Buyer Leads  ← LEAD_STATUS_LOG   (นับเมื่อย้ายเข้าสถานะที่เป็นบวก · ครั้งเดียวต่อ Lead ต่อตัวชี้วัดต่อเดือน)
  *   Sale developer / Home builder ← สรุปรายเดือนเดิมของหน้า Developer (monthlyReport) แยกตามประเภทลูกค้า
  *   Production ← CONTENT_HISTORY + CONTENT_MEMBERS (เสร็จ = ย้ายถึง PUBLISHED · ผู้ร่วมงานทุกคนได้เต็ม 1 งาน)
- * คนที่ได้ผลงาน = Staff ของ Lead / Developer (จับคู่กับ "ชื่อที่แสดง" ของผู้ใช้) · Lead ที่ไม่มี Staff ให้คนที่กดย้าย
+ * คนที่ได้ผลงาน = Staff ของ Lead / Developer (จับคู่กับ "ชื่อที่แสดง" ของผู้ใช้) · ไม่มี Staff ให้ผู้ดูแลบอร์ดนั้น (คนที่มีตำแหน่งของบอร์ด)
  */
 import { bkkDay, monthlyReport, type Dev, type DevProduct } from "./developers";
 import { REPORT_STAGES } from "./content";
@@ -20,7 +20,7 @@ export type CalcInput = {
   waits?: Row[]; holidays?: string[]; today?: string; // CONTENT_WAITS · วันหยุดบริษัท (YYYY-MM-DD) · วันนี้ (เวลาไทย) ใช้นับการรอที่ยังไม่จบ
 };
 /** ผลงานที่ระบบนับให้ใครไม่ได้ (ชื่อ Staff ไม่ตรงกับผู้ใช้ / ชื่อซ้ำหลายคน) — แสดงให้ Admin แก้ */
-export type Unmatched = { name: string; reason: "no_user" | "ambiguous" | "no_member"; source: string; count: number };
+export type Unmatched = { name: string; reason: "no_user" | "ambiguous" | "no_member" | "no_holder" | "many_holders"; source: string; count: number };
 export type CalcResult = { actuals: Record<string, Record<string, number | null>>; unmatched: Unmatched[] };
 
 const lc = (v: unknown) => String(v ?? "").trim().toLowerCase();
@@ -39,17 +39,25 @@ export function computeMonth(inp: CalcInput): CalcResult {
     const k = `${reason}|${source}|${name}`; const x = unmatched.get(k);
     if (x) x.count += n; else unmatched.set(k, { name, reason, source, count: n });
   };
-  /** Staff → อีเมลผู้ใช้ · ว่าง → คนที่กด (fallback) · ไม่ตรง/ซ้ำ → null และบันทึกเป็น unmatched */
-  const resolve = (staff: string, fallback: string, source: string, n = 1): string | null => {
+  /** ผู้ดูแลบอร์ดของตำแหน่งนั้น (ตั้งที่ ตั้งค่า → ตั้งเป้าประสิทธิภาพรายคน) */
+  const holders = (pos: string) => inp.users.filter((u) => u.positions.includes(pos)).map((u) => u.email);
+  /**
+   * Staff → อีเมลผู้ใช้ · ไม่ตรง/ชื่อซ้ำ → null และบันทึกเป็น unmatched
+   * Staff ว่าง (ผู้ใช้กำหนด 5/11/2026) → ให้ผู้ดูแลบอร์ดนั้น = คนที่มีตำแหน่งของบอร์ด:
+   *   มีคนเดียว → คนนั้น · หลายคน → คนที่กดย้าย ถ้าเป็นหนึ่งในผู้ดูแล ไม่งั้นนับให้ใครไม่ได้ · ไม่มีใคร → นับให้ใครไม่ได้
+   */
+  const resolve = (staff: string, mover: string, source: string, position: string, n = 1): string | null => {
     const s = lc(staff);
     if (s) {
       if (byName.has(s)) { const e = byName.get(s); if (e) return e; miss(staff.trim(), "ambiguous", source, n); return null; }
       if (byEmail.has(s)) return byEmail.get(s)!;
       miss(staff.trim(), "no_user", source, n); return null;
     }
-    const f = lc(fallback);
-    if (f && byEmail.has(f)) return byEmail.get(f)!;
-    miss("(ไม่ระบุ Staff)", "no_user", source, n); return null;
+    const hs = holders(position);
+    if (hs.length === 1) return hs[0];
+    const m = lc(mover), hit = hs.find((e) => lc(e) === m);
+    if (hit) return hit;
+    miss("(ไม่ระบุ Staff)", hs.length ? "many_holders" : "no_holder", source, n); return null;
   };
   const add = (email: string | null, key: string, n: number) => { if (email && n) actuals[email][key] = (actuals[email][key] ?? 0) + n; };
 
@@ -61,7 +69,7 @@ export function computeMonth(inp: CalcInput): CalcResult {
     for (const l of monthLogs) {
       if (l.field !== r.field || !r.to.includes(l.to_status) || (r.from && !r.from.includes(l.from_status)) || seen.has(l.lead_id)) continue;
       seen.add(l.lead_id);
-      add(resolve(l.staff, l.changed_by, "Leads"), m.key, 1);
+      add(resolve(l.staff, l.changed_by, r.field === "sell_status" ? "คนต้องการขาย" : "คนต้องการซื้อ", m.position), m.key, 1);
     }
   }
 
@@ -70,7 +78,7 @@ export function computeMonth(inp: CalcInput): CalcResult {
     for (const r of monthlyReport(d.logs, d.products, d.devs, month, d.contacts)) {
       const n = r.calls + r.planned + r.met + r.won + r.productSales;
       if (!n) continue; // แถวที่ไม่มีผลงาน ไม่ต้องจับคู่/ไม่ต้องรายงานว่าไม่ตรง
-      const e = resolve(r.staff === "(ไม่ระบุ Staff)" ? "" : r.staff, "", pos === "sale_developer" ? "Developer" : "Home Builder", 1);
+      const e = resolve(r.staff === "(ไม่ระบุ Staff)" ? "" : r.staff, "", pos === "sale_developer" ? "Developer" : "Home Builder", pos);
       add(e, `${pos}.calls`, r.calls); add(e, `${pos}.planned`, r.planned); add(e, `${pos}.met`, r.met); add(e, `${pos}.won`, r.won); add(e, `${pos}.sales`, r.productSales);
     }
   }

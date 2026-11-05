@@ -16,7 +16,7 @@ const EXPECT: Record<string, string[] | "public" | Record<string, string[]>> = {
   "src/app/api/auth/[...nextauth]/route.ts": "public", // Auth.js จัดการเอง (login/callback)
   "src/app/api/init/route.ts": ["super_admin"], "src/app/api/admin/d1/route.ts": ["super_admin"], "src/app/api/health/route.ts": ["super_admin"], "src/app/api/users/route.ts": ["super_admin"], // ตั้งค่าระบบ: Super Admin เท่านั้น
   "src/app/api/website/route.ts": { GET: ["admin", "marketing", "production"], POST: ["admin"] }, // Marketing ดูอย่างเดียว
-  "src/app/api/import/plan/route.ts": ["admin"], "src/app/api/import/commit/route.ts": ["admin"], "src/app/api/import/history/route.ts": ["admin"],
+  "src/app/api/import/plan/route.ts": ["admin"], "src/app/api/import/commit/route.ts": ["admin"], "src/app/api/import/history/route.ts": { GET: ["admin"], POST: ["super_admin"] }, // POST = ลบข้อมูลรายงานที่นำเข้า (5/11/2026)
   "src/app/api/line-oa/route.ts": { GET: ["admin", "marketing", "production"], POST: ["admin"] },
   "src/app/api/leads/route.ts": { GET: ["admin", "ae"], POST: ["admin", "ae"], PATCH: ["admin", "ae"], DELETE: ["ae"] }, // Admin เพิ่ม/แก้ได้ ลบไม่ได้
   "src/app/api/badges/route.ts": ["admin", "ae"], // จำนวน Lead ที่ต้องติดตาม (ตัวเลขบนเมนู)

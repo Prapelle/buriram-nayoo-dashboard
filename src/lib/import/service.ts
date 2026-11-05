@@ -1,5 +1,6 @@
 import { AREAS } from "../schema";
-import { appendRows, batchGet, batchUpdateValues, colLetter, firstRowOf, readTabs, toRow } from "../sheets";
+import { appendRows, atomicWrite, batchGet, batchUpdateValues, colLetter, firstRowOf, readTabs, toRow, type AtomicOp } from "../sheets";
+import { readColumns } from "../tabdata";
 import { isIsoDate } from "./normalize";
 import { buildPlan, compareKeys, detectSpec, parseInput, periodsFromFilename, PlanError, type Ctx, type Existing, type Plan } from "./plan";
 import { SPEC_BY_ID, type Spec } from "./specs";
@@ -244,7 +245,40 @@ async function audit(actor: string, action: string, entityId: string, summary: s
   await appendRows("AUDIT_LOG", [toRow(eh, { audit_id: crypto.randomUUID(), actor_email: actor, action, entity_type: "import_batch", entity_id: entityId, timestamp: now, summary })]);
 }
 
-export async function listBatches(limit = 30) {
+/**
+ * ลบข้อมูลของรายงานที่นำเข้า (Super Admin · 5/11/2026) — ใช้แก้กรณีนำเข้ารายงานช่วงวันที่ทับกันแล้วยอดนับซ้ำ
+ * แถวที่ลบ = แถวในแท็บปลายทางที่มาจากชุดนี้ (source_batch_id) + ถ้าแท็บมีช่วงรายงาน แถวที่ช่วงรายงานตรงกับชุดนี้พอดี (รายงานช่วงเดียวกันที่นำเข้าซ้ำ)
+ * ชุดนำเข้าไม่ถูกลบ: เปลี่ยนสถานะเป็น deleted (ประวัติยังอยู่ · นำเข้าไฟล์เดิมใหม่ได้) · บันทึก Audit Log
+ * confirm = false → แค่นับว่าจะลบกี่แถว (ไม่เขียนอะไร)
+ */
+export async function deleteBatchData(batchId: string, actor: string, confirm: boolean) {
+  if (!batchId) throw new HttpError(400, "ไม่ระบุชุดนำเข้า", "BAD_REQUEST");
+  const { IMPORT_BATCHES: B } = await readTabs(["IMPORT_BATCHES"]);
+  const bi = B.rows.findIndex((b) => b.batch_id === batchId);
+  if (bi < 0) throw new HttpError(404, "ไม่พบชุดนำเข้านี้", "NOT_FOUND");
+  const batch = B.rows[bi];
+  if (batch.status === "deleted") throw new HttpError(409, "ชุดนำเข้านี้ถูกลบข้อมูลไปแล้ว", "ALREADY_DELETED");
+  const spec = SPEC_BY_ID[batch.report_type];
+  if (!spec) throw new HttpError(422, `ไม่รู้จักประเภทรายงาน ${batch.report_type}`, "UNKNOWN_TYPE");
+  const t = await readColumns(spec.tab, { only: ["record_id", "source_batch_id", "report_start", "report_end"] });
+  const byPeriod = t.headers.includes("report_start") && t.headers.includes("report_end") && !!batch.report_start && !!batch.report_end;
+  const hit = t.rows.filter((r) => r.source_batch_id === batchId || (byPeriod && r.report_start === batch.report_start && r.report_end === batch.report_end));
+  // ชุดนำเข้าที่ข้อมูลถูกลบไปด้วย (รายงานช่วงเดียวกันที่นำเข้าซ้ำ)
+  const sameIds = new Set(hit.map((r) => r.source_batch_id).filter(Boolean)); sameIds.add(batchId);
+  const batches = B.rows.map((b, i) => ({ b, i })).filter(({ b }) => b.status !== "deleted" && (sameIds.has(b.batch_id) || (byPeriod && b.report_type === batch.report_type && b.report_start === batch.report_start && b.report_end === batch.report_end)));
+  const summary = { batchId, tab: spec.tab, label: spec.label, period: batch.report_start ? `${batch.report_start} – ${batch.report_end}` : "", rows: hit.length, batches: batches.length };
+  if (!confirm) return { ...summary, deleted: false };
+  if (!t.headers.includes("source_batch_id") || (hit.some((r) => r.source_batch_id !== batchId) && !t.headers.includes("record_id"))) throw new HttpError(409, "แท็บนี้ไม่มีคอลัมน์ source_batch_id / record_id ลบอัตโนมัติไม่ได้", "NO_KEY");
+  const ops: AtomicOp[] = [{ deleteWhere: spec.tab, col: "source_batch_id", value: batchId }];
+  for (const r of hit) if (r.source_batch_id !== batchId && r.record_id) ops.push({ deleteWhere: spec.tab, col: "record_id", value: r.record_id });
+  await atomicWrite(ops);
+  const now = new Date().toISOString(), last = colLetter(B.headers.length - 1);
+  await batchUpdateValues(batches.map(({ b, i }) => ({ range: `'IMPORT_BATCHES'!A${i + 2}:${last}${i + 2}`, values: [toRow(B.headers, { ...b, status: "deleted", error_summary: `ลบข้อมูลโดย ${actor} ${now}` })] })));
+  await audit(actor, "import_batch_delete", batchId, `ลบข้อมูลรายงาน ${spec.label} ${summary.period} (${batch.filename}): ${hit.length} แถว · ชุดนำเข้า ${batches.length} ชุด`, now);
+  return { ...summary, deleted: true };
+}
+
+export async function listBatches(limit = 100) {
   const { IMPORT_BATCHES } = await readTabs(["IMPORT_BATCHES"]);
   return IMPORT_BATCHES.rows.slice(-limit).reverse().map((b) => ({
     batch_id: b.batch_id, report_type: b.report_type, filename: b.filename, report_start: b.report_start, report_end: b.report_end,

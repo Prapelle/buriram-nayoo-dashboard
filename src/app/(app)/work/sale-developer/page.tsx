@@ -7,7 +7,7 @@ export default async function SaleDeveloperPage() {
     <section className="space-y-4">
       <div>
         <h1 className="text-[26px] font-bold tracking-tight">Sale developer</h1>
-        <p className="text-sm text-slate-500">ติดตามการขายโฆษณาให้โครงการหมู่บ้าน ตาม Status · การ์ดมาจากหน้า Developer · เข้าถึงได้เฉพาะ Admin และ Sales</p>
+        <p className="text-sm text-slate-500">ติดตามการขายโฆษณาให้โครงการหมู่บ้าน ตาม Status · การ์ดมาจากหน้า Developer · เข้าถึงได้เฉพาะ Super Admin, Admin และ AE</p>
       </div>
       <DevBoard />
     </section>

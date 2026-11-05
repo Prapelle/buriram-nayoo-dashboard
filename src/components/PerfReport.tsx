@@ -9,10 +9,10 @@ type Line = { key: string; label: string; unit: "count" | "baht" | "percent"; ho
 type Person = { email: string; name: string; positions: { key: string; label: string; metrics: Line[] }[]; overall: number | null };
 type Report = {
   month: string; canSeeAll: boolean; people: Person[]; duplicateNames: string[];
-  unmatched: { name: string; reason: "no_user" | "ambiguous" | "no_member"; source: string; count: number }[];
+  unmatched: { name: string; reason: "no_user" | "ambiguous" | "no_member" | "no_holder" | "many_holders"; source: string; count: number }[];
 };
 const monthNow = () => new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 7);
-const REASON = { no_user: "ไม่ตรงกับชื่อผู้ใช้คนใด", ambiguous: "ชื่อซ้ำกับผู้ใช้หลายคน", no_member: "การ์ดไม่มีผู้ร่วมงาน" } as const;
+const REASON = { no_user: "ไม่ตรงกับชื่อผู้ใช้คนใด", ambiguous: "ชื่อซ้ำกับผู้ใช้หลายคน", no_member: "การ์ดไม่มีผู้ร่วมงาน", no_holder: "ไม่ระบุ Staff และยังไม่มีใครมีตำแหน่งของบอร์ดนี้ (ตั้งที่ ตั้งค่า → ตั้งเป้าประสิทธิภาพรายคน)", many_holders: "ไม่ระบุ Staff และบอร์ดนี้มีผู้ดูแลหลายคน — เลือก Staff ให้การ์ด" } as const;
 const num = (n: number | null, unit: Line["unit"]) => (n === null ? "—" : unit === "baht" ? `฿${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}` : unit === "percent" ? `${n}%` : n.toLocaleString("en-US"));
 const tone = (p: number | null) => (p === null ? "bg-slate-300" : p >= 100 ? "bg-green-500" : p >= 70 ? "bg-sky-500" : p >= 40 ? "bg-amber-500" : "bg-red-500");
 

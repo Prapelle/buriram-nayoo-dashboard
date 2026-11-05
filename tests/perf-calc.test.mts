@@ -162,4 +162,24 @@ await t("วันหยุดบริษัทไม่นับเป็น�
   assert.equal(run([]), 100); // รอ 2 วัน → due 11-12 → ทัน
   assert.equal(run(["2026-11-04", "2026-11-05"]), 0); // วันที่รอเป็นวันหยุดทั้งคู่ → รอ 0 วัน → due 11-10 → เลย
 });
+await t("ไม่ระบุ Staff → ผู้ดูแลบอร์ด (คนที่มีตำแหน่ง): คนเดียว = คนนั้น · หลายคน = คนที่กด ถ้าเป็นผู้ดูแล · ไม่มีผู้ดูแล = นับให้ใครไม่ได้", () => {
+  const us = [{ email: "p@x.com", name: "พี", positions: ["ae_sell"] }, { email: "q@x.com", name: "คิว", positions: ["ae_buy"] }, { email: "r@x.com", name: "อาร์", positions: ["ae_buy"] }, { email: "s@x.com", name: "เอส", positions: ["sale_developer"] }];
+  const empty = { devs: [], products: [], logs: [], contacts: [] };
+  const r = C.computeMonth({ month: M, users: us, cards: [], members: [], history: [],
+    leadLogs: [L("A", "sell_status", "รอติดต่อ", "สนใจขาย", "", IN, "zz@x.com"), L("B", "call_status", "รอติดต่อ", "ติดต่อได้แล้ว", "", IN, "r@x.com"), L("C", "call_status", "รอติดต่อ", "ติดต่อได้แล้ว", "", IN, "zz@x.com")],
+    developers: { devs: [dev("x1", "")], products: [], logs: [DL("x1", "เข้าพบแล้ว", "")], contacts: [] },
+    homeBuilders: { devs: [dev("y1", "")], products: [], logs: [DL("y1", "ปิดการขาย", "")], contacts: [] } });
+  assert.equal(r.actuals["p@x.com"]["ae_sell.contact"], 1); // ผู้ดูแลคนต้องการขายมีคนเดียว (คนกดไม่ใช่ผู้ดูแลก็ได้)
+  assert.equal(r.actuals["r@x.com"]["ae_buy.contact"], 1); assert.equal(r.actuals["q@x.com"]["ae_buy.contact"], 0); // ผู้ดูแล 2 คน → คนที่กด
+  assert.equal(r.actuals["s@x.com"]["sale_developer.met"], 1);
+  assert.ok(r.unmatched.some((u) => u.reason === "many_holders" && u.source === "คนต้องการซื้อ")); // Lead C: คนกดไม่ใช่ผู้ดูแล
+  assert.ok(r.unmatched.some((u) => u.reason === "no_holder" && u.source === "Home Builder"));
+  void empty;
+});
+await t("Sale developer: ลากเข้าสถานะเดิมซ้ำในเดือนเดียว = นับครั้งเดียวต่อโครงการ", () => {
+  const us = [{ email: "s@x.com", name: "เอส", positions: ["sale_developer"] }];
+  const logs = [DL("z1", "มีแผนเข้าพบ", "เอส", IN), { ...DL("z1", "มีแผนเข้าพบ", "เอส", "2026-11-06T03:00:00.000Z") }, DL("z1", "ปิดการขาย", "เอส", IN), { ...DL("z1", "ปิดการขาย", "เอส", "2026-11-07T03:00:00.000Z") }, DL("z2", "มีแผนเข้าพบ", "เอส", IN)];
+  const r = C.computeMonth({ month: M, users: us, cards: [], members: [], history: [], leadLogs: [], developers: { devs: [dev("z1", "เอส"), dev("z2", "เอส")], products: [], logs, contacts: [] }, homeBuilders: { devs: [], products: [], logs: [], contacts: [] } });
+  assert.equal(r.actuals["s@x.com"]["sale_developer.planned"], 2); assert.equal(r.actuals["s@x.com"]["sale_developer.won"], 1);
+});
 console.log("perf-calc: ผ่านทั้งหมด");

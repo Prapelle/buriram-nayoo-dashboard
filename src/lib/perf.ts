@@ -54,6 +54,15 @@ export function staffUserNames(users: Record<string, string>[], normRole: (v: un
   const names = users.filter((u) => u.email && String(u.active).toUpperCase() === "TRUE" && STAFF_ROLES.includes(normRole(u.role) ?? "")).map(staffNameOf).filter(Boolean);
   return [...new Set(names)].sort(th);
 }
+/**
+ * ตรวจช่อง Staff ฝั่ง Server (5/11/2026): ต้องว่าง / เป็นชื่อผู้ใช้ที่เป็น Staff ได้ / หรือคงค่าเดิมของรายการนั้น (ข้อมูลเก่าที่พิมพ์เอง)
+ * คืนชื่อที่ใช้บันทึก (สะกดตามรายชื่อผู้ใช้) หรือ null ถ้าไม่อนุญาต
+ */
+export function checkStaff(staff: unknown, prevStaff: unknown, userNames: string[]): string | null {
+  const v = String(staff ?? "").trim();
+  if (!v || v === String(prevStaff ?? "").trim()) return v;
+  return userNames.find((n) => n.toLowerCase() === v.toLowerCase()) ?? null;
+}
 /** รายชื่อสำหรับตัวกรอง = ผู้ใช้ปัจจุบัน + ชื่อเดิมที่มีอยู่ในข้อมูลแต่ไม่ตรงกับผู้ใช้ใด (ข้อมูลเก่าที่พิมพ์เอง) */
 export const mergeStaff = (userNames: string[], existing: string[]) => [...userNames, ...[...new Set(existing.map((x) => x.trim()).filter(Boolean))].filter((x) => !userNames.includes(x)).sort(th)];
 

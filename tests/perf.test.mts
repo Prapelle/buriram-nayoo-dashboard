@@ -56,6 +56,9 @@ await t("mergeStaff: ผู้ใช้มาก่อน แล้วตาม�
 await initializeSpreadsheet("admin@example.com");
 const db = makeD1(); D.setD1ForTest(db as never); ST.invalidateD1State();
 const log = () => db.rows("LEAD_STATUS_LOG") as Record<string, string>[];
+// ช่อง Staff ต้องเป็นชื่อผู้ใช้ (ตรวจฝั่ง Server ตั้งแต่ 5/11/2026)
+await (await import("../src/lib/users-service")).saveUser({ email: "somchai@example.com", display_name: "สมชาย", role: "ae" }, "admin@example.com");
+await (await import("../src/lib/users-service")).saveUser({ email: "somying@example.com", display_name: "สมหญิง", role: "ae" }, "admin@example.com");
 const base = { received_at: "2026-11-05", source_channel: "Referral", phone: "0811111111" };
 let buyer: Awaited<ReturnType<typeof saveLead>>["lead"];
 
@@ -98,9 +101,11 @@ await t("listLeads / listDevelopers ส่ง staffUsers (ชื่อผู้�
   const { saveUser } = await import("../src/lib/users-service");
   await saveUser({ email: "ae9@example.com", display_name: "เอไอ", role: "ae" }, "admin@example.com");
   const { listLeads } = await import("../src/lib/leads-service");
-  await saveLead({ ...base, phone: "0844444444", customer_name: "ชื่อเก่า", need: "ซื้อ", buy_status: "Cold", staff: "คนเก่าที่ไม่มีบัญชี" }, "ae9@example.com");
-  const L = await listLeads(); assert.ok(L.staffUsers.includes("เอไอ")); assert.ok(!L.staffUsers.includes("คนเก่าที่ไม่มีบัญชี"));
-  assert.ok(L.staff.includes("เอไอ") && L.staff.includes("คนเก่าที่ไม่มีบัญชี"));
+  // Staff ที่ไม่ใช่ชื่อผู้ใช้ → Server ปฏิเสธ (ชื่อเดิมในข้อมูลเก่ายังคงไว้ได้ ดู checkStaff)
+  await assert.rejects(saveLead({ ...base, phone: "0844444444", customer_name: "ชื่อเก่า", need: "ซื้อ", buy_status: "Cold", staff: "คนเก่าที่ไม่มีบัญชี" }, "ae9@example.com"), (e: unknown) => (e as { code?: string }).code === "VALIDATION");
+  const ok1 = (await saveLead({ ...base, phone: "0844444445", customer_name: "ชื่อใหม่", need: "ซื้อ", buy_status: "Cold", staff: "เอไอ" }, "ae9@example.com")).lead; assert.equal(ok1.staff, "เอไอ");
+  const L = await listLeads(); assert.ok(L.staffUsers.includes("เอไอ")); assert.ok(L.staff.includes("เอไอ"));
+  assert.equal(P.checkStaff("คนเก่า", "คนเก่า", ["เอไอ"]), "คนเก่า"); assert.equal(P.checkStaff("คนเก่า", "", ["เอไอ"]), null); assert.equal(P.checkStaff("เอไอ ", "", ["เอไอ"]), "เอไอ"); assert.equal(P.checkStaff("", "x", []), "");
   const { listDevelopers } = await import("../src/lib/developers-service");
   const Dv = await listDevelopers("developer"); assert.ok(Dv.staffUsers.includes("เอไอ"));
 });
@@ -203,7 +208,10 @@ await PS.savePositions("rep@example.com", ["ae_buy"], ADM);
 await PS.savePositions("other@example.com", ["ae_buy"], ADM);
 await t("getPerfReport: ลาก Call Status จริง → ทำได้ตรงเป้า · คนทั่วไปเห็นเฉพาะของตัวเอง · Admin เห็นทุกคน + รายการที่นับให้ใครไม่ได้", async () => {
   const mk = async (n: string, staff: string, ph: string) => (await saveLead({ ...base, phone: ph, customer_name: n, need: "ซื้อ", buy_status: "Hot", staff }, ADM)).lead;
+  // Lead ที่ Staff เป็นผู้ใช้ที่ภายหลังถูกระงับ = ชื่อเดิมที่ไม่ตรงกับผู้ใช้ปัจจุบัน (บันทึกชื่อนอกรายชื่อตรง ๆ ไม่ได้แล้ว)
+  await saveU({ email: "gone@example.com", display_name: "ชื่อที่ไม่มีบัญชี", role: "ae" }, ADM);
   let a = await mk("ลูกค้า1", "คนทดสอบรายงาน", "0851111111"), b = await mk("ลูกค้า2", "คนทดสอบรายงาน", "0852222222"); const c = await mk("ลูกค้า3", "ชื่อที่ไม่มีบัญชี", "0853333333");
+  await saveU({ email: "gone@example.com", display_name: "ชื่อที่ไม่มีบัญชี", role: "ae", active: false, ...(await (async () => { const g = (await (await import("../src/lib/users-service")).listUsers()).find((u: Record<string, string>) => u.email === "gone@example.com")!; return { user_id: g.user_id, updated_at_seen: g.updated_at }; })()) }, ADM);
   a = (await changeLeadStatus(a.lead_id, "call_status", "ติดต่อได้แล้ว", a.updated_at, ADM)).lead;
   b = (await changeLeadStatus(b.lead_id, "call_status", "ติดต่อไม่ได้", b.updated_at, ADM)).lead; // ลบ ไม่ได้คะแนน
   await changeLeadStatus(c.lead_id, "call_status", "ติดต่อได้แล้ว", c.updated_at, ADM);

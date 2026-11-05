@@ -5,7 +5,7 @@
  * - ไม่ลบ log · ตรวจข้อมูลเก่าก่อนแก้ (updated_at) · เตือนชื่อบริษัท/โครงการ/เบอร์/Line ซ้ำ (ไม่ merge อัตโนมัติ) · บันทึก Audit Log
  */
 import { writeAudit } from "./audit";
-import { mergeStaff, staffUserNames } from "./perf";
+import { checkStaff, mergeStaff, staffUserNames } from "./perf";
 import { normRole } from "./roles";
 import {
   addDays, AUTO_STATUS, KIND_LABEL, kindOf, type DevKind, autoChanges, CONTACT_COLUMNS, CONTACT_METHODS, NEXT_CONTACT_DAYS, DEFAULT_PRODUCTS, DEV_COLUMNS, DEV_DEFAULT, DEV_EDITABLE, DEV_STATUS, findDevDuplicates, IMPORT_HEADERS, LOG_COLUMNS, nextDevCode, normLine, normName, normPhone,
@@ -145,6 +145,10 @@ export async function saveDeveloper(input: Record<string, unknown>, actor: strin
     if (kindOf(prev) !== kind) throw new DevError(404, `ไม่พบรายการนี้ใน ${KIND_LABEL[kind]}`, "NOT_FOUND");
     if (String(input.updated_at_seen ?? "") !== prev.updated_at) throw new DevError(409, "รายการนี้ถูกแก้ไขโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่ก่อนแก้ไข", "STALE");
   }
+  // Staff ต้องเลือกจากรายชื่อผู้ใช้ (ค่าเดิมของรายการนี้ยังคงไว้ได้)
+  const staffOk = checkStaff(v.rec.staff, prev?.staff, staffUserNames(t.APP_USERS?.rows ?? [], normRole));
+  if (staffOk === null) throw new DevError(422, "Staff ต้องเลือกจากรายชื่อผู้ใช้", "VALIDATION", { fields: { staff: "เลือก Staff จากรายชื่อผู้ใช้" } });
+  v.rec.staff = staffOk;
   const key = (d: Dev) => [normName(d.company_name), normName(d.project_main), normPhone(d.phone), normLine(d.line_id)].join("|");
   if ((!prev || key(prev) !== key(v.rec)) && input.confirmDuplicate !== true) {
     const m = findDevDuplicates(rows.filter((r) => r.developer_id && sameKind(r)).map(pickDev), v.rec, id || undefined);

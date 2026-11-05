@@ -10,7 +10,13 @@ t("ลำดับคอลัมน์ตรงตามที่กำหน�
 t("ค่าเริ่มต้นคือ รอติดต่อ", () => assert.equal(SELL_DEFAULT, "รอติดต่อ"));
 t("ค่าเก่า ทำสัญญา / เป็นนายหน้า ถูกตัดออก", () => { assert.ok(!SELL_STATUS.includes("ทำสัญญา")); assert.ok(!SELL_STATUS.includes("เป็นนายหน้า")); });
 t("Pipeline: รอติดต่อ ไม่นับ Qualified", () => { assert.equal(pipelineOf(sell("รอติดต่อ")), "New"); assert.equal(pipelineOf(sell("รอติดต่อ", "ติดต่อได้แล้ว")), "Contacted"); });
-t("Pipeline: สนใจขาย / นัดทำสัญญา / เซ็นสัญญา / สัญญาเปิด = Qualified", () => { for (const s of ["สนใจขาย", "นัดทำสัญญา", "เซ็นสัญญา", "สัญญาเปิด"]) assert.equal(pipelineOf(sell(s)), "Qualified", s); });
+t("Pipeline: เซ็นสัญญา / สัญญาเปิด = Qualified · สนใจขาย / นัดทำสัญญา = Contacted (นิยามเดียวกับ KPI)", () => { for (const s of ["เซ็นสัญญา", "สัญญาเปิด"]) assert.equal(pipelineOf(sell(s)), "Qualified", s); for (const s of ["สนใจขาย", "นัดทำสัญญา"]) assert.equal(pipelineOf(sell(s)), "Contacted", s); });
+t("Pipeline คนต้องการซื้อ: ใช้ Call Status (Hot/Warm ไม่ทำให้ Qualified)", () => {
+  assert.equal(pipelineOf({ need: "ซื้อ", buy_status: "Hot", call_status: "รอติดต่อ" } as Lead), "New");
+  for (const c of ["รอเข้าชม", "เข้าชมแล้ว", "จอง", "กู้ไม่ผ่าน"]) assert.equal(pipelineOf({ need: "ซื้อ", call_status: c } as Lead), "Qualified", c);
+  assert.equal(pipelineOf({ need: "ซื้อ", call_status: "ซื้อสำเร็จ" } as Lead), "Won");
+  assert.equal(pipelineOf({ need: "เช่า", call_status: "ไม่สนใจ" } as Lead), "Lost");
+});
 t("Pipeline: ขายแล้ว = Won · ยกเลิก / บ้านไม่พร้อมขาย = Lost", () => { assert.equal(pipelineOf(sell("ขายแล้ว")), "Won"); assert.equal(pipelineOf(sell("ยกเลิก")), "Lost"); assert.equal(pipelineOf(sell("บ้านไม่พร้อมขาย")), "Lost"); });
 t("leadStatusOf อ่าน sell_status เมื่อ Need = ขาย", () => assert.equal(leadStatusOf(sell("สนใจขาย")), "สนใจขาย"));
 t("validateLead ยอมรับสถานะใหม่ และปฏิเสธค่าเก่าที่ตัดออก", () => {

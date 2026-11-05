@@ -18,9 +18,9 @@ await initializeSpreadsheet("admin@example.com");
 let lead = (await saveLead({ ...base }, "sales@example.com")).lead;
 
 await t("Lead ขายที่ไม่ระบุ Sell Status เริ่มที่ รอติดต่อ", async () => { assert.equal(lead.sell_status, "รอติดต่อ"); assert.equal(lead.status, "New"); });
-await t("เปลี่ยนเป็น สนใจขาย → Qualified + audit", async () => {
+await t("เปลี่ยนเป็น สนใจขาย → Contacted (ยังไม่ Qualified) + audit", async () => {
   const r = await changeSellStatus(lead.lead_id, "สนใจขาย", lead.updated_at, "sales@example.com"); assert.ok(r.changed);
-  assert.equal(row(lead.lead_id).sell_status, "สนใจขาย"); assert.equal(row(lead.lead_id).status, "Qualified"); assert.ok(row(lead.lead_id).qualified_at);
+  assert.equal(row(lead.lead_id).sell_status, "สนใจขาย"); assert.equal(row(lead.lead_id).status, "Contacted"); assert.equal(row(lead.lead_id).qualified_at, "");
   assert.ok((tabs.get("AUDIT_LOG")!.rows as string[][]).some((x) => x.join("|").includes("สนใจขาย")));
   lead = r.lead;
 });
@@ -40,9 +40,9 @@ await t("ไม่พบ Lead → 404", async () => { await fails(changeSellStat
 const buyer = (await saveLead({ ...base, customer_name: "ผู้ซื้อ", phone: "0833333333", need: "ซื้อ", buy_status: "Cold" }, "sales@example.com")).lead;
 await t("Lead ซื้อที่ไม่ระบุ Call Status เริ่มที่ รอติดต่อ", async () => { assert.equal(buyer.call_status, "รอติดต่อ"); assert.equal(buyer.status, "New"); });
 let cur = buyer;
-await t("รอเข้าชม → Qualified Lead (Pipeline Contacted) + contactable TRUE", async () => {
+await t("รอเข้าชม → Qualified Lead (Pipeline Qualified ตรงกับ KPI) + contactable TRUE", async () => {
   const r = await changeLeadStatus(cur.lead_id, "call_status", "รอเข้าชม", cur.updated_at, "sales@example.com"); assert.ok(r.changed);
-  assert.equal(row(cur.lead_id).call_status, "รอเข้าชม"); assert.equal(row(cur.lead_id).status, "Contacted"); assert.equal(row(cur.lead_id).contactable, "TRUE");
+  assert.equal(row(cur.lead_id).call_status, "รอเข้าชม"); assert.equal(row(cur.lead_id).status, "Qualified"); assert.equal(row(cur.lead_id).contactable, "TRUE");
   assert.ok((tabs.get("AUDIT_LOG")!.rows as string[][]).some((x) => x.join("|").includes("Call รอติดต่อ → รอเข้าชม")));
   cur = r.lead;
 });
@@ -55,9 +55,10 @@ await t("ติดต่อไม่ได้ → contactable FALSE · จอง
   let r = await changeLeadStatus(cur.lead_id, "call_status", "ติดต่อไม่ได้", cur.updated_at, "sales@example.com"); assert.equal(row(cur.lead_id).contactable, "FALSE"); assert.equal(row(cur.lead_id).status, "New"); cur = r.lead;
   r = await changeLeadStatus(cur.lead_id, "call_status", "จอง", cur.updated_at, "sales@example.com"); assert.equal(row(cur.lead_id).contactable, "TRUE"); cur = r.lead;
 });
-await t("Pipeline จาก Buy Status ไม่ถูกทับ (Hot = Qualified แม้ Call = รอติดต่อ)", async () => {
-  const h = (await saveLead({ ...base, customer_name: "ผู้ซื้อ Hot", phone: "0844444444", need: "ซื้อ", buy_status: "Hot" }, "sales@example.com")).lead; assert.equal(h.status, "Qualified");
-  const r = await changeLeadStatus(h.lead_id, "call_status", "ไม่สนใจ", h.updated_at, "sales@example.com"); assert.equal(row(h.lead_id).status, "Qualified"); assert.equal(row(h.lead_id).contactable, "TRUE"); void r;
+await t("Pipeline คนต้องการซื้อมาจาก Call Status (Hot ไม่ทำให้ Qualified · ไม่สนใจ = Lost)", async () => {
+  const h = (await saveLead({ ...base, customer_name: "ผู้ซื้อ Hot", phone: "0844444444", need: "ซื้อ", buy_status: "Hot" }, "sales@example.com")).lead; assert.equal(h.status, "New");
+  let r = await changeLeadStatus(h.lead_id, "call_status", "รอเข้าชม", h.updated_at, "sales@example.com"); assert.equal(row(h.lead_id).status, "Qualified"); assert.ok(row(h.lead_id).qualified_at);
+  r = await changeLeadStatus(h.lead_id, "call_status", "ไม่สนใจ", r.lead.updated_at, "sales@example.com"); assert.equal(row(h.lead_id).status, "Lost"); assert.equal(row(h.lead_id).contactable, "TRUE");
 });
 await t("Call Status นอกรายการ → 422 · ข้อมูลเก่า → 409", async () => {
   await fails(changeLeadStatus(cur.lead_id, "call_status", "โทรแล้ว", cur.updated_at, "x@example.com"), "VALIDATION");

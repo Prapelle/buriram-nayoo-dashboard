@@ -206,8 +206,12 @@ export function monthlyReport(logs: Record<string, string>[], products: DevProdu
   // ประวัติอัตโนมัติอาจถูกบันทึกซ้ำถ้าเปิดหน้าพร้อมกันหลายคน (รหัสเดียวกัน) → นับครั้งเดียวต่อรหัส
   const seenIds = new Set<string>(); const uniq: Record<string, string>[] = [];
   for (const l of logs) { if (l.log_id) { if (seenIds.has(l.log_id)) continue; seenIds.add(l.log_id); } uniq.push(l); }
+  // ลากการ์ดออกแล้วลากกลับเข้าสถานะเดิมในเดือนเดียวกัน = นับครั้งเดียวต่อโครงการต่อสถานะต่อเดือน (ผู้ใช้กำหนด 5/11/2026 · เหมือนฝั่ง Lead)
+  const seenMove = new Set<string>();
   for (const l of uniq) {
-    if (l.kind === "manual" && bkkDay(l.changed_at).slice(0, 7) === month) {
+    const mk = `${l.developer_id}|${l.to_status}`;
+    if (l.kind === "manual" && bkkDay(l.changed_at).slice(0, 7) === month && !(l.developer_id && seenMove.has(mk))) {
+      if (l.developer_id) seenMove.add(mk);
       if (l.to_status === "มีแผนเข้าพบ") row(l.staff).planned++;
       if (l.to_status === "เข้าพบแล้ว") { const r = row(l.staff); r.met++; r._met.add(l.developer_id); }
       if (l.to_status === "ไม่ให้เข้าพบ") row(l.staff).noMeeting++;

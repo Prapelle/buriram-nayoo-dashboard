@@ -8,6 +8,7 @@ import type { Role } from "../roles";
 import { getExcludedPages, readColumns } from "../tabdata";
 import { DATASET_BY_ID, DATASETS, SUMMARY_COLUMNS, SUMMARY_FINANCIAL, type Dataset, type ExportFilters, type Row } from "./datasets";
 import { TYPE_DOC, columnType, normalizeExportValue } from "./dictionary";
+import { pipelineOf } from "../leads";
 import { isQualifiedLead, NEEDS, BUY_NEEDS, SELL_NEEDS } from "../lead-options";
 import { fetchDashboardData } from "../dashboard-data";
 import { computePerformance } from "../performance";
@@ -115,7 +116,7 @@ export async function exportDataset(id: string, f: ExportFilters, role: Role, ac
       const [meta, google, posts, line, leads, sales, excluded, fbPage] = await Promise.all([
         read("META_ADS", ["report_start", "report_end", "amount_spent_thb", "area"]), read("GOOGLE_ADS_CAMPAIGNS", ["report_start", "report_end", "cost_thb", "clicks", "area"]),
         read("FB_PAGE_POSTS", ["page_id", "post_id", "page_name", "publish_time", "metric_date", "metric_scope", "snapshot_date", "reach", "link_clicks", "reactions_comments_shares", "seconds_viewed"]), read("LINE_OA_MONTHLY", ["report_month", "new_friends", "inquiries", "leads"]),
-        read("LEADS", ["lead_id", "received_at", "status", "qualified_at", "area", "source_channel", "need", "call_status"]),
+        read("LEADS", ["lead_id", "received_at", "status", "qualified_at", "area", "source_channel", "need", "call_status", "sell_status"]) /* sell_status: Qualified ฝั่งขาย (แก้ 5/11/2026 — เดิมไม่ได้อ่าน ทำให้นับเป็น 0) */,
         (role === "marketing" || role === "production") ? read("SALES", ["closing_date", "payment_status"]) : read("SALES", ["closing_date", "revenue_date", "payment_status", "deal_value_thb", "company_revenue_thb", "direct_cost_thb"]),
         getExcludedPages(DEFAULT_EXCLUDED_PAGES),
         read("FB_PAGE_INSIGHTS", ["metric", "metric_date", "value", "imported_at"]).catch(() => [] as Row[]), // แท็บใหม่ ยังไม่เตรียม Sheet → ข้าม
@@ -130,6 +131,8 @@ export async function exportDataset(id: string, f: ExportFilters, role: Role, ac
       let rows = await read(ds.tab!, ds.columns);
       if (id === "facebook_page_posts" && !f.includeExcluded) { const ex = new Set(await getExcludedPages(DEFAULT_EXCLUDED_PAGES)); rows = rows.filter((r) => !ex.has(r.page_name) && !ex.has(r.page_id)); }
       rows = rows.filter((r) => ds.keep(r, f));
+      // ขั้น Pipeline คำนวณใหม่ตอนส่งออก (Lead ที่บันทึกก่อน 5/11/2026 ยังเก็บค่าจากนิยามเดิม) · Lead เก่าที่ยังไม่มี Need คงค่าเดิม
+      if (id === "leads") rows = rows.map((r) => (r.need ? { ...r, status: pipelineOf(r) } : r));
       if (ds.derive) rows = ds.derive.apply(rows);
       const types = columns.map((c) => columnType(ds.tab, c));
       body = rows.map((r) => columns.map((c, i) => normalizeExportValue(types[i], r[c] ?? "")));

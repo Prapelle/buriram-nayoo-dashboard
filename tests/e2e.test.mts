@@ -205,6 +205,8 @@ const { saveLead, listLeads, LeadError } = await import("../src/lib/leads-servic
 const { validateLead, normalizePhone, filterLeads } = await import("../src/lib/leads");
 const isLead = (code: string) => (x: unknown) => x instanceof LeadError && x.code === code;
 const base = { received_at: "2026-09-05", customer_name: "สมชาย ใจดี", source_channel: "Facebook Ads", service_category: "Product", need: "ซื้อ" };
+// ช่อง Staff ต้องเป็นชื่อผู้ใช้ (ตรวจฝั่ง Server ตั้งแต่ 5/11/2026) — สร้างผู้ใช้ที่ใช้เป็น Staff ในเทสต์นี้
+for (const [i, n] of ["พี่เอ", "พี่บี", "เซลส์ 1", "เซลส์ 2"].entries()) await (await import("../src/lib/users-service")).saveUser({ email: `staff${i}@example.com`, display_name: n, role: "ae" }, "admin@example.com");
 const l1 = await saveLead({ ...base, phone: "081-234-5678", email: "Somchai@Example.com", campaign_name: "A" }, "s@x.com");
 const year = new Date(Date.now() + 7 * 3600_000).getUTCFullYear();
 assert.equal(l1.lead.lead_code, `LD-${year}-0001`); assert.equal(l1.lead.area, ""); /* พื้นที่ไม่กรอก = ว่าง (Dashboard ถือเป็น unknown) */ assert.equal(rowsOf("LEADS"), 1);
@@ -224,9 +226,9 @@ try { await saveLead({ received_at: "2026-02-31", customer_name: " ", source_cha
 catch (x) { assert.ok(x instanceof LeadError && x.code === "VALIDATION"); assert.deepEqual(Object.keys(x.extra.fields!).sort(), ["customer_name", "email", "need", "phone", "received_at", "service_category", "source_channel"]); }
 assert.equal(rowsOf("LEADS"), 3); ok("ฟิลด์บังคับ/รูปแบบผิด → แจ้งรายช่อง ไม่เขียนข้อมูล");
 const cur = (await listLeads()).rows.find((r) => r.lead_code === `LD-${year}-0001`)!; await new Promise((r) => setTimeout(r, 5));
-const q1 = await saveLead({ ...cur, buy_status: "Hot", lead_id: cur.lead_id, updated_at_seen: cur.updated_at }, "s2@x.com");
+const q1 = await saveLead({ ...cur, call_status: "รอเข้าชม", lead_id: cur.lead_id, updated_at_seen: cur.updated_at }, "s2@x.com");
 assert.equal(q1.lead.qualified_at, new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 10)); assert.equal(q1.lead.won_at, ""); assert.equal(q1.lead.lead_code, cur.lead_code); assert.equal(q1.lead.created_by, "s@x.com"); assert.equal(q1.lead.updated_by, "s2@x.com"); assert.equal(rowsOf("LEADS"), 3);
-assert.equal(q1.lead.status, "Qualified"); ok("Buy Status = Hot → ขั้น Qualified, ตั้ง qualified_at อัตโนมัติ, คง Lead Code/ผู้สร้าง, แถวเดียว, ไม่เตือนซ้ำเพราะเบอร์ไม่เปลี่ยน");
+assert.equal(q1.lead.status, "Qualified"); ok("Call Status = รอเข้าชม → ขั้น Qualified, ตั้ง qualified_at อัตโนมัติ, คง Lead Code/ผู้สร้าง, แถวเดียว, ไม่เตือนซ้ำเพราะเบอร์ไม่เปลี่ยน");
 await new Promise((r) => setTimeout(r, 5));
 const w1 = await saveLead({ ...q1.lead, buy_status: "Close", updated_at_seen: q1.lead.updated_at }, "s@x.com"); assert.ok(w1.lead.won_at); assert.equal(w1.lead.status, "Won"); await new Promise((r) => setTimeout(r, 5));
 const back = await saveLead({ ...w1.lead, buy_status: "Warm", updated_at_seen: w1.lead.updated_at }, "s@x.com"); assert.equal(back.lead.won_at, ""); assert.equal(back.lead.status, "Qualified"); assert.equal(back.lead.qualified_at, q1.lead.qualified_at); ok("Close → Won ตั้ง won_at; Warm (ถอยออกจาก Won) ล้าง won_at; qualified_at คงเป็นประวัติ");
@@ -465,9 +467,9 @@ assert.equal(mig.lead.status, "Proposal"); assert.equal(mig.lead.qualified_at, "
 ok("แก้ Lead เก่า: ต้องเลือก Need ก่อน · ใส่ Need อย่างเดียวไม่ลดขั้น Pipeline เดิม (Proposal), owner_email/Remark/qualified_at คงเดิม");
 
 const s1 = (await saveLead({ ...base, customer_name: "ผู้ขายบ้าน", phone: "0861111111", need: "ขาย", sell_status: "นัดทำสัญญา", buy_status: "Hot", property_type: "บ้านเดี่ยว", property_condition: "มือ 2", price_range: "1.5–2.5 m", call_status: "รอเข้าชม", staff: "พี่เอ", need_description: "ขายด่วน", notes: "โทรหลัง 5 โมง" }, "s@x.com")).lead;
-assert.equal(s1.sell_status, "นัดทำสัญญา"); assert.equal(s1.buy_status, ""); assert.equal(s1.status, "Qualified"); assert.equal(s1.contactable, "TRUE");
+assert.equal(s1.sell_status, "นัดทำสัญญา"); assert.equal(s1.buy_status, ""); assert.equal(s1.status, "Contacted"); assert.equal(s1.contactable, "TRUE");
 assert.deepEqual([s1.property_type, s1.property_condition, s1.price_range, s1.staff], ["บ้านเดี่ยว", "มือ 2", "1.5–2.5 m", "พี่เอ"]);
-ok("Need = ขาย → ใช้ Sell Status (Buy Status ที่ส่งมาไม่ถูกเก็บ) · นัดทำสัญญา = Qualified · Call รอเข้าชม → contactable TRUE · Type/Condition/Price/Staff บันทึกครบ");
+ok("Need = ขาย → ใช้ Sell Status (Buy Status ที่ส่งมาไม่ถูกเก็บ) · นัดทำสัญญา = Contacted (Qualified เริ่มที่ เซ็นสัญญา) · Call รอเข้าชม → contactable TRUE · Type/Condition/Price/Staff บันทึกครบ");
 await assert.rejects(saveLead({ ...base, customer_name: "ผิด", phone: "0862222222", need: "ขาย", sell_status: "Hot" }, "s@x.com"), isLead("VALIDATION"));
 await assert.rejects(saveLead({ ...base, customer_name: "ผิด", phone: "0862222223", need: "ซื้อ", buy_status: "ขายแล้ว" }, "s@x.com"), isLead("VALIDATION"));
 for (const [k, v] of [["call_status", "โทรแล้ว"], ["property_type", "โรงงาน"], ["property_condition", "มือ 3"], ["price_range", "10 m"]]) await assert.rejects(saveLead({ ...base, customer_name: "ผิด", phone: "0863333333", [k]: v }, "s@x.com"), isLead("VALIDATION"));

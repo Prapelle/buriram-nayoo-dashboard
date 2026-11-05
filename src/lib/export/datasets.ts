@@ -85,7 +85,7 @@ export const DATASETS: Dataset[] = [
     grain: "หนึ่งแถวต่อ แหล่ง × ช่วงรายงาน × dimension_type × dimension_value (300 อันดับแรก + แถว (อื่น ๆ))",
     note: "แต่ละ dimension_type มาจากตารางคนละตารางที่ Google รวมข้อมูลคนละแบบ — ห้ามรวมข้าม dimension_type และห้ามรวมกับไฟล์สรุป · ga4_page รวมหน้า Landing ทุกแบบของหน้าเดียวกันแล้ว" },
   { id: "leads", filename: "leads.csv", label: "Leads", group: "Leads / Sales", tab: "LEADS", columns: tabCols("LEADS"), roles: SALES, sensitive: "pii", grain: "หนึ่งแถวต่อ Lead (lead_id)",
-    applies: { date: "วันที่รับ Lead", area: true, channel: true, campaign: true, need: true }, note: "มีข้อมูลส่วนบุคคลของลูกค้า (ชื่อ เบอร์โทร อีเมล) เฉพาะ Admin และ AE · status คำนวณจาก buy_status / sell_status (ตาม need)",
+    applies: { date: "วันที่รับ Lead", area: true, channel: true, campaign: true, need: true }, note: "มีข้อมูลส่วนบุคคลของลูกค้า (ชื่อ เบอร์โทร อีเมล) เฉพาะ Admin และ AE · status คำนวณจาก Call Status (ซื้อ / เช่า / สร้าง) หรือ Sell Status (ขาย) นิยามเดียวกับ Dashboard",
     keep: (r, f) => inDay(r.received_at, f) && areaOk(r, f) && (!f.channel || canonChannel(r.source_channel) === f.channel) && (!f.campaign || r.campaign_name === f.campaign) && (!f.need || r.need === f.need) },
   { id: "sales", filename: "sales.csv", label: "Sales — ดีล (กรอกด้วยมือ)", group: "Leads / Sales", tab: "SALES", columns: tabCols("SALES"), roles: SALES, sensitive: "financial", grain: "หนึ่งแถวต่อดีล (sale_id)",
     applies: { date: "วันที่ปิดการขาย", area: false, channel: true, campaign: true }, note: "ข้อมูลการเงินและลูกค้า เฉพาะ Admin และ AE (Deal Value ไม่ใช่รายได้บริษัท)",
