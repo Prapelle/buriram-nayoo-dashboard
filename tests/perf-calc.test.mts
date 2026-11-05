@@ -21,6 +21,8 @@ const leadLogs = [
   L("L5", "call_status", "รอติดต่อ", "ติดต่อได้แล้ว", "", IN, "a@x.com"), // ไม่มี Staff → คนที่กด
   L("L6", "call_status", "รอติดต่อ", "ติดต่อได้แล้ว", "คนนอก"), L("L7", "call_status", "รอติดต่อ", "ติดต่อได้แล้ว", "ซ้ำ"),
   L("L8", "call_status", "", "รอติดต่อ"), // สร้างใหม่ ไม่ใช่ผลงาน
+  L("L10", "call_status", "รอติดต่อ", "ติดต่อไม่ได้"), L("L10", "call_status", "ติดต่อไม่ได้", "ติดต่อได้แล้ว"), // เคยติดต่อไม่ได้ แล้วกลับมาติดต่อได้ = นับ
+  L("L11", "call_status", "กู้ไม่ผ่าน", "จอง"), // ย้ายมาจากสถานะอื่นที่ไม่ใช่ รอติดต่อ/ติดต่อไม่ได้ = ไม่นับเป็นการติดต่อ (นับเป็น จอง เท่านั้น)
 ];
 const dev = (id: string, staff: string) => ({ developer_id: id, staff, company_name: id, status: "เข้าร่วมแล้ว" });
 const DL = (id: string, to: string, staff = "สมหญิง", at = IN) => ({ log_id: `${id}${to}${at}`, developer_id: id, staff, from_status: "", to_status: to, kind: "manual", counts_as: "", month: M, changed_by: "x", changed_at: at });
@@ -38,9 +40,9 @@ const res = C.computeMonth({
 const A = res.actuals["a@x.com"], B = res.actuals["b@x.com"], Cc = res.actuals["c@x.com"];
 
 await t("Buyer: ติดต่อได้ = ย้ายจาก รอติดต่อ ไปสถานะบวก ครั้งเดียวต่อ Lead (ลากไปมาไม่ซ้ำ · ติดต่อไม่ได้ไม่ได้คะแนน · เดือนอื่น/สร้างใหม่ไม่นับ)", () => {
-  assert.equal(A["ae_buy.contact"], 3); // L1 + L3 + L5(ไม่มี Staff → คนที่กด)
+  assert.equal(A["ae_buy.contact"], 4); // L1 + L3 + L5(ไม่มี Staff → คนที่กด) + L10(ติดต่อไม่ได้ → ติดต่อได้แล้ว)
   assert.equal(A["ae_buy.visited"], 1);
-  assert.equal(A["ae_buy.booked"], 0); assert.equal(A["ae_buy.sold"], 0);
+  assert.equal(A["ae_buy.booked"], 1); // L11 assert.equal(A["ae_buy.sold"], 0);
 });
 await t("Seller: สนใจขาย/ขายแล้วได้คะแนน · บ้านไม่พร้อมขาย/ยกเลิกไม่ได้", () => {
   assert.equal(A["ae_sell.contact"], 1); assert.equal(A["ae_sell.sold"], 1); assert.equal(A["ae_sell.contract"], 0);
@@ -72,10 +74,10 @@ const rep = C.buildReport(users, res.actuals, targets);
 await t("buildReport: เฉพาะคนที่มีตำแหน่ง · % = ทำได้/เป้า · ไม่มีเป้า = null · ภาพรวมจำกัดตัวชี้วัดละ 100", () => {
   assert.deepEqual(rep.map((p) => p.email), ["a@x.com", "b@x.com", "c@x.com"]);
   const a = rep[0], buy = a.positions[0].metrics, sell = a.positions[1].metrics;
-  assert.equal(buy.find((m) => m.key === "ae_buy.contact")!.pct, 75); // 3/4
+  assert.equal(buy.find((m) => m.key === "ae_buy.contact")!.pct, 100); // 4/4
   assert.equal(buy.find((m) => m.key === "ae_buy.visited")!.pct, null); // ไม่ตั้งเป้า
   assert.equal(sell.find((m) => m.key === "ae_sell.sold")!.pct, 100);
-  assert.equal(a.overall, 87.5); // (75 + 100) / 2
+  assert.equal(a.overall, 100); // (100 + 100) / 2
   const c = rep[2]; assert.equal(c.positions[0].metrics.find((m) => m.key === "production.done")!.pct, 150); // เกินเป้าแสดงเกิน 100 ได้
   assert.equal(c.positions[0].metrics.find((m) => m.key === "production.ontime")!.pct, 62.5); // 50 ÷ เป้า 80
   assert.equal(c.overall, 81.3); // (min(150,100)=100 + 62.5) / 2 = 81.25 → 81.3 (ภาพรวมจำกัดไม่เกิน 100 ต่อตัวชี้วัด)

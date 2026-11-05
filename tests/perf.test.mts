@@ -112,14 +112,15 @@ await t("METRICS: คีย์ไม่ซ้ำ · ตำแหน่งมี�
   for (const m of P.METRICS) {
     assert.ok(P.POSITION_KEYS.includes(m.position), m.key); assert.ok(m.key.startsWith(m.position + "."), m.key);
     const r = m.rule;
-    if (r.kind === "lead_move") { const list = r.field === "sell_status" ? OPT.SELL_STATUS : OPT.CALL_STATUS; for (const x of [...r.to, ...(r.from ? [r.from] : [])]) assert.ok(list.includes(x), `${m.key}: ${x}`); }
+    if (r.kind === "lead_move") { const list = r.field === "sell_status" ? OPT.SELL_STATUS : OPT.CALL_STATUS; for (const x of [...r.to, ...(r.from ?? [])]) assert.ok(list.includes(x), `${m.key}: ${x}`); }
     if (r.kind === "dev_status") assert.ok((DEVM.DEV_STATUS as readonly string[]).includes(r.to), `${m.key}: ${r.to}`);
   }
   for (const k of P.POSITION_KEYS) assert.ok(P.metricsOf(k).length > 0, k);
 });
 await t("สถานะเป็นบวก: ไม่รวม บ้านไม่พร้อมขาย / ยกเลิก / กู้ไม่ผ่าน / ติดต่อไม่ได้ / ไม่สนใจ", async () => {
   for (const bad of ["บ้านไม่พร้อมขาย", "ยกเลิก", "กู้ไม่ผ่าน", "ติดต่อไม่ได้", "ไม่สนใจ", "รอติดต่อ"]) assert.ok(![...P.SELL_POSITIVE, ...P.BUY_POSITIVE].includes(bad), bad);
-  const contact = P.METRICS.find((m) => m.key === "ae_sell.contact")!; assert.ok(contact.rule.kind === "lead_move" && contact.rule.from === "รอติดต่อ");
+  const contact = P.METRICS.find((m) => m.key === "ae_sell.contact")!; assert.ok(contact.rule.kind === "lead_move" && contact.rule.from?.join() === "รอติดต่อ");
+  const buy = P.METRICS.find((m) => m.key === "ae_buy.contact")!; assert.ok(buy.rule.kind === "lead_move" && buy.rule.from?.join() === "รอติดต่อ,ติดต่อไม่ได้"); // ผู้ซื้อ: กลับมาติดต่อได้หลังเคยติดต่อไม่ได้ก็นับ
 });
 const fail422 = (fn: () => unknown, code = "VALIDATION") => { try { fn(); } catch (e) { assert.equal((e as { code?: string }).code, code); return; } assert.fail("ควรผิดพลาด " + code); };
 await t("validateTarget: ว่าง=ไม่ตั้ง · จำนวนต้องเป็นจำนวนเต็ม · % ไม่เกิน 100 · ติดลบ/ตัวอักษร/ตัวชี้วัดแปลก → ผิด", async () => {

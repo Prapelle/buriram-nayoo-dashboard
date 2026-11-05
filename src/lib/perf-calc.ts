@@ -56,7 +56,7 @@ export function computeMonth(inp: CalcInput): CalcResult {
     const r = m.rule; if (r.kind !== "lead_move") continue;
     const seen = new Set<string>(); // ลากไปมา/ย้ายซ้ำในเดือนเดียวกัน = ได้คะแนนครั้งเดียวต่อ Lead
     for (const l of monthLogs) {
-      if (l.field !== r.field || !r.to.includes(l.to_status) || (r.from && l.from_status !== r.from) || seen.has(l.lead_id)) continue;
+      if (l.field !== r.field || !r.to.includes(l.to_status) || (r.from && !r.from.includes(l.from_status)) || seen.has(l.lead_id)) continue;
       seen.add(l.lead_id);
       add(resolve(l.staff, l.changed_by, "Leads"), m.key, 1);
     }

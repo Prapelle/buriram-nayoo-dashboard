@@ -79,7 +79,7 @@ export const BUY_POSITIVE = ["ติดต่อได้แล้ว", "รอ�
 export type MetricUnit = "count" | "baht" | "percent";
 /** rule = วิธีนับ (ตัวคำนวณขั้นถัดไปอ่านจากนี้) — how = คำอธิบายภาษาไทยที่แสดงในหน้าตั้งเป้า */
 export type MetricRule =
-  | { kind: "lead_move"; field: LeadStatusField; from?: string; to: string[] }
+  | { kind: "lead_move"; field: LeadStatusField; from?: string[]; to: string[] }
   | { kind: "dev_status"; to: string }
   | { kind: "dev_contact"; method: string }
   | { kind: "dev_sales" }
@@ -96,10 +96,10 @@ const devMetrics = (position: "sale_developer" | "sale_home_builder"): Metric[] 
 ];
 
 export const METRICS: Metric[] = [
-  { key: "ae_sell.contact", position: "ae_sell", label: "ติดต่อผู้ขายได้", unit: "count", how: "ย้ายจาก รอติดต่อ ไปสถานะที่เป็นบวก (สนใจขาย · นัดทำสัญญา · เซ็นสัญญา · สัญญาเปิด · ขายแล้ว)", rule: { kind: "lead_move", field: "sell_status", from: "รอติดต่อ", to: SELL_POSITIVE } },
+  { key: "ae_sell.contact", position: "ae_sell", label: "ติดต่อผู้ขายได้", unit: "count", how: "ย้ายจาก รอติดต่อ ไปสถานะที่เป็นบวก (สนใจขาย · นัดทำสัญญา · เซ็นสัญญา · สัญญาเปิด · ขายแล้ว)", rule: { kind: "lead_move", field: "sell_status", from: ["รอติดต่อ"], to: SELL_POSITIVE } },
   { key: "ae_sell.contract", position: "ae_sell", label: "เซ็นสัญญา", unit: "count", how: "ย้ายการ์ดไป เซ็นสัญญา", rule: { kind: "lead_move", field: "sell_status", to: ["เซ็นสัญญา"] } },
   { key: "ae_sell.sold", position: "ae_sell", label: "ขายแล้ว", unit: "count", how: "ย้ายการ์ดไป ขายแล้ว", rule: { kind: "lead_move", field: "sell_status", to: ["ขายแล้ว"] } },
-  { key: "ae_buy.contact", position: "ae_buy", label: "ติดต่อผู้ซื้อได้", unit: "count", how: "ย้ายจาก รอติดต่อ ไปสถานะที่เป็นบวก (ติดต่อได้แล้ว · รอเข้าชม · เข้าชมแล้ว · จอง · ซื้อสำเร็จ)", rule: { kind: "lead_move", field: "call_status", from: "รอติดต่อ", to: BUY_POSITIVE } },
+  { key: "ae_buy.contact", position: "ae_buy", label: "ติดต่อผู้ซื้อได้", unit: "count", how: "ย้ายจาก รอติดต่อ หรือ ติดต่อไม่ได้ ไปสถานะที่เป็นบวก (ติดต่อได้แล้ว · รอเข้าชม · เข้าชมแล้ว · จอง · ซื้อสำเร็จ)", rule: { kind: "lead_move", field: "call_status", from: ["รอติดต่อ", "ติดต่อไม่ได้"], to: BUY_POSITIVE } },
   { key: "ae_buy.visited", position: "ae_buy", label: "เข้าชมแล้ว", unit: "count", how: "ย้ายการ์ดไป เข้าชมแล้ว", rule: { kind: "lead_move", field: "call_status", to: ["เข้าชมแล้ว"] } },
   { key: "ae_buy.booked", position: "ae_buy", label: "จอง", unit: "count", how: "ย้ายการ์ดไป จอง", rule: { kind: "lead_move", field: "call_status", to: ["จอง"] } },
   { key: "ae_buy.sold", position: "ae_buy", label: "ซื้อสำเร็จ", unit: "count", how: "ย้ายการ์ดไป ซื้อสำเร็จ", rule: { kind: "lead_move", field: "call_status", to: ["ซื้อสำเร็จ"] } },
