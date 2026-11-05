@@ -9,6 +9,8 @@ import {
   LEAD_LOG_COLUMNS, METRICS, parsePositions, PerfError, POSITIONS, POSITION_KEYS, STAFF_ROLES, staffNameOf, validateHoliday, validateMonth, validateTarget,
   type LeadStatusChange, type TargetInput,
 } from "./perf";
+import { buildReport, computeMonth, type DevData } from "./perf-calc";
+import { listDevelopers } from "./developers-service";
 import { normRole } from "./roles";
 import { appendRows, batchUpdateValues, colLetter, deleteRow, listTabs, readTabs, toRow } from "./sheets";
 
@@ -125,4 +127,26 @@ export async function deleteHoliday(date: unknown, actor: string) {
   await deleteRow(sheetId, idx + 2);
   await writeAudit(actor, "perf_holiday_delete", "perf_holiday", d, `ลบวันหยุด ${d} ${t[HOL].rows[idx].name}`);
   return { date: d };
+}
+
+// ── รายงาน ทำได้ / เป้าหมาย รายเดือน ──
+const emptyDev: DevData = { devs: [], products: [], logs: [], contacts: [] };
+async function devData(kind: "developer" | "home_builder"): Promise<DevData> {
+  try { const d = await listDevelopers(kind); return { devs: d.devs, products: d.products, logs: d.logs, contacts: d.contacts ?? [] }; }
+  catch (e) { logError("perf.devData", e); return emptyDev; } // ระบบ Developer ยังไม่พร้อม = ไม่มีผลงานฝั่งนี้ ไม่ให้ทั้งรายงานล้ม
+}
+
+/** admin ขึ้นไปเห็นทุกคน · Role อื่นเห็นเฉพาะของตัวเอง (และไม่เห็นรายการที่จับคู่ชื่อไม่ได้) */
+export async function getPerfReport(monthRaw: string | undefined, viewer: { email: string; role: string }) {
+  const settings = await getPerfSettings(monthRaw);
+  let t: Record<string, Tab>;
+  try { t = await readTabs(["LEAD_STATUS_LOG", "CONTENT_CARDS", "CONTENT_MEMBERS", "CONTENT_HISTORY"]); }
+  catch { throw new PerfError(409, "ฐานข้อมูล D1 ยังไม่พร้อม — ตารางประวัติอยู่บน D1", "DB_NOT_READY"); }
+  const [developers, homeBuilders] = await Promise.all([devData("developer"), devData("home_builder")]);
+  const users = settings.users.map((u) => ({ email: u.email, name: u.name, positions: u.positions }));
+  const calc = computeMonth({ month: settings.month, users, leadLogs: t.LEAD_STATUS_LOG.rows, developers, homeBuilders, cards: t.CONTENT_CARDS.rows, members: t.CONTENT_MEMBERS.rows, history: t.CONTENT_HISTORY.rows });
+  const all = viewer.role === "super_admin" || viewer.role === "admin";
+  const me = norm(viewer.email);
+  const people = buildReport(users, calc.actuals, settings.targets).filter((p) => all || norm(p.email) === me);
+  return { month: settings.month, canSeeAll: all, people, unmatched: all ? calc.unmatched : [], duplicateNames: all ? settings.duplicateNames : [] };
 }

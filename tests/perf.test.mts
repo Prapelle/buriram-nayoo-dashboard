@@ -192,4 +192,34 @@ await t("วันหยุดบริษัท: เพิ่ม · ซ้ำ 4
 await t("ไม่มี D1 → 409 DB_NOT_READY (ไม่ใช่ error ดิบ)", async () => {
   D.setD1ForTest(null); ST.invalidateD1State(); await rej(S(), "DB_NOT_READY");
 });
+// ── รายงานตั้งแต่ต้นจนจบ: ลากการ์ด → ประวัติ → ทำได้/เป้า ──
+D.setD1ForTest(makeD1() as never); ST.invalidateD1State();
+const { todayBkk: today } = await import("../src/lib/leads");
+const thisMonth = today().slice(0, 7);
+await saveU({ email: "rep@example.com", display_name: "คนทดสอบรายงาน", role: "ae" }, ADM);
+await saveU({ email: "other@example.com", display_name: "อีกคน", role: "ae" }, ADM);
+await PS.savePositions("rep@example.com", ["ae_buy"], ADM);
+await PS.savePositions("other@example.com", ["ae_buy"], ADM);
+await t("getPerfReport: ลาก Call Status จริง → ทำได้ตรงเป้า · คนทั่วไปเห็นเฉพาะของตัวเอง · Admin เห็นทุกคน + รายการที่นับให้ใครไม่ได้", async () => {
+  const mk = async (n: string, staff: string, ph: string) => (await saveLead({ ...base, phone: ph, customer_name: n, need: "ซื้อ", buy_status: "Hot", staff }, ADM)).lead;
+  let a = await mk("ลูกค้า1", "คนทดสอบรายงาน", "0851111111"), b = await mk("ลูกค้า2", "คนทดสอบรายงาน", "0852222222"); const c = await mk("ลูกค้า3", "ชื่อที่ไม่มีบัญชี", "0853333333");
+  a = (await changeLeadStatus(a.lead_id, "call_status", "ติดต่อได้แล้ว", a.updated_at, ADM)).lead;
+  b = (await changeLeadStatus(b.lead_id, "call_status", "ติดต่อไม่ได้", b.updated_at, ADM)).lead; // ลบ ไม่ได้คะแนน
+  await changeLeadStatus(c.lead_id, "call_status", "ติดต่อได้แล้ว", c.updated_at, ADM);
+  await PS.saveTargets(thisMonth, [{ user_email: "rep@example.com", metric_key: "ae_buy.contact", value: "4" }], ADM);
+
+  const own = await PS.getPerfReport(thisMonth, { email: "rep@example.com", role: "ae" });
+  assert.equal(own.canSeeAll, false); assert.deepEqual(own.people.map((p) => p.email), ["rep@example.com"]);
+  const line = own.people[0].positions[0].metrics.find((m) => m.key === "ae_buy.contact")!;
+  assert.deepEqual([line.actual, line.target, line.pct], [1, 4, 25]);
+  assert.deepEqual(own.unmatched, []); assert.deepEqual(own.duplicateNames, []); // คนทั่วไปไม่เห็นรายการที่จับคู่ไม่ได้
+
+  const adm = await PS.getPerfReport(thisMonth, { email: ADM, role: "super_admin" });
+  assert.deepEqual(adm.people.map((p) => p.email).sort(), ["other@example.com", "rep@example.com"]);
+  assert.equal(adm.people.find((p) => p.email === "other@example.com")!.positions[0].metrics[0].actual, 0);
+  assert.ok(adm.unmatched.some((x) => x.name === "ชื่อที่ไม่มีบัญชี" && x.reason === "no_user"));
+  const other = await PS.getPerfReport("2020-01", { email: "rep@example.com", role: "ae" }); // เดือนที่ไม่มีข้อมูล
+  assert.equal(other.people[0].positions[0].metrics.find((m) => m.key === "ae_buy.contact")!.actual, 0);
+});
+await t("getPerfReport: เดือนผิดรูปแบบ → 422", async () => { await rej(PS.getPerfReport("2026-13", { email: ADM, role: "super_admin" }), "VALIDATION"); });
 console.log("perf: ผ่านทั้งหมด");

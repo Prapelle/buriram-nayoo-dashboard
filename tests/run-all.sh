@@ -20,6 +20,7 @@ echo "== account-service (บน D1 จำลอง)"; D1_MODE=1 npx tsx tests/a
 echo "== d1 (ย้าย Sheets → D1)"; npx tsx tests/d1.test.mts
 echo "== content (บอร์ด Content บน D1)"; npx tsx tests/content.test.mts
 echo "== perf (ประสิทธิภาพรายคน: ประวัติสถานะ Lead)"; npx tsx tests/perf.test.mts
+echo "== perf-calc (ตัวคำนวณประสิทธิภาพรายคน)"; npx tsx tests/perf-calc.test.mts
 if ls "$FIX"/Page.csv >/dev/null 2>&1; then
   echo "== import";    npx tsx tests/import.test.ts
   echo "== dashboard"; npx tsx tests/dashboard.test.ts
