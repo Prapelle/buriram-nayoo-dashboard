@@ -22,7 +22,7 @@ export const GROUP_TABS: Record<string, string[]> = {
 };
 
 /** ตารางที่ "เกิดบน D1" ไม่มีต้นทางใน Google Sheets — ใช้ D1 เสมอเมื่อผูก binding DB (ไม่ต้องย้าย/สลับ) */
-export const NATIVE_TABS = ["CONTENT_CARDS", "CONTENT_MEMBERS", "CONTENT_HISTORY", "PRODUCT_SETTINGS", ...PERF_TABS];
+export const NATIVE_TABS = ["CONTENT_CARDS", "CONTENT_MEMBERS", "CONTENT_HISTORY", "PRODUCT_SETTINGS", "CONTENT_WAITS", ...PERF_TABS];
 
 export const tabsOfGroups = (groups: string[]) => groups.flatMap((g) => GROUP_TABS[g] ?? []);
 

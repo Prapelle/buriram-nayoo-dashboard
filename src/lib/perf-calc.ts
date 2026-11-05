@@ -7,6 +7,7 @@
  * คนที่ได้ผลงาน = Staff ของ Lead / Developer (จับคู่กับ "ชื่อที่แสดง" ของผู้ใช้) · Lead ที่ไม่มี Staff ให้คนที่กดย้าย
  */
 import { bkkDay, monthlyReport, type Dev, type DevProduct } from "./developers";
+import { addWorkdays, waitSummary, type WaitRow } from "./workdays";
 import { METRICS, metricsOf, positionLabel, type Metric } from "./perf";
 
 export type Row = Record<string, string>;
@@ -15,6 +16,7 @@ export type DevData = { devs: Dev[]; products: DevProduct[]; logs: Row[]; contac
 export type CalcInput = {
   month: string; users: CalcUser[]; leadLogs: Row[]; developers: DevData; homeBuilders: DevData;
   cards: Row[]; members: Row[]; history: Row[];
+  waits?: Row[]; holidays?: string[]; today?: string; // CONTENT_WAITS · วันหยุดบริษัท (YYYY-MM-DD) · วันนี้ (เวลาไทย) ใช้นับการรอที่ยังไม่จบ
 };
 /** ผลงานที่ระบบนับให้ใครไม่ได้ (ชื่อ Staff ไม่ตรงกับผู้ใช้ / ชื่อซ้ำหลายคน) — แสดงให้ Admin แก้ */
 export type Unmatched = { name: string; reason: "no_user" | "ambiguous" | "no_member"; source: string; count: number };
@@ -77,20 +79,38 @@ export function computeMonth(inp: CalcInput): CalcResult {
   for (const h of inp.history) if (h.card_id && h.to_stage === "PUBLISHED" && inMonth(h.at, month)) { const d = bkkDay(h.at); if (d > (pubDay.get(h.card_id) ?? "")) pubDay.set(h.card_id, d); }
   const membersOf = new Map<string, string[]>();
   for (const m of inp.members) if (m.card_id && m.email) (membersOf.get(m.card_id) ?? membersOf.set(m.card_id, []).get(m.card_id)!).push(lc(m.email));
-  const tally = new Map<string, { done: number; due: number; ontime: number }>();
+  const hol = new Set(inp.holidays ?? []), today = inp.today ?? bkkDay(new Date().toISOString());
+  const waitsOf = new Map<string, WaitRow[]>();
+  for (const w of inp.waits ?? []) if (w.card_id) (waitsOf.get(w.card_id) ?? waitsOf.set(w.card_id, []).get(w.card_id)!).push({ card_id: w.card_id, kind: w.kind, started_day: bkkDay(w.started_at), ended_day: w.ended_at ? bkkDay(w.ended_at) : "" });
+  const sched = (c: Row) => waitSummary(c, waitsOf.get(c.card_id) ?? [], today, hol);
+  const tally = new Map<string, { done: number; due: number; ontime: number; sent: number; rdue: number; rontime: number }>();
+  const row = (email: string) => tally.get(email) ?? tally.set(email, { done: 0, due: 0, ontime: 0, sent: 0, rdue: 0, rontime: 0 }).get(email)!;
+  // รายงานที่ส่งในเดือนนี้ (ส่งให้ลูกค้าแล้ว) — ผู้ร่วมงานทุกคนได้เต็ม
+  for (const c of inp.cards) {
+    if (!c.card_id || c.stage !== "ส่งให้ลูกค้าแล้ว" || String(c.report_sent_at ?? "").slice(0, 7) !== month) continue;
+    const mem = [...new Set(membersOf.get(c.card_id) ?? [])];
+    if (!mem.length) { miss("(การ์ดไม่มีผู้ร่วมงาน)", "no_member", "Production"); continue; }
+    const due = c.report_due_date ? sched(c).reportDueEff : "";
+    for (const em of mem) {
+      const email = byEmail.get(em); if (!email) { miss(em, "no_user", "Production"); continue; }
+      const t = row(email); t.sent++; if (due) { t.rdue++; if (c.report_sent_at <= due) t.rontime++; }
+    }
+  }
   for (const c of inp.cards) {
     const d = pubDay.get(c.card_id); if (!d) continue;
     const mem = [...new Set(membersOf.get(c.card_id) ?? [])];
     if (!mem.length) { miss("(การ์ดไม่มีผู้ร่วมงาน)", "no_member", "Production"); continue; }
     for (const em of mem) {
       const email = byEmail.get(em); if (!email) { miss(em, "no_user", "Production"); continue; }
-      const t = tally.get(email) ?? tally.set(email, { done: 0, due: 0, ontime: 0 }).get(email)!;
-      t.done++; if (c.planned_date) { t.due++; if (d <= c.planned_date) t.ontime++; }
+      const t = row(email);
+      t.done++; if (c.planned_date) { t.due++; if (d <= sched(c).plannedEff) t.ontime++; }
     }
   }
   for (const [email, t] of tally) {
     actuals[email]["production.done"] = t.done;
     actuals[email]["production.ontime"] = t.due ? Math.round((t.ontime / t.due) * 1000) / 10 : null;
+    actuals[email]["production.reports"] = t.sent;
+    actuals[email]["production.report_ontime"] = t.rdue ? Math.round((t.rontime / t.rdue) * 1000) / 10 : null;
   }
   return { actuals, unmatched: [...unmatched.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "th")) };
 }

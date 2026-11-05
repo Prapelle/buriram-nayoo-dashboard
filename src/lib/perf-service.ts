@@ -140,11 +140,11 @@ async function devData(kind: "developer" | "home_builder"): Promise<DevData> {
 export async function getPerfReport(monthRaw: string | undefined, viewer: { email: string; role: string }) {
   const settings = await getPerfSettings(monthRaw);
   let t: Record<string, Tab>;
-  try { t = await readTabs(["LEAD_STATUS_LOG", "CONTENT_CARDS", "CONTENT_MEMBERS", "CONTENT_HISTORY"]); }
+  try { t = await readTabs(["LEAD_STATUS_LOG", "CONTENT_CARDS", "CONTENT_MEMBERS", "CONTENT_HISTORY", "CONTENT_WAITS", "PERF_HOLIDAYS"]); }
   catch { throw new PerfError(409, "ฐานข้อมูล D1 ยังไม่พร้อม — ตารางประวัติอยู่บน D1", "DB_NOT_READY"); }
   const [developers, homeBuilders] = await Promise.all([devData("developer"), devData("home_builder")]);
   const users = settings.users.map((u) => ({ email: u.email, name: u.name, positions: u.positions }));
-  const calc = computeMonth({ month: settings.month, users, leadLogs: t.LEAD_STATUS_LOG.rows, developers, homeBuilders, cards: t.CONTENT_CARDS.rows, members: t.CONTENT_MEMBERS.rows, history: t.CONTENT_HISTORY.rows });
+  const calc = computeMonth({ month: settings.month, users, leadLogs: t.LEAD_STATUS_LOG.rows, developers, homeBuilders, cards: t.CONTENT_CARDS.rows, members: t.CONTENT_MEMBERS.rows, history: t.CONTENT_HISTORY.rows, waits: t.CONTENT_WAITS.rows, holidays: t.PERF_HOLIDAYS.rows.map((h) => h.holiday_date).filter(Boolean) });
   const all = viewer.role === "super_admin" || viewer.role === "admin";
   const me = norm(viewer.email);
   const people = buildReport(users, calc.actuals, settings.targets).filter((p) => all || norm(p.email) === me);

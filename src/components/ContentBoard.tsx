@@ -6,10 +6,11 @@ import { BoardScroller, BoardTabs } from "@/components/Board";
 import { btn } from "@/components/PageHeader";
 import { thDate, thDateTime } from "@/lib/thdate";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CONTENT_TYPES, DUTIES, PROD_STAGES, REPORT_STAGES, SALES_GOALS, isReportStage } from "@/lib/content";
+import { CONTENT_TYPES, DUTIES, WAIT_KINDS, PROD_STAGES, REPORT_STAGES, SALES_GOALS, isReportStage } from "@/lib/content";
 
 type Member = { email: string; name: string; duty: string; is_main: boolean };
-type Card = Record<string, string> & { due: "none" | "upcoming" | "due" | "overdue"; members: Member[] };
+type Wait = { open: { kind: string; since: string; days: number } | null; alert: boolean; prod_days: number; report_days: number; planned_eff: string; report_due_eff: string };
+type Card = Record<string, string> & { due: "none" | "upcoming" | "due" | "overdue"; members: Member[]; wait: Wait };
 type Board = { cards: Card[]; today: string; products: string[]; users: { email: string; name: string }[]; customers: { developer_id: string; name: string }[]; settings: { product: string; content_count: number; report_days: number }[] };
 type Metrics = { scope: "lifetime" | "daily" | "none"; as_of: string; permalink: string; views: number; reach: number; reactions: number; comments: number; shares: number; link_clicks: number; total_clicks: number };
 type Hist = { from_stage: string; to_stage: string; actor_name: string; at: string; note: string };
@@ -80,12 +81,16 @@ export function ContentBoard({ canDelete }: { canDelete: boolean }) {
         <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
           <span className="font-mono">{c.card_code}</span>
           {main ? <span>👤 {main.name}</span> : c.members[0] && <span>👤 {c.members[0].name}</span>}{c.members.length > 1 && <span>+{c.members.length - 1}</span>}
-          {c.planned_date && !c.published_at && <span>กำหนด {dmy(c.planned_date)}</span>}
+          {c.planned_date && !c.published_at && <span>วันลง {dmy(c.wait.planned_eff || c.planned_date)}{c.wait.planned_eff && c.wait.planned_eff !== c.planned_date && <span className="text-slate-400"> (เลื่อนจาก {dmy(c.planned_date)})</span>}</span>}
           {c.published_at && <span>เผยแพร่ {dmy(c.published_at)}</span>}
         </div>
+        {c.wait.open && (
+          <div role={c.wait.alert ? "alert" : undefined} className={`mt-1 rounded px-1.5 py-0.5 text-xs ${c.wait.alert ? "bg-red-100 font-semibold text-red-700" : "bg-amber-100 text-amber-800"}`}>
+            ⏳ รอลูกค้า ({c.wait.open.kind}) มาแล้ว {c.wait.open.days} วันทำการ{c.wait.alert && " — เกิน 3 วัน ควรตามลูกค้า"}
+          </div>)}
         {c.report_due_date && c.stage !== "ส่งให้ลูกค้าแล้ว" && c.stage !== "รายงานเสร็จแล้ว" && (
           <div className={`mt-1 text-xs ${c.due === "overdue" ? "font-semibold text-red-600" : c.due === "due" ? "font-semibold text-amber-700" : "text-slate-500"}`}>
-            รายงานครบกำหนด {dmy(c.report_due_date)}{c.due === "overdue" && " (เลยกำหนด)"}{c.due === "due" && " (วันนี้)"}
+            รายงานครบกำหนด {dmy(c.wait.report_due_eff || c.report_due_date)}{c.due === "overdue" && " (เลยกำหนด)"}{c.due === "due" && " (วันนี้)"}
           </div>)}
         {c.report_sent_at && <div className="mt-1 text-xs text-emerald-700">ส่งแล้ว {dmy(c.report_sent_at)}</div>}
       </>);
@@ -149,6 +154,13 @@ function CardDialog({ board, card, canDelete, onClose, onDone }: { board: Board;
   useEffect(() => { if (card) api(`/api/content/history?id=${card.card_id}`).then((j) => setHist(j.history)).catch(() => setHist([])); }, [card]);
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => { setF((p) => ({ ...p, [k]: v })); setErr((e) => ({ ...e, [k]: "" })); };
   const inReport = !!card && isReportStage(card.stage);
+  const [waitKind, setWaitKind] = useState<string>(WAIT_KINDS[0]);
+  const isMember = !!card && card.members.length > 0; // ปุ่มใช้ได้เสมอ — server ตรวจว่าเป็นผู้ร่วมงานจริง และตอบเหตุผลกลับมา
+  async function waitAct(start: boolean) {
+    if (!card) return; setSaving(true); setTop("");
+    try { await api("/api/content/wait", send(start ? "POST" : "DELETE", { card_id: card.card_id, kind: waitKind })); onDone(start ? `${card.card_code}: เริ่มนับรอลูกค้า (${waitKind})` : `${card.card_code}: ลูกค้าตอบแล้ว หยุดนับเวลา`); }
+    catch (e) { setTop(e instanceof Error ? e.message : "ไม่สำเร็จ"); setSaving(false); }
+  }
   const field = (k: string, label: string, el: React.ReactNode) => <label className="block text-sm"><span className="mb-0.5 block text-xs text-slate-600">{label}</span>{el}{err[k] && <span role="alert" className="mt-0.5 block text-xs font-medium text-red-600">⚠ {err[k]}</span>}</label>;
   const cls = (k: string) => `${inp} ${err[k] ? "border-red-500 bg-red-50" : ""}`;
   const [prods, setProds] = useState(board.products); const [newP, setNewP] = useState<string | null>(null); const [addingP, setAddingP] = useState(false);
@@ -178,7 +190,7 @@ function CardDialog({ board, card, canDelete, onClose, onDone }: { board: Board;
         {field("title", "ชื่อ Content *", <input value={f.title} onChange={(e) => set("title", e.target.value)} className={cls("title")} autoFocus />)}
         <div className="grid gap-3 sm:grid-cols-2">
           {field("content_type", "ประเภท Content", <select value={f.content_type} onChange={(e) => set("content_type", e.target.value)} className={cls("content_type")}><option value="">—</option>{CONTENT_TYPES.map((x) => <option key={x}>{x}</option>)}</select>)}
-          {field("planned_date", "กำหนดเผยแพร่", <input type="date" value={f.planned_date} onChange={(e) => set("planned_date", e.target.value)} className={cls("planned_date")} />)}
+          {field("planned_date", "วันลง (กำหนดเผยแพร่)", <input type="date" value={f.planned_date} onChange={(e) => set("planned_date", e.target.value)} className={cls("planned_date")} />)}
           {field("developer_id", "ลูกค้า", <select value={f.developer_id} onChange={(e) => set("developer_id", e.target.value)} className={cls("developer_id")}><option value="">—</option>{board.customers.map((c) => <option key={c.developer_id} value={c.developer_id}>{c.name}</option>)}</select>)}
           {field("product", "Product", newP === null
             ? <select value={f.product} onChange={(e) => { if (e.target.value === "__new") setNewP(""); else pickProduct(e.target.value); }} className={cls("product")}><option value="">—</option>{prods.map((p) => <option key={p}>{p}</option>)}<option value="__new">＋ เพิ่ม Product ใหม่…</option></select>
@@ -190,6 +202,22 @@ function CardDialog({ board, card, canDelete, onClose, onDone }: { board: Board;
             {field("sales_goal", "เป้าหมายงานขาย", <select value={f.sales_goal} onChange={(e) => set("sales_goal", e.target.value)} className={cls("sales_goal")}><option value="">—</option>{SALES_GOALS.map((x) => <option key={x}>{x}</option>)}</select>)}
             {field("follow_days", "ระยะติดตามผล (วันหลังเผยแพร่)", <input inputMode="numeric" value={f.follow_days} onChange={(e) => set("follow_days", e.target.value)} placeholder="เช่น 30" className={cls("follow_days")} />)}
           </div>}
+          {card && f.sales_tag && card.sales_tag === "TRUE" && (
+            <div className="space-y-1.5 rounded-md bg-slate-50 p-2.5 text-sm">
+              <div className="text-xs font-medium text-slate-700">รอลูกค้า <span className="font-normal text-slate-500">(นับเฉพาะวันทำการ จันทร์–เสาร์ ตัดวันหยุดบริษัท · วันที่รอจะเลื่อนวันลง/วันครบกำหนดรายงานออกไปให้)</span></div>
+              {card.wait.open ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={card.wait.alert ? "font-semibold text-red-700" : "text-amber-800"}>⏳ รอ {card.wait.open.kind} ตั้งแต่ {dmy(card.wait.open.since)} · {card.wait.open.days} วันทำการ</span>
+                  <button type="button" disabled={saving || !isMember} onClick={() => void waitAct(false)} className={btn.primary}>ลูกค้าตอบแล้ว</button>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2">
+                  <select aria-label="รออะไรจากลูกค้า" value={waitKind} onChange={(e) => setWaitKind(e.target.value)} className={`${inp} !w-auto`}>{WAIT_KINDS.map((k) => <option key={k}>{k}</option>)}</select>
+                  <button type="button" disabled={saving || !isMember} onClick={() => void waitAct(true)} className={btn.secondary}>เริ่มรอลูกค้า</button>
+                </div>)}
+              {(card.wait.prod_days > 0 || card.wait.report_days > 0) && <p className="text-xs text-slate-600">รอมาแล้ว: ช่วงผลิต {card.wait.prod_days} วัน · ช่วงรายงาน {card.wait.report_days} วัน{card.wait.planned_eff && card.wait.planned_eff !== card.planned_date && ` · วันลงใหม่ ${dmy(card.wait.planned_eff)}`}{card.wait.report_due_eff && card.wait.report_due_eff !== card.report_due_date && ` · รายงานครบกำหนดใหม่ ${dmy(card.wait.report_due_eff)}`}</p>}
+              {!isMember && <p className="text-xs text-slate-500">เพิ่มผู้ร่วมงานและบันทึกก่อน — เฉพาะผู้ร่วมงานในการ์ดกดได้</p>}
+            </div>)}
           {card?.report_due_date && <p className="text-xs text-slate-600">เผยแพร่ {dmy(card.published_at)} · รายงานครบกำหนด {dmy(card.report_due_date)}{card.report_sent_at && ` · ส่งแล้ว ${dmy(card.report_sent_at)}`}</p>}
         </fieldset>
         <div className="space-y-1.5">

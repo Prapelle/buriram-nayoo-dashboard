@@ -42,7 +42,7 @@ const A = res.actuals["a@x.com"], B = res.actuals["b@x.com"], Cc = res.actuals["
 await t("Buyer: ติดต่อได้ = ย้ายจาก รอติดต่อ ไปสถานะบวก ครั้งเดียวต่อ Lead (ลากไปมาไม่ซ้ำ · ติดต่อไม่ได้ไม่ได้คะแนน · เดือนอื่น/สร้างใหม่ไม่นับ)", () => {
   assert.equal(A["ae_buy.contact"], 4); // L1 + L3 + L5(ไม่มี Staff → คนที่กด) + L10(ติดต่อไม่ได้ → ติดต่อได้แล้ว)
   assert.equal(A["ae_buy.visited"], 1);
-  assert.equal(A["ae_buy.booked"], 1); // L11 assert.equal(A["ae_buy.sold"], 0);
+  assert.equal(A["ae_buy.booked"], 1); assert.equal(A["ae_buy.sold"], 0); // booked = L11
 });
 await t("Seller: สนใจขาย/ขายแล้วได้คะแนน · บ้านไม่พร้อมขาย/ยกเลิกไม่ได้", () => {
   assert.equal(A["ae_sell.contact"], 1); assert.equal(A["ae_sell.sold"], 1); assert.equal(A["ae_sell.contract"], 0);
@@ -85,5 +85,63 @@ await t("buildReport: เฉพาะคนที่มีตำแหน่ง 
 });
 await t("pctOf: เป้า 0 / ว่าง / ผลงาน null → null", () => {
   assert.equal(C.pctOf(5, 0), null); assert.equal(C.pctOf(5, null), null); assert.equal(C.pctOf(null, 10), null); assert.equal(C.pctOf(1, 3), 33.3);
+});
+
+// ── วันทำการ + รอลูกค้า ──
+const W = await import("../src/lib/workdays");
+const none = new Set<string>();
+await t("วันทำการ: จันทร์–เสาร์ ตัดอาทิตย์ · ตัดวันหยุดบริษัท · [เริ่ม, ตอบ)", () => {
+  assert.equal(W.workdaysBetween("2026-11-02", "2026-11-04", none), 2); // จ.→พ. = 2
+  assert.equal(W.workdaysBetween("2026-11-02", "2026-11-02", none), 0); // วันเดียวกัน = 0
+  assert.equal(W.workdaysBetween("2026-11-06", "2026-11-09", none), 2); // ศ. ส. (อา.ไม่นับ)
+  assert.equal(W.workdaysBetween("2026-11-02", "2026-11-09", none), 6); // จ.–ส. (อา.ไม่นับ)
+  assert.equal(W.workdaysBetween("2026-11-02", "2026-11-09", new Set(["2026-11-04"])), 5); // หยุดบริษัท พ.
+  assert.equal(W.workdaysBetween("bad", "2026-11-09", none), 0);
+});
+await t("addWorkdays: เลื่อนข้ามอาทิตย์/วันหยุด", () => {
+  assert.equal(W.addWorkdays("2026-11-07", 1, none), "2026-11-09"); // ส. +1 → ข้ามอา. ไป จ.
+  assert.equal(W.addWorkdays("2026-11-07", 1, new Set(["2026-11-09"])), "2026-11-10");
+  assert.equal(W.addWorkdays("2026-11-07", 0, none), "2026-11-07");
+  assert.equal(W.addWorkdays("2026-11-02", 6, none), "2026-11-09"); // จ.+6 = จ.ถัดไป
+});
+await t("waitSummary: แยกช่วงผลิต/ช่วงรายงาน · รอค้าง >3 วันทำการแจ้งเตือน", () => {
+  const card = { planned_date: "2026-11-10", published_at: "2026-11-12", report_due_date: "2026-12-12" };
+  const s = W.waitSummary(card, [
+    { card_id: "k", kind: "รอบรีฟ", started_day: "2026-11-02", ended_day: "2026-11-04" }, // ก่อนเผยแพร่ = ผลิต 2
+    { card_id: "k", kind: "คอนเฟิร์มงาน", started_day: "2026-11-13", ended_day: "" }, // หลังเผยแพร่ ยังรออยู่ ถึง 11-18 → 13,14,16,17 = 4
+  ], "2026-11-18", none);
+  assert.equal(s.prod, 2); assert.equal(s.report, 4);
+  assert.equal(s.plannedEff, "2026-11-12"); assert.equal(s.reportDueEff, "2026-12-17");
+  assert.ok(s.alert && s.open?.days === 4 && s.open.kind === "คอนเฟิร์มงาน");
+  assert.equal(W.waitSummary(card, [{ card_id: "k", kind: "x", started_day: "2026-11-13", ended_day: "" }], "2026-11-16", none).alert, false); // 2 วัน
+});
+await t("Production: วันที่รอลูกค้าเลื่อนวันลง (เลยวันลงแต่รอลูกค้า = ยังทัน) · รายงานส่งทันเวลา · ทุกคนได้เต็ม", () => {
+  const cards = [
+    { card_id: "w1", planned_date: "2026-11-10", stage: "PUBLISHED" },   // เผยแพร่ 11-12 แต่รอลูกค้า 2 วันทำการ → due 11-12 → ทัน
+    { card_id: "w2", planned_date: "2026-11-10", stage: "PUBLISHED" },   // เผยแพร่ 11-12 ไม่มีรอ → เลย
+    { card_id: "r1", planned_date: "", stage: "ส่งให้ลูกค้าแล้ว", report_due_date: "2026-11-20", report_sent_at: "2026-11-19" }, // ทัน
+    { card_id: "r2", planned_date: "", stage: "ส่งให้ลูกค้าแล้ว", report_due_date: "2026-11-20", report_sent_at: "2026-11-23" }, // ไม่ทัน
+    { card_id: "r3", planned_date: "", stage: "ส่งให้ลูกค้าแล้ว", report_due_date: "2026-11-20", report_sent_at: "2026-11-23" }, // รอลูกค้าช่วงรายงาน 3 วัน → due 11-24 → ทัน
+    { card_id: "r4", planned_date: "", stage: "ส่งให้ลูกค้าแล้ว", report_due_date: "2026-11-20", report_sent_at: "2026-10-30" }, // เดือนอื่น
+  ].map((c) => ({ published_at: "2026-11-12", ...c }));
+  const x = C.computeMonth({
+    month: M, users, leadLogs: [], developers: { devs: [], products: [], logs: [], contacts: [] }, homeBuilders: { devs: [], products: [], logs: [], contacts: [] },
+    cards, members: cards.flatMap((c) => [mem(c.card_id, "c@x.com"), mem(c.card_id, "a@x.com")]),
+    history: [H("w1", "2026-11-12T05:00:00.000Z"), H("w2", "2026-11-12T05:00:00.000Z")],
+    waits: [{ card_id: "w1", kind: "รอบรีฟ", started_at: "2026-11-04T03:00:00.000Z", ended_at: "2026-11-06T03:00:00.000Z" }, // พ.→ศ. = 2
+            { card_id: "r3", kind: "ตรวจบอร์ด", started_at: "2026-11-13T03:00:00.000Z", ended_at: "2026-11-17T03:00:00.000Z" }], // ศ.ส.จ. = 3 (อา.ไม่นับ) 
+    holidays: [], today: "2026-11-30",
+  });
+  for (const e of ["c@x.com", "a@x.com"]) { // ผู้ร่วมงานทุกคนได้เต็ม
+    assert.equal(x.actuals[e]["production.done"], 2); assert.equal(x.actuals[e]["production.ontime"], 50);
+    assert.equal(x.actuals[e]["production.reports"], 3); assert.equal(x.actuals[e]["production.report_ontime"], 66.7);
+  }
+});
+await t("วันหยุดบริษัทไม่นับเป็นวันรอ", () => {
+  const cards = [{ card_id: "w1", planned_date: "2026-11-10", stage: "PUBLISHED", published_at: "2026-11-12" }];
+  const run = (holidays: string[]) => C.computeMonth({ month: M, users, leadLogs: [], developers: { devs: [], products: [], logs: [], contacts: [] }, homeBuilders: { devs: [], products: [], logs: [], contacts: [] }, cards, members: [mem("w1", "c@x.com")],
+    history: [H("w1", "2026-11-12T05:00:00.000Z")], waits: [{ card_id: "w1", kind: "รอบรีฟ", started_at: "2026-11-04T03:00:00.000Z", ended_at: "2026-11-06T03:00:00.000Z" }], holidays, today: "2026-11-30" }).actuals["c@x.com"]["production.ontime"];
+  assert.equal(run([]), 100); // รอ 2 วัน → due 11-12 → ทัน
+  assert.equal(run(["2026-11-04", "2026-11-05"]), 0); // วันที่รอเป็นวันหยุดทั้งคู่ → รอ 0 วัน → due 11-10 → เลย
 });
 console.log("perf-calc: ผ่านทั้งหมด");

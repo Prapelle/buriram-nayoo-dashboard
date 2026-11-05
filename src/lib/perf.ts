@@ -84,7 +84,9 @@ export type MetricRule =
   | { kind: "dev_contact"; method: string }
   | { kind: "dev_sales" }
   | { kind: "content_done" }
-  | { kind: "content_ontime" };
+  | { kind: "content_ontime" }
+  | { kind: "report_sent" }
+  | { kind: "report_ontime" };
 export type Metric = { key: string; position: PositionKey; label: string; unit: MetricUnit; how: string; rule: MetricRule };
 
 const devMetrics = (position: "sale_developer" | "sale_home_builder"): Metric[] => [
@@ -106,7 +108,9 @@ export const METRICS: Metric[] = [
   ...devMetrics("sale_developer"),
   ...devMetrics("sale_home_builder"),
   { key: "production.done", position: "production", label: "งานที่เสร็จ", unit: "count", how: "การ์ด Content ที่เสร็จ โดยผู้ร่วมงานทุกคนในการ์ดได้ครบ 1 งาน", rule: { kind: "content_done" } },
-  { key: "production.ontime", position: "production", label: "ทันเวลา (%)", unit: "percent", how: "งานที่เสร็จไม่เกินกำหนด ÷ งานที่เสร็จทั้งหมด (ไม่นับวันที่รอลูกค้า)", rule: { kind: "content_ontime" } },
+  { key: "production.ontime", position: "production", label: "ทันเวลา (%)", unit: "percent", how: "งานที่เผยแพร่ไม่เกินวันลง ÷ งานที่เสร็จและมีวันลง (วันลงเลื่อนออกตามวันทำการที่รอลูกค้า ตัดวันอาทิตย์/วันหยุดบริษัท)", rule: { kind: "content_ontime" } },
+  { key: "production.reports", position: "production", label: "รายงานที่ส่งลูกค้า", unit: "count", how: "การ์ดงานขายที่ย้ายเป็น ส่งให้ลูกค้าแล้ว ในเดือนนี้ ผู้ร่วมงานทุกคนในการ์ดได้ครบ 1 งาน", rule: { kind: "report_sent" } },
+  { key: "production.report_ontime", position: "production", label: "ส่งรายงานทันเวลา (%)", unit: "percent", how: "รายงานที่ส่งไม่เกินวันครบกำหนด ÷ รายงานที่ส่งทั้งหมดในเดือน (วันครบกำหนดเลื่อนตามวันทำการที่รอลูกค้า)", rule: { kind: "report_ontime" } },
 ];
 export const metricsOf = (position: string) => METRICS.filter((m) => m.position === position);
 export const metricByKey = (key: string) => METRICS.find((m) => m.key === key);

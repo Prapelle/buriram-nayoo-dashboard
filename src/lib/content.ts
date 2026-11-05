@@ -19,6 +19,9 @@ export const CARD_COLUMNS = ["card_id", "card_code", "title", "stage", "stage_at
   "created_by", "created_at", "updated_by", "updated_at"];
 export const MEMBER_COLUMNS = ["member_id", "card_id", "email", "display_name", "duty", "is_main", "created_at"];
 export const HISTORY_COLUMNS = ["log_id", "card_id", "from_stage", "to_stage", "actor", "at", "note"];
+/** ช่วงที่รอลูกค้า (รอบรีฟ / ตรวจบอร์ด / คอนเฟิร์มงาน) — ใครก็ได้ในการ์ดกดเริ่มรอ / ลูกค้าตอบแล้ว · ended_at ว่าง = ยังรออยู่ */
+export const WAIT_KINDS = ["รอบรีฟ", "ตรวจบอร์ด", "คอนเฟิร์มงาน", "อื่น ๆ"] as const;
+export const WAIT_COLUMNS = ["wait_id", "card_id", "kind", "started_at", "started_by", "ended_at", "ended_by"];
 export const SETTING_COLUMNS = ["product", "content_count", "report_days", "updated_by", "updated_at"];
 
 export type Rec = Record<string, string>;
@@ -136,6 +139,6 @@ export const nextCardCode = (codes: string[]) => `CT-${String(codes.reduce((m, c
 /** ตารางที่เกิดบน D1 (สร้างอัตโนมัติ): Content + ประสิทธิภาพรายคน (perf.ts, 5/11/2026) */
 export const NATIVE_DEFS = [
   { name: "CONTENT_CARDS", headers: CARD_COLUMNS }, { name: "CONTENT_MEMBERS", headers: MEMBER_COLUMNS },
-  { name: "CONTENT_HISTORY", headers: HISTORY_COLUMNS }, { name: "PRODUCT_SETTINGS", headers: SETTING_COLUMNS },
+  { name: "CONTENT_HISTORY", headers: HISTORY_COLUMNS }, { name: "PRODUCT_SETTINGS", headers: SETTING_COLUMNS }, { name: "CONTENT_WAITS", headers: WAIT_COLUMNS },
   ...PERF_DEFS,
 ];
