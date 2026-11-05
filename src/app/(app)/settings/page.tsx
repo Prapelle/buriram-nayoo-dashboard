@@ -14,8 +14,8 @@ export default async function SettingsPage() {
         <UsersManager />
       </div>
       <div className="rounded-xl border border-slate-200 bg-white p-5">
-        <h2 className="mb-1 font-semibold">สำรองข้อมูล Google Sheet อัตโนมัติ</h2>
-        <p className="mb-4 text-sm text-slate-600">ตั้งครั้งเดียว Google จะทำสำเนาไฟล์ฐานข้อมูลทั้งไฟล์ไว้ใน Google Drive ของเจ้าของไฟล์ทุกสัปดาห์ (ฟรี ไม่ต้องใช้เซิร์ฟเวอร์)</p>
+        <h2 className="mb-1 font-semibold">สำรองข้อมูล</h2>
+        <p className="mb-4 text-sm text-slate-600">วิธีสำรอง / กู้คืนข้อมูลบน Cloudflare D1</p>
         <BackupGuide />
       </div>
       <div className="rounded-xl border border-slate-200 bg-white p-5">
