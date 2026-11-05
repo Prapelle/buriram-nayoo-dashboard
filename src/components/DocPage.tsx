@@ -202,7 +202,7 @@ export function DocPage({ docType = "quotation", docId, canPay, isSuper = false 
 
       {d && d.jobs.length > 0 && (
         <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4">
-          <div className="flex items-center gap-3"><h2 className="font-semibold">งาน Production ที่สร้างให้</h2><Link href="/production" className="text-sm text-brand-700 underline">ไปหน้า Production</Link></div>
+          <div className="flex items-center gap-3"><h2 className="font-semibold">งาน Production ที่สร้างให้</h2><Link href="/production/content" className="text-sm text-brand-700 underline">ไปบอร์ด Content</Link></div>
           <ul className="text-sm">{d.jobs.map((j) => <li key={j.job_id}><b>{j.job_code}</b> · {j.product} · {j.status} · {j.checklist.split("|").length} หัวข้อ</li>)}</ul>
         </div>)}
     </section>

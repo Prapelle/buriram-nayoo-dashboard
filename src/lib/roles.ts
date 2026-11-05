@@ -88,7 +88,7 @@ export const SYSTEMS: SystemDef[] = [
   { id: "dashboard", label: "Dashboard", desc: "การตลาด · Facebook / Google / LINE OA / Website · นำเข้า-ส่งออกข้อมูล", href: "/dashboard/facebook-ads", prefix: "/dashboard", roles: MKT },
   { id: "work", label: "ติดตามงาน", desc: "Leads คนต้องการซื้อ / ขาย · Developer · Home Builder", href: "/work/leads", prefix: "/work", roles: SALES },
   { id: "account", label: "บัญชี", desc: "ใบเสนอราคา · ใบวางบิล · ใบแจ้งหนี้ · ใบเสร็จ · สรุปยอดรอเรียกเก็บ · Revenue", href: "/account", prefix: "/account", roles: SALES },
-  { id: "production", label: "Production", desc: "งานผลิตที่สร้างอัตโนมัติจากการชำระเงิน · เช็กลิสต์ตามรายละเอียดแพ็กเกจ", href: "/production/content", prefix: "/production", roles: [...SALES, "production"] },
+  { id: "production", label: "Production", desc: "บอร์ด Content ผลิตถึงเผยแพร่ · รายงานลูกค้า · สร้างการ์ดอัตโนมัติเมื่อเปิด Job", href: "/production/content", prefix: "/production", roles: [...SALES, "production"] },
 ];
 export const systemsFor = (role: Role) => SYSTEMS.filter((x) => !x.soon && x.roles.includes(role));
 /** ระบบของ path (หน้าที่ใช้ร่วมกันคืน null) */
