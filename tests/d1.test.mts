@@ -20,6 +20,8 @@ const { guardRow } = await import("../src/lib/row-guard");
 const A = await import("../src/lib/account-service");
 const { todayBkk } = await import("../src/lib/developers");
 
+const META_H = (await import("../src/lib/schema")).TABS.find((x) => x.name === "META_ADS")!.headers;
+const G_readTab = (await import("../src/lib/sheets-google")).readTab;
 const t = async (name: string, fn: () => Promise<void>) => { await fn(); console.log("  ✓", name); };
 const ADMIN = "admin@example.com", today = todayBkk();
 const CORE = GROUP_TABS.core;
@@ -159,6 +161,31 @@ await t("ไม่รู้จักกลุ่ม → 422 · ชื่อต�
   await reject(AD.checkGroup("nope"), /ไม่รู้จักกลุ่ม/);
   await reject(D.getRange(d1 as never, `'APP_USERS"; DROP TABLE x;--'!A1`), /ชื่อตาราง D1 ไม่ถูกต้อง/);
   await reject(D.getRange(d1 as never, "APP_USERS"), /range ไม่ถูกต้อง/);
+});
+
+// ── รอบ 3: กลุ่ม leads / sales / marketing / fbposts ──
+const { saveLead, listLeads } = await import("../src/lib/leads-service");
+await t("กลุ่มที่เหลือ: ตรวจ → สลับ → ใช้งานจริงบน D1 (ไม่แตะ Sheets) → ย้อนกลับได้", async () => {
+  const sheetN = async (tab: string) => (await G_readTab(tab)).rows.length;
+  // ข้อมูลตั้งต้นบน Sheets (ตอนนี้ core ย้อนกลับมาที่ Sheets แล้ว)
+  const l1 = (await saveLead({ received_at: "2026-11-01", source_channel: "Referral", customer_name: "ผู้ซื้อ ก", phone: "0811111111", need: "ซื้อ" }, ADMIN)).lead;
+  await S.appendRows("META_ADS", [["r1", "2026-11-01", "2026-11-07", "โฆษณา A"].concat(new Array(40).fill(""))].map((r) => { const h = META_H; return h.map((k, i) => (i < r.length ? r[i] : "")); }));
+  const metaSum = (await S.readTab("META_ADS")).rows.length;
+  // check / cutover ทุกกลุ่ม
+  for (const g of ["leads", "sales", "marketing", "fbposts"]) {
+    const c = await AD.checkGroup(g); assert.equal(c.ok, true, `${g}: ${JSON.stringify(c.tabs.filter((x) => !x.ok))}`);
+    const r = await AD.cutoverGroup(g, ADMIN, { waitMs: 0 }); assert.equal(r.switched, true, g);
+  }
+  const st = (await AD.d1Status()) as { groups: { name: string; active: boolean }[] };
+  assert.deepEqual(st.groups.filter((x) => x.active).map((x) => x.name).sort(), ["fbposts", "leads", "marketing", "sales"]);
+  assert.equal(d1.rows("LEADS").length, 1); assert.equal(d1.rows("META_ADS").length, metaSum);
+  // ใช้งานต่อบน D1: เพิ่ม Lead ใหม่ → อยู่ใน D1 · Sheets ไม่เปลี่ยน
+  const before = await sheetN("LEADS");
+  const l2 = (await saveLead({ received_at: "2026-11-02", source_channel: "Referral", customer_name: "ผู้ซื้อ ข", phone: "0822222222", need: "ซื้อ" }, ADMIN)).lead;
+  assert.equal(d1.rows("LEADS").length, 2); assert.equal(await sheetN("LEADS"), before);
+  assert.equal((await listLeads()).rows.length, 2); assert.ok(l1.lead_id && l2.lead_id);
+  // ย้อนกลับ
+  await AD.rollbackGroup("leads", ADMIN); assert.equal((await S.readTab("LEADS")).rows.length, before);
 });
 
 console.log("\nD1 (Sheets จำลอง + D1 จำลอง) ผ่านทั้งหมด");

@@ -6,7 +6,13 @@ type Report = { group: string; at: string; ok: boolean; tabs: TabReport[] };
 type Group = { name: string; active: boolean; counts: { tab: string; rows: number | null }[]; report: Report | null };
 type Status = { available: false } | { available: true; initialized: boolean; migrating: { group: string; since: string } | null; groups: Group[] };
 
-const LABEL: Record<string, string> = { core: "แกนหลัก: ผู้ใช้ · Developer / Home Builder · ระบบบัญชี · Production Job" };
+const LABEL: Record<string, string> = {
+  core: "แกนหลัก: ผู้ใช้ · Developer / Home Builder · ระบบบัญชี · Production Job",
+  leads: "Leads (ผู้ซื้อ / ผู้ขาย) + ทรัพย์ของ Lead",
+  sales: "Sales / Revenue · เป้าหมายรายเดือน · LINE OA · แคตตาล็อกบริการ · Area mapping",
+  marketing: "ข้อมูลนำเข้าการตลาด: Meta Ads · Google Ads · Website · Facebook Page รายวัน + ประวัติการนำเข้า",
+  fbposts: "สถิติโพสต์ Facebook (ตารางใหญ่ที่สุด — กด “ลองคัดลอกและตรวจเทียบ” ก่อนเสมอ)",
+};
 
 async function call(body: object) {
   const res = await fetch("/api/admin/d1", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
