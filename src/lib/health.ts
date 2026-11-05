@@ -1,6 +1,7 @@
 import { normRole, type Role } from "./roles";
 import { TABS } from "./schema";
 import { batchGet, listTabs, readTabs } from "./sheets";
+import { d1Routing } from "./d1-state";
 
 export type Check = { id: string; label: string; status: "ok" | "warn" | "fail"; detail: string };
 
@@ -18,6 +19,11 @@ export async function systemCheck(): Promise<Check[]> {
   const leaked = Object.keys(process.env).filter((k) => k.startsWith("NEXT_PUBLIC_") && /SECRET|PRIVATE|KEY|TOKEN/i.test(k));
   add("public_env", "ไม่มี Secret ใช้คำนำหน้า NEXT_PUBLIC_", leaked.length ? "fail" : "ok", leaked.length ? `พบ: ${leaked.join(", ")} (จะถูกส่งไปที่ Browser) ให้เปลี่ยนชื่อทันที` : "ไม่พบ");
 
+  try {
+    const r = await d1Routing();
+    add("d1", "ฐานข้อมูล D1 พร้อมใช้งาน", r.db ? "ok" : "warn", r.db ? `ผูก binding DB แล้ว · ใช้ D1 ${r.state.active.length} กลุ่ม (${r.state.active.join(", ") || "ยังไม่มี"})` : "ไม่พบ binding DB — ระบบใช้ Google Sheets ทั้งหมด");
+  } catch (e) { add("d1", "ฐานข้อมูล D1 พร้อมใช้งาน", "fail", `${e instanceof Error ? e.message.slice(0, 160) : "error"} — ตรวจ binding DB ใน wrangler.jsonc`); }
+
   let tabs;
   try { tabs = await listTabs(); }
   catch (e) { add("sheet", "เชื่อมต่อ Google Sheets ได้", "fail", `${e instanceof Error ? e.message.slice(0, 160) : "error"} — ตรวจ GOOGLE_SHEET_ID, การแชร์ให้ Service Account (Editor) และการเปิด Sheets API`); return out; }
@@ -25,11 +31,11 @@ export async function systemCheck(): Promise<Check[]> {
 
   const have = new Set(tabs.map((t) => t.title));
   const missingTabs = TABS.filter((t) => !have.has(t.name)).map((t) => t.name);
-  if (missingTabs.length) add("tabs", "แท็บครบตามโครงสร้าง", "warn", `ขาด ${missingTabs.length} แท็บ: ${missingTabs.slice(0, 6).join(", ")}${missingTabs.length > 6 ? "…" : ""} — กด เตรียม Google Sheet`);
+  if (missingTabs.length) add("tabs", "แท็บครบตามโครงสร้าง", "warn", `ขาด ${missingTabs.length} แท็บ: ${missingTabs.slice(0, 6).join(", ")}${missingTabs.length > 6 ? "…" : ""} — ตารางใน D1 สร้างด้วย เตรียมฐานข้อมูล D1 (แจ้งผู้ดูแล)`);
   else {
     const headers = await batchGet(TABS.map((t) => `'${t.name}'!1:1`));
     const lacking = TABS.map((t, i) => ({ name: t.name, miss: t.headers.filter((h) => !(headers[i][0] ?? []).includes(h)) })).filter((x) => x.miss.length);
-    add("tabs", "แท็บและคอลัมน์ครบตามโครงสร้าง", lacking.length ? "warn" : "ok", lacking.length ? `${lacking.length} แท็บขาดคอลัมน์ (เช่น ${lacking[0].name}: ${lacking[0].miss.slice(0, 3).join(", ")}) — กด เตรียม Google Sheet` : `ครบ ${TABS.length} แท็บ`);
+    add("tabs", "แท็บและคอลัมน์ครบตามโครงสร้าง", lacking.length ? "warn" : "ok", lacking.length ? `${lacking.length} แท็บขาดคอลัมน์ (เช่น ${lacking[0].name}: ${lacking[0].miss.slice(0, 3).join(", ")}) — แจ้งผู้ดูแลให้เตรียมฐานข้อมูล` : `ครบ ${TABS.length} แท็บ`);
   }
 
   if (have.has("APP_USERS")) {
@@ -41,11 +47,15 @@ export async function systemCheck(): Promise<Check[]> {
     const bad = APP_USERS.rows.filter((u) => u.email && !normRole(u.role));
     if (bad.length) add("roles", "Role ของผู้ใช้ถูกต้อง", "warn", `${bad.length} แถวใน APP_USERS มี role ที่ไม่รู้จัก (ใช้ super_admin / admin / ae / marketing / production) ผู้ใช้เหล่านี้จะเข้าระบบไม่ได้`);
     const keys = new Set(APP_CONFIG.rows.map((r) => r.config_key));
-    add("config", "ค่า Config เริ่มต้น", ["max_upload_mb", "excluded_fb_pages"].every((k) => keys.has(k)) ? "ok" : "warn", ["max_upload_mb", "excluded_fb_pages"].every((k) => keys.has(k)) ? "ครบ" : "ขาดบางค่า — กด เตรียม Google Sheet");
+    add("config", "ค่า Config เริ่มต้น", ["max_upload_mb", "excluded_fb_pages"].every((k) => keys.has(k)) ? "ok" : "warn", ["max_upload_mb", "excluded_fb_pages"].every((k) => keys.has(k)) ? "ครบ" : "ขาดบางค่า — แจ้งผู้ดูแล");
     const stuck = IMPORT_BATCHES.rows.filter((b) => b.status === "processing" && Date.now() - Date.parse(b.uploaded_at) > 10 * 60_000);
     const failed = IMPORT_BATCHES.rows.slice(-20).filter((b) => b.status === "failed");
     add("imports", "การนำเข้าล่าสุด", stuck.length ? "warn" : "ok", stuck.length ? `${stuck.length} ครั้งค้างสถานะ processing เกิน 10 นาที (อาจล้มกลางทาง ลองนำเข้าไฟล์เดิมอีกครั้ง ข้อมูลจะไม่ซ้ำ)` : failed.length ? `มีที่ล้มเหลว ${failed.length} ครั้งใน 20 ครั้งล่าสุด (ดูประวัติในหน้า นำเข้า CSV)` : "ไม่พบปัญหา");
   }
-  add("writer", "ข้อจำกัดการเขียนพร้อมกัน", "warn", "Google Sheets ไม่มี transaction: ใช้ให้มีผู้เขียนข้อมูลทีละคน (Single Writer) ตามที่ออกแบบไว้ — ถ้าจะให้หลายคนบันทึกพร้อมกันเป็นประจำ ควรย้าย Leads/Sales ไปฐานข้อมูลจริง");
+  try {
+    const r = await d1Routing();
+    const left = Object.keys((await import("./d1-groups")).GROUP_TABS).filter((g) => !r.state.active.includes(g));
+    add("writer", "การเขียนข้อมูลพร้อมกัน", left.length ? "warn" : "ok", left.length ? `กลุ่มที่ยังใช้ Google Sheets (ไม่มี transaction ควรเขียนทีละคน): ${left.join(", ")}` : "ทุกกลุ่มอยู่บน D1 แล้ว — หลายคนบันทึกพร้อมกันได้");
+  } catch { /* ข้ามได้ */ }
   return out;
 }

@@ -20,14 +20,6 @@ export const GROUP_TABS: Record<string, string[]> = {
   fbposts: ["FB_PAGE_POSTS"], // สถิติโพสต์ Facebook — ตารางใหญ่สุด แยกไว้ท้ายสุด ให้กด "ตรวจ" ก่อนเสมอ
 };
 
-export const GROUP_LABEL: Record<string, string> = {
-  core: "แกนหลัก: ผู้ใช้ · Developer / Home Builder · ระบบบัญชี · Production Job",
-  leads: "Leads (ผู้ซื้อ / ผู้ขาย) + ทรัพย์ของ Lead",
-  sales: "Sales / Revenue · เป้าหมายรายเดือน · LINE OA · แคตตาล็อกบริการ · Area mapping",
-  marketing: "ข้อมูลนำเข้าการตลาด: Meta Ads · Google Ads · Website · Facebook Page รายวัน + ประวัติการนำเข้า",
-  fbposts: "สถิติโพสต์ Facebook (ตารางใหญ่ที่สุด — กด ตรวจ ก่อนสลับ)",
-};
-
 /** ตารางที่ "เกิดบน D1" ไม่มีต้นทางใน Google Sheets — ใช้ D1 เสมอเมื่อผูก binding DB (ไม่ต้องย้าย/สลับ) */
 export const NATIVE_TABS = ["CONTENT_CARDS", "CONTENT_MEMBERS", "CONTENT_HISTORY", "PRODUCT_SETTINGS"];
 
