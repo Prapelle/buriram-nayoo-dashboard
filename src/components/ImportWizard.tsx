@@ -354,7 +354,7 @@ export function ImportWizard({ role = "admin" }: { role?: Role }) {
           <span className="text-lg font-semibold">ประวัติการนำเข้า</span><span className="text-xs text-slate-500">30 รายการล่าสุด · กดเพื่อแสดง</span>
           <span aria-hidden="true" className="ml-auto text-slate-400 transition-transform group-open:rotate-180">▾</span></summary>
         <div className="mt-2">
-        {canEditMarketing(role) && <p className="mb-2 text-xs text-slate-500">ประวัติการนำเข้ายอดขาย (FlowAccount) ดูที่หน้า <a href="/account/revenue" className="underline">Sales</a></p>}
+        {canEditMarketing(role) && <p className="mb-2 text-xs text-slate-500">ประวัติการนำเข้ายอดขาย (FlowAccount) ดูที่หน้า <a href="/work/sales" className="underline">Sales</a></p>}
         {history.state === "loading" && <Skeleton kind={"rows"} />}
         {history.state === "error" && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">โหลดประวัติไม่ได้: {history.error}</p>}
         {history.state === "ok" && history.rows.length === 0 && <p className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-500">ยังไม่มีประวัติการนำเข้า</p>}

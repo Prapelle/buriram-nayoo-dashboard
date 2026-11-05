@@ -19,7 +19,7 @@ export type Dataset = {
 };
 
 const INTERNAL = new Set(["record_id", "row_key", "raw_json", "source_batch_id"]);
-const MKT: Role[] = ["super_admin", "admin", "marketing"];
+const MKT: Role[] = ["super_admin", "admin", "marketing", "production"];
 const SALES: Role[] = ["super_admin", "admin", "ae"];
 const tabCols = (tab: string) => TABS.find((t) => t.name === tab)!.headers.filter((h) => !INTERNAL.has(h));
 const day = (v: string | undefined) => String(v ?? "").slice(0, 10);
@@ -92,7 +92,7 @@ export const DATASETS: Dataset[] = [
     keep: (r, f) => inDay(r.closing_date, f) && (!f.channel || r.source_channel === f.channel) && (!f.campaign || r.campaign_name === f.campaign) },
   { id: "sales_transactions", filename: "sales_transactions.csv", label: "Sales — รายการขายจากรายงานบัญชี (Excel)", group: "Leads / Sales", tab: null, columns: [], roles: SALES, sensitive: "financial", route: "/api/export/sales-transactions", grain: "หนึ่งแถวต่อเอกสารขาย (invoice_no)",
     applies: { date: "วันที่เอกสาร", area: false, channel: false, campaign: false }, note: "ข้อมูลการเงินและลูกค้า เฉพาะ Admin และ AE (ตัวกรองเพิ่มเติมอยู่ที่หน้า Sales)", keep: () => true },
-  { id: "marketing_monthly_summary", filename: "marketing_monthly_summary.csv", label: "สรุปการตลาดรายเดือน", group: "สรุป", tab: null, columns: SUMMARY_COLUMNS, roles: ["super_admin", "admin", "marketing", "ae"], special: "summary",
+  { id: "marketing_monthly_summary", filename: "marketing_monthly_summary.csv", label: "สรุปการตลาดรายเดือน", group: "สรุป", tab: null, columns: SUMMARY_COLUMNS, roles: ["super_admin", "admin", "marketing", "ae", "production"], special: "summary",
     grain: "หนึ่งแถวต่อเดือน (ตัวเลขสรุปจากไฟล์ต้นฉบับ — ห้ามนำไปรวมกับไฟล์ต้นฉบับ จะนับซ้ำ)",
     applies: { date: "เดือน", area: true, channel: false, campaign: false },
     note: "หนึ่งแถวต่อเดือน · fb_posts_published = โพสต์ที่เผยแพร่ในเดือน (ไม่ซ้ำ) · fb_posts_reach_sum_lifetime/fb_link_clicks = ยอดสะสม (Lifetime) ล่าสุดของแต่ละโพสต์ ตามเดือนที่เผยแพร่ · fb_daily_* = ผลรวมรายวันตามเดือนของวันที่ของสถิติ (fb_daily_reach_sum ไม่ใช่ Unique Reach) · fb_page_viewers_sum = ผลรวม Viewers รายวันระดับเพจ (ใช้ Viewers เทียบเคียง Reach, ไม่ใช่ Unique) · fb_page_link_clicks = Link clicks รายวันระดับเพจ · ใช้ Meta Ads + Google Ads Campaign Report เท่านั้น (ไม่รวมรายงานรายละเอียด) · ช่องว่าง = ไม่มีข้อมูล ไม่ใช่ 0 · ไม่รวมยอดขายจากรายงานบัญชี · Marketing จะไม่มีคอลัมน์การเงิน · Area ใช้กับโฆษณาและ Leads · leads_total นับ lead_id ไม่ซ้ำ · leads_qualified = Lead ที่ Call Status = รอเข้าชม / เข้าชมแล้ว / จอง / ซื้อสำเร็จ / กู้ไม่ผ่าน · google_ads_campaign_clicks มาจาก Campaign Report (ชุดเดียวกับ Spend) · leads_from_ads = ช่องทาง Facebook Ads / Google Ads",
@@ -102,7 +102,7 @@ export const DATASETS: Dataset[] = [
     applies: { date: "ช่วงที่คำนวณ (ไม่เลือก = ช่วงข้อมูลทั้งหมดที่มี)", area: false, channel: false, campaign: false },
     note: "ตัวเลขเดียวกับหน้า Marketing Performance · value ว่าง + state = pending คือรอข้อมูล, na คือหารด้วย 0 · yoy_change_pct ว่างเมื่อปีก่อนไม่มีข้อมูลหรือเป็น 0 (ดู yoy_status) · Paid / Organic / Website แยกด้วยคอลัมน์ kind",
     keep: () => true },
-  { id: "data_dictionary", filename: "data_dictionary.csv", label: "พจนานุกรมข้อมูล — ชื่อคอลัมน์ ชนิด และระดับข้อมูลของทุกไฟล์", group: "สรุป", tab: null, columns: DICTIONARY_COLUMNS, roles: ["super_admin", "admin", "marketing", "ae"], special: "dictionary",
+  { id: "data_dictionary", filename: "data_dictionary.csv", label: "พจนานุกรมข้อมูล — ชื่อคอลัมน์ ชนิด และระดับข้อมูลของทุกไฟล์", group: "สรุป", tab: null, columns: DICTIONARY_COLUMNS, roles: ["super_admin", "admin", "marketing", "ae", "production"], special: "dictionary",
     grain: "หนึ่งแถวต่อ คอลัมน์ × ไฟล์ส่งออก", applies: { date: "ไม่ใช้", area: false, channel: false, campaign: false },
     note: "อธิบายทุกไฟล์ที่ส่งออกได้: ระดับข้อมูล (grain), ลำดับคอลัมน์, ชนิดข้อมูล และรูปแบบวันที่ · ใช้ตรวจโครงสร้างก่อนนำไปใช้ต่อ", keep: () => true },
 ];

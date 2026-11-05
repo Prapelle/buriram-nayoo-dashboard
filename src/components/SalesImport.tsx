@@ -163,7 +163,7 @@ export function SalesImport({ incoming, embedded = false }: { incoming?: { file:
         {state === "done" && result && (
           <div role="status" className="space-y-2 rounded-lg bg-green-50 p-4 text-green-900">
             <p className="font-semibold">นำเข้าสำเร็จ {result.counts.insert + result.counts.update} รายการ (เพิ่ม {result.counts.insert} · อัปเดต {result.counts.update}) · ซ้ำ/ข้าม {result.counts.duplicate} · ไม่สำเร็จ {result.counts.invalid}</p>
-            <div className="flex gap-4 text-sm">{result.errors.length > 0 && <button onClick={() => downloadErrors(result.errors)} className="underline">ดาวน์โหลด Error Report</button>}<a href="/account/revenue" className="underline">ไปดูแดชบอร์ดยอดขาย</a><button onClick={reset} className="underline">นำเข้าไฟล์อื่น</button></div>
+            <div className="flex gap-4 text-sm">{result.errors.length > 0 && <button onClick={() => downloadErrors(result.errors)} className="underline">ดาวน์โหลด Error Report</button>}<a href="/work/sales" className="underline">ไปดูแดชบอร์ดยอดขาย</a><button onClick={reset} className="underline">นำเข้าไฟล์อื่น</button></div>
           </div>
         )}
       </section>

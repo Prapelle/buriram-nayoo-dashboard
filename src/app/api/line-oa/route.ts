@@ -11,7 +11,7 @@ function fail(e: unknown) {
 }
 
 export async function GET() {
-  const g = await requireRole(["admin", "marketing"]);
+  const g = await requireRole(["admin", "marketing", "production"]);
   if (!g.ok) return g.res;
   try { return NextResponse.json({ rows: await listLine() }); } catch (e) { return fail(e); }
 }

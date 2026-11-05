@@ -14,8 +14,6 @@ echo "== callstatus-kpi"; npx tsx tests/callstatus-kpi.test.ts
 echo "== insights";    npx tsx tests/insights.test.ts
 echo "== developers";  npx tsx tests/developers.test.ts
 echo "== thdate";      npx tsx tests/thdate.test.ts
-echo "== account";     npx tsx tests/account.test.ts
-echo "== account-service"; npx tsx tests/account-service.test.mts
 if ls "$FIX"/Page.csv >/dev/null 2>&1; then
   echo "== import";    npx tsx tests/import.test.ts
   echo "== dashboard"; npx tsx tests/dashboard.test.ts
