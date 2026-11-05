@@ -15,9 +15,12 @@ export const GROUP_LABEL: Record<string, string> = {
   core: "แกนหลัก: ผู้ใช้ · Developer / Home Builder · ระบบบัญชี · Production Job",
 };
 
+/** ตารางที่ "เกิดบน D1" ไม่มีต้นทางใน Google Sheets — ใช้ D1 เสมอเมื่อผูก binding DB (ไม่ต้องย้าย/สลับ) */
+export const NATIVE_TABS = ["CONTENT_CARDS", "CONTENT_MEMBERS", "CONTENT_HISTORY", "PRODUCT_SETTINGS"];
+
 export const tabsOfGroups = (groups: string[]) => groups.flatMap((g) => GROUP_TABS[g] ?? []);
 
 /** sheetId สมมติของตารางบน D1 (ติดลบ ไม่ชนกับ sheetId จริงของ Google) ใช้กับ listTabs → deleteRow */
-const ALL = Object.values(GROUP_TABS).flat().sort();
+const ALL = [...Object.values(GROUP_TABS).flat(), ...NATIVE_TABS].sort();
 export const d1SheetId = (tab: string) => -(ALL.indexOf(tab) + 1);
 export const d1TabOfSheetId = (id: number) => (id < 0 ? ALL[-id - 1] : undefined);

@@ -13,6 +13,7 @@ import { kindOf, PRODUCT_CATEGORIES, todayBkk, validateProduct, DEV_COLUMNS } fr
 import { normRole } from "./roles";
 import { productTypesOf, saveProduct, saveDeveloper, deleteDeveloper, DevError, addProductType } from "./developers-service";
 import { dedupeCode, guardRow } from "./row-guard";
+import { createCardsForJobs, renameProductInContent } from "./content-service";
 import { appendRows, batchUpdateValues, colLetter, deleteRow, listTabs, readTabs, toRow } from "./sheets";
 
 export class AccError extends Error {
@@ -225,7 +226,10 @@ async function applyWork(t: Record<string, Tab>, doc: Rec, actor: string) {
   if (ri >= 0) { t.ACC_DOCS.rows[ri].work_started_at = now; updates.push({ range: rowRange("ACC_DOCS", t.ACC_DOCS.headers, ri + 2), values: [toRow(t.ACC_DOCS.headers, t.ACC_DOCS.rows[ri])] }); }
   await batchUpdateValues(updates);
   await writeAudit(actor, "account_work_start", "account_doc", doc.doc_id, `${doc.doc_no} → ${dev.dev_code}: Product ${lines.length} รายการ · Job ${made.map((j) => j.job_code).join(", ")}`);
-  return { products: lines.length, jobs: made.map((j) => ({ job_id: j.job_id, job_code: j.job_code, product: j.product })) };
+  // สร้างการ์ด Content ตามจำนวนโพสต์ของ Product (best-effort: พลาดก็ไม่ให้เปิดงานล้ม — สร้างการ์ดเองที่บอร์ดได้)
+  let cards = 0;
+  try { cards = (await createCardsForJobs(made.map((j) => ({ job_id: j.job_id, job_code: j.job_code, product: j.product, doc_id: doc.doc_id, developer_id: dev.developer_id, customer_name: doc.customer_name, job_title: doc.job_title })), actor)).created; } catch { /* ไม่กระทบการเปิดงาน */ }
+  return { products: lines.length, cards, jobs: made.map((j) => ({ job_id: j.job_id, job_code: j.job_code, product: j.product })) };
 }
 
 export type Upload = { name: string; type: string; data: ArrayBuffer };
@@ -533,6 +537,7 @@ export async function renameProduct(from: unknown, to: unknown, actor: string) {
   }
   await writeTypes(t, types.map((x) => (x === old ? n : x)));
   if (updates.length) await batchUpdateValues(updates);
+  try { await renameProductInContent(old, n); } catch { /* ตั้งค่า/การ์ด Content ตามไม่ทัน — ไม่กระทบการเปลี่ยนชื่อ */ }
   await writeAudit(actor, "developer_product_type", "config", TYPE_KEY, `เปลี่ยนชื่อ ${old} → ${n} (แก้ ${updates.length} รายการที่ใช้อยู่)`);
   const t2 = await load();
   return { products: productTypesOf(t2.APP_CONFIG.rows).map((x) => ({ name: x, ...usage(t2, x) })), updated: updates.length };

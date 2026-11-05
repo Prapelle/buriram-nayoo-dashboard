@@ -6,6 +6,7 @@
 import * as G from "./sheets-google";
 import * as D from "./d1";
 import { assertWritable, d1Routing } from "./d1-state";
+import { NATIVE_DEFS } from "./content";
 import { d1SheetId, d1TabOfSheetId } from "./d1-groups";
 
 export type { TabMeta } from "./sheets-google";
@@ -13,8 +14,11 @@ export { colLetter, toRow, firstRowOf } from "./sheets-google";
 
 const tabOf = (range: string) => (/^'((?:[^']|'')+)'/.exec(range)?.[1] ?? "").replace(/''/g, "'");
 
+const ensured = new WeakSet<object>();
 async function route() {
   const r = await d1Routing();
+  // ตารางที่เกิดบน D1 (Content) — สร้างให้อัตโนมัติครั้งแรกต่อเครื่อง (CREATE IF NOT EXISTS ไม่แตะข้อมูลเดิม)
+  if (r.db && !ensured.has(r.db)) { await D.ensureSchema(r.db, NATIVE_DEFS); ensured.add(r.db); }
   if (r.tabs.size && !r.db) throw new Error("ฐานข้อมูล D1 (binding DB) ไม่พร้อมใช้งาน");
   return r;
 }

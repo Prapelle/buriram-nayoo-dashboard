@@ -5,7 +5,7 @@
  * - มี binding แต่อ่านสถานะไม่ได้ → ผิดพลาดทันที (ไม่ถอยกลับไปอ่าน Sheets เงียบ ๆ เพราะข้อมูลอาจเก่า)
  */
 import { getD1, metaGetAll, type D1Like } from "./d1";
-import { GROUP_TABS, tabsOfGroups } from "./d1-groups";
+import { GROUP_TABS, NATIVE_TABS, tabsOfGroups } from "./d1-groups";
 
 export class MigratingError extends Error {
   status = 503;
@@ -40,7 +40,7 @@ export async function getD1State(): Promise<{ db: D1Like | null; state: D1State 
 /** แท็บที่ตอนนี้อยู่บน D1 (พร้อม db) — ว่างถ้ายังไม่ได้สลับกลุ่มไหนเลย */
 export async function d1Routing(): Promise<{ db: D1Like | null; tabs: Set<string>; state: D1State }> {
   const { db, state } = await getD1State();
-  return { db, state, tabs: new Set(tabsOfGroups(state.active)) };
+  return { db, state, tabs: new Set([...tabsOfGroups(state.active), ...(db ? NATIVE_TABS : [])]) };
 }
 
 /** ห้ามเขียนแท็บของกลุ่มที่กำลังย้าย */

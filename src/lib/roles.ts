@@ -62,6 +62,7 @@ export const NAV: NavItem[] = [
   { href: "/account/customers", label: "รายชื่อลูกค้า", roles: SALES, icon: "users", system: "account" },
   { href: "/account/products", label: "Product", roles: SALES, icon: "board", system: "account" },
   { href: "/production", label: "งาน Production", roles: [...SALES, "production"], icon: "board", system: "production" },
+  { href: "/production/content", label: "บอร์ด Content", roles: [...SALES, "production"], icon: "board", system: "production" }, // Kanban Content + รายงานลูกค้า (5/11/2026)
   { href: "/dashboard/import", label: "นำเข้า CSV", roles: DATA, group: "ข้อมูล", icon: "upload", system: "dashboard" },
   { href: "/dashboard/export", label: "ส่งออกข้อมูล", roles: DATA, group: "ข้อมูล", icon: "download", system: "dashboard" },
   // ตั้งค่า: เมนูย่อย — ตั้งค่าระบบ (Admin) · คู่มือนำเข้าข้อมูล และ คำอธิบายตัวเลข (ทุก Role)

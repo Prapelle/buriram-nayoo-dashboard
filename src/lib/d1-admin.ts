@@ -11,6 +11,7 @@ import * as D from "./d1";
 import { GROUP_TABS } from "./d1-groups";
 import { getD1State, invalidateD1State, parseState } from "./d1-state";
 import { TABS } from "./schema";
+import { NATIVE_DEFS } from "./content";
 import * as G from "./sheets-google";
 
 export class D1AdminError extends Error { constructor(public status: number, message: string) { super(message); } }
@@ -52,7 +53,7 @@ const sheetTitles = async () => new Set((await G.listTabs()).map((m) => m.title)
 
 export async function initD1() {
   const { db } = await need();
-  const report = await D.ensureSchema(db, TABS.map((t) => ({ name: t.name, headers: t.headers })));
+  const report = await D.ensureSchema(db, [...TABS.map((t) => ({ name: t.name, headers: t.headers })), ...NATIVE_DEFS]);
   invalidateD1State();
   return report;
 }
@@ -62,7 +63,7 @@ async function copyGroup(group: string) {
   const tabs = groupTabs(group);
   const { db } = await need();
   if (parseState(await D.metaGetAll(db)).active.includes(group)) throw new D1AdminError(409, "กลุ่มนี้ใช้ D1 อยู่แล้ว คัดลอกทับไม่ได้ (ต้อง rollback ก่อน)");
-  await D.ensureSchema(db, TABS.map((t) => ({ name: t.name, headers: t.headers })));
+  await D.ensureSchema(db, [...TABS.map((t) => ({ name: t.name, headers: t.headers })), ...NATIVE_DEFS]);
   const have = await sheetTitles();
   for (const tab of tabs) {
     const src = await readSource(tab, have);
