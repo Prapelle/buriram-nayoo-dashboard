@@ -188,4 +188,12 @@ await t("กลุ่มที่เหลือ: ตรวจ → สลับ 
   await AD.rollbackGroup("leads", ADMIN); assert.equal((await S.readTab("LEADS")).rows.length, before);
 });
 
+await t("อ่านหลายคอลัมน์ในคำขอเดียวได้ผลเท่ากับอ่านทีละช่วง และสแกนตารางครั้งเดียวต่อแท็บ", async () => {
+  let selects = 0; const wrapped = { ...db, prepare: (sql: string) => { if (/FROM "LEADS"/.test(sql)) selects++; return db.prepare(sql); } };
+  const h = (await D.getRange(db as never, "'LEADS'!1:1"))[0];
+  const rs = [`'LEADS'!A:A`, `'LEADS'!C:C`, `'LEADS'!${S.colLetter(h.length - 1)}:${S.colLetter(h.length - 1)}`, `'LEADS'!1:1`, `'LEADS'!A2:B2`];
+  const single = []; for (const r of rs) single.push(await D.getRange(db as never, r));
+  selects = 0; const batch = await D.getRanges(wrapped as never, rs);
+  assert.deepEqual(batch, single); assert.ok(selects <= 3, `สแกน LEADS ${selects} ครั้ง`); // 3 ช่วงเต็มคอลัมน์ → 1 SELECT + 1 สำหรับ A2:B2 (+ header)
+});
 console.log("\nD1 (Sheets จำลอง + D1 จำลอง) ผ่านทั้งหมด");
