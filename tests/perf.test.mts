@@ -41,6 +41,17 @@ await t("PERF_DEFS: ชื่อตารางไม่ซ้ำ และอ�
   for (const n of P.PERF_TABS) assert.ok(G.NATIVE_TABS.includes(n), n);
 });
 
+// ── รายชื่อ Staff ──
+const U = (email: string, name: string, role: string, active = "TRUE") => ({ email, display_name: name, role, active });
+const nr = (await import("../src/lib/roles")).normRole;
+await t("staffUserNames: เฉพาะผู้ใช้ที่ใช้งานอยู่และเป็น Super Admin/Admin/AE · ใช้ชื่อที่แสดง (ไม่มี → อีเมล) · ไม่ซ้ำ", async () => {
+  const names = P.staffUserNames([U("a@x.com", "สมชาย", "ae"), U("b@x.com", "", "admin"), U("c@x.com", "นักการตลาด", "marketing"), U("d@x.com", "ถูกระงับ", "ae", "FALSE"), U("e@x.com", "สมชาย", "sales"), U("f@x.com", "ผู้ผลิต", "production")], nr);
+  assert.deepEqual(names, ["b@x.com", "สมชาย"].sort((a, b) => a.localeCompare(b, "th")));
+});
+await t("mergeStaff: ผู้ใช้มาก่อน แล้วตามด้วยชื่อเดิมที่ไม่ตรงผู้ใช้ (ไม่ซ้ำ ตัดช่องว่าง)", async () => {
+  assert.deepEqual(P.mergeStaff(["สมชาย", "สมหญิง"], ["สมชาย", " เก่า ", "เก่า", "", "สมหญิง"]), ["สมชาย", "สมหญิง", "เก่า"]);
+});
+
 // ── บันทึกลง D1 ──
 await initializeSpreadsheet("admin@example.com");
 const db = makeD1(); D.setD1ForTest(db as never); ST.invalidateD1State();
@@ -81,5 +92,16 @@ await t("เขียนประวัติไม่สำเร็จ (ไม
   D.setD1ForTest(null); ST.invalidateD1State();
   const r = await saveLead({ ...base, phone: "0833333333", customer_name: "ไม่มี D1", need: "ซื้อ", buy_status: "Cold" }, "ae1@example.com");
   assert.ok(r.created && r.lead.lead_id);
+});
+await t("listLeads / listDevelopers ส่ง staffUsers (ชื่อผู้ใช้) + staff (ผู้ใช้ + ชื่อเดิมในข้อมูล)", async () => {
+  D.setD1ForTest(makeD1() as never); ST.invalidateD1State();
+  const { saveUser } = await import("../src/lib/users-service");
+  await saveUser({ email: "ae9@example.com", display_name: "เอไอ", role: "ae" }, "admin@example.com");
+  const { listLeads } = await import("../src/lib/leads-service");
+  await saveLead({ ...base, phone: "0844444444", customer_name: "ชื่อเก่า", need: "ซื้อ", buy_status: "Cold", staff: "คนเก่าที่ไม่มีบัญชี" }, "ae9@example.com");
+  const L = await listLeads(); assert.ok(L.staffUsers.includes("เอไอ")); assert.ok(!L.staffUsers.includes("คนเก่าที่ไม่มีบัญชี"));
+  assert.ok(L.staff.includes("เอไอ") && L.staff.includes("คนเก่าที่ไม่มีบัญชี"));
+  const { listDevelopers } = await import("../src/lib/developers-service");
+  const Dv = await listDevelopers("developer"); assert.ok(Dv.staffUsers.includes("เอไอ"));
 });
 console.log("perf: ผ่านทั้งหมด");

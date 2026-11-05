@@ -2,7 +2,7 @@ import { normRole } from "./roles";
 import { canonChannel } from "./dashboard";
 import { dedupeCode, guardRow } from "./row-guard";
 import { writeAudit } from "./audit";
-import { leadStatusChanges } from "./perf";
+import { leadStatusChanges, mergeStaff, staffUserNames } from "./perf";
 import { logLeadStatus } from "./perf-service";
 import { CALL_DEFAULT, CALL_STATUS, isSellerLead, normCall, SELL_DEFAULT, SELL_STATUS } from "./lead-options";
 import { areaLabel, AREA_SUGGEST, contactableFor, findDuplicates, LEAD_COLUMNS, leadStatusOf, nextLeadCode, normalizeEmail, normalizeLine, normalizePhone, pipelineOf, resolveNeedStatus, stampStatus, statusFieldOf, todayBkk, validateLead, type DupMatch, type Lead } from "./leads";
@@ -54,7 +54,8 @@ const pick = (r: Record<string, string>): Lead => { const o: Lead = Object.fromE
 
 export async function listLeads() {
   const [t, props] = await Promise.all([load(), loadProps()]);
-  const staff = [...new Set(t.LEADS.rows.map((r) => String(r.staff ?? "").trim()).filter(Boolean))].sort();
+  const staffUsers = staffUserNames(t.APP_USERS.rows, normRole);
+  const staff = mergeStaff(staffUsers, t.LEADS.rows.map((r) => String(r.staff ?? "")));
   const owners = [...new Set(t.APP_USERS.rows.filter((u) => String(u.active).toUpperCase() === "TRUE" && ["super_admin", "admin", "ae"].includes(normRole(u.role) ?? "")).map((u) => u.email))].sort();
   const rows = t.LEADS.rows.filter((r) => r.lead_id).map((r) => { const l = pick(r); l.source_channel = canonChannel(l.source_channel); return l; }) // ชื่อช่องทางเก่า → Unknown (แก้ใน Sheet เมื่อบันทึก Lead นั้น)
     .sort((a, b) => b.received_at.localeCompare(a.received_at) || b.lead_code.localeCompare(a.lead_code));
@@ -62,7 +63,7 @@ export async function listLeads() {
   const areas = [...new Set([...AREA_SUGGEST, ...rows.map((r) => areaLabel(r.area)).filter(Boolean)])];
   const byLead: Record<string, LeadProperty[]> = {};
   for (const p of props.rows) (byLead[p.lead_id] ??= []).push(p);
-  return { rows, owners, staff, areas, properties: byLead, propertiesReady: props.ready };
+  return { rows, owners, staff, staffUsers, areas, properties: byLead, propertiesReady: props.ready };
 }
 
 /** สร้าง/แก้ไข Lead: Lead Code สร้างฝั่ง Server, เตือนซ้ำจากเบอร์/อีเมลแต่ไม่ merge อัตโนมัติ */

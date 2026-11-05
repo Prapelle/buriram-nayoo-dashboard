@@ -37,7 +37,7 @@ type SortKey = "lead_code" | "received_at" | "customer_name" | "source_channel" 
 type Conflict = { field: string; value: string };
 
 export function LeadsManager({ canDelete = true }: { canDelete?: boolean }) {
-  const [data, setData] = useState<{ state: "loading" | "ok" | "error"; rows: Lead[]; staff: string[]; areas: string[]; properties: Record<string, LeadProperty[]>; propsReady: boolean; error?: string }>({ state: "loading", rows: [], staff: [], areas: [], properties: {}, propsReady: false });
+  const [data, setData] = useState<{ state: "loading" | "ok" | "error"; rows: Lead[]; staff: string[]; staffUsers: string[]; areas: string[]; properties: Record<string, LeadProperty[]>; propsReady: boolean; error?: string }>({ state: "loading", rows: [], staff: [], staffUsers: [], areas: [], properties: {}, propsReady: false });
   const [props, setProps] = useState<{ property_id?: string; url: string; status: string }[]>([]);
   const mobile = useIsMobile();
   const [f, setF] = useState(EMPTY_F);
@@ -60,8 +60,8 @@ export function LeadsManager({ canDelete = true }: { canDelete?: boolean }) {
     try {
       const r = await fetch("/api/leads"); const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
-      setData({ state: "ok", rows: j.rows, staff: j.staff ?? [], areas: j.areas ?? [], properties: j.properties ?? {}, propsReady: j.propertiesReady === true });
-    } catch (e) { if (silent) return; setData({ state: "error", rows: [], staff: [], areas: [], properties: {}, propsReady: false, error: e instanceof Error ? e.message : "error" }); }
+      setData({ state: "ok", rows: j.rows, staff: j.staff ?? [], staffUsers: j.staffUsers ?? [], areas: j.areas ?? [], properties: j.properties ?? {}, propsReady: j.propertiesReady === true });
+    } catch (e) { if (silent) return; setData({ state: "error", rows: [], staff: [], staffUsers: [], areas: [], properties: {}, propsReady: false, error: e instanceof Error ? e.message : "error" }); }
   }, []);
   useEffect(() => { load(); }, [load]);
   useAutoRefresh(() => load(true));
@@ -257,8 +257,7 @@ export function LeadsManager({ canDelete = true }: { canDelete?: boolean }) {
                 {sf ? select(sf, statusLabel(form.need), pair(statusOptionsOf(form.need)), { onChange: (v) => setStatus(sf, v) })
                   : <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">สถานะ</span><select disabled className={inp("x") + " bg-slate-50"}><option>เลือกความต้องการก่อน</option></select></label>}
                 {select("call_status", "Call Status", pair(CALL_STATUS), { onChange: (v) => setStatus("call_status", v) })}
-                {field("staff", "Staff", { list: "staff-list" })}
-                <datalist id="staff-list">{data.staff.map((o) => <option key={o} value={o} />)}</datalist>
+                {select("staff", "Staff", pair(form.staff && !data.staffUsers.includes(form.staff) ? [...data.staffUsers, form.staff] : data.staffUsers))}
                 {normCall(form.call_status) === "กู้ไม่ผ่าน" ? field("lost_reason", "สาเหตุที่กู้ไม่ผ่าน", { required: true }) : (closedNow || form.lost_reason) && field("lost_reason", "เหตุผลที่ปิดไม่สำเร็จ")}
               </>)}
               {grp("4. การติดตาม", <>

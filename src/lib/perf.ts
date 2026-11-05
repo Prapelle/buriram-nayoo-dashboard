@@ -43,3 +43,16 @@ export function leadStatusChanges(prev: Record<string, string> | null, next: Rec
   const from = prev ? String(prev[field] ?? "").trim() || defaults[field] : "";
   return from === to ? [] : [{ field, from, to }];
 }
+
+/** Role ที่เป็น Staff ได้ (ฝ่ายขาย) — ใช้เป็นตัวเลือกช่อง Staff ของ Leads / Developer / Home Builder */
+export const STAFF_ROLES = ["super_admin", "admin", "ae"];
+const th = (a: string, b: string) => a.localeCompare(b, "th");
+/** ชื่อ Staff ของผู้ใช้ = "ชื่อที่แสดง" (ถ้าไม่ได้ตั้ง ใช้อีเมล) — ช่อง Staff เก็บเป็นชื่อนี้ */
+export const staffNameOf = (u: Record<string, string>) => String(u.display_name ?? "").trim() || String(u.email ?? "").trim();
+/** รายชื่อผู้ใช้ที่ใช้งานอยู่และเป็น Staff ได้ (ไม่ซ้ำ เรียงตามชื่อ) */
+export function staffUserNames(users: Record<string, string>[], normRole: (v: unknown) => string | null): string[] {
+  const names = users.filter((u) => u.email && String(u.active).toUpperCase() === "TRUE" && STAFF_ROLES.includes(normRole(u.role) ?? "")).map(staffNameOf).filter(Boolean);
+  return [...new Set(names)].sort(th);
+}
+/** รายชื่อสำหรับตัวกรอง = ผู้ใช้ปัจจุบัน + ชื่อเดิมที่มีอยู่ในข้อมูลแต่ไม่ตรงกับผู้ใช้ใด (ข้อมูลเก่าที่พิมพ์เอง) */
+export const mergeStaff = (userNames: string[], existing: string[]) => [...userNames, ...[...new Set(existing.map((x) => x.trim()).filter(Boolean))].filter((x) => !userNames.includes(x)).sort(th)];

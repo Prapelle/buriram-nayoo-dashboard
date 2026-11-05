@@ -5,6 +5,8 @@
  * - ไม่ลบ log · ตรวจข้อมูลเก่าก่อนแก้ (updated_at) · เตือนชื่อบริษัท/โครงการ/เบอร์/Line ซ้ำ (ไม่ merge อัตโนมัติ) · บันทึก Audit Log
  */
 import { writeAudit } from "./audit";
+import { mergeStaff, staffUserNames } from "./perf";
+import { normRole } from "./roles";
 import {
   addDays, AUTO_STATUS, KIND_LABEL, kindOf, type DevKind, autoChanges, CONTACT_COLUMNS, CONTACT_METHODS, NEXT_CONTACT_DAYS, DEFAULT_PRODUCTS, DEV_COLUMNS, DEV_DEFAULT, DEV_EDITABLE, DEV_STATUS, findDevDuplicates, IMPORT_HEADERS, LOG_COLUMNS, nextDevCode, normLine, normName, normPhone,
   PRODUCT_COLUMNS, productDrivenStatus, productState, todayBkk, validateDev, validateProduct, type Dev, type DevDup, type DevProduct,
@@ -16,7 +18,7 @@ export class DevError extends Error {
   constructor(public status: number, message: string, public code: string, public extra: { fields?: Record<string, string>; matches?: DevDup[] } = {}) { super(message); }
 }
 type Tab = { headers: string[]; rows: Record<string, string>[] };
-const TABS = ["DEVELOPERS", "DEVELOPER_PRODUCTS", "DEVELOPER_STATUS_LOG", "APP_CONFIG"];
+const TABS = ["DEVELOPERS", "DEVELOPER_PRODUCTS", "DEVELOPER_STATUS_LOG", "APP_CONFIG", "APP_USERS"];
 const CONTACTS = "DEVELOPER_CONTACTS"; // เพิ่ม 31/10/2026 — ยังไม่ได้เตรียม Sheet ก็เปิดหน้าได้ (ไม่มีประวัติ) แต่บันทึกการติดต่อไม่ได้
 const CONFIG_KEY = "developer_products";
 
@@ -89,9 +91,10 @@ export async function listDevelopers(kind: DevKind = "developer") {
   const ids = new Set(devs.map((d) => d.developer_id));
   const products = t.DEVELOPER_PRODUCTS.rows.filter((r) => r.product_id && ids.has(r.developer_id)).map(pickProd);
   const logs = t.DEVELOPER_STATUS_LOG.rows.filter((r) => r.log_id && ids.has(r.developer_id)).map((r) => Object.fromEntries(LOG_COLUMNS.map((c) => [c, r[c] ?? ""])));
-  const staff = [...new Set(devs.map((d) => d.staff.trim()).filter(Boolean))].sort();
+  const staffUsers = staffUserNames(t.APP_USERS.rows, normRole);
+  const staff = mergeStaff(staffUsers, devs.map((d) => d.staff));
   const contacts = t[CONTACTS].rows.filter((r) => r.contact_id && ids.has(r.developer_id)).map((r) => Object.fromEntries(CONTACT_COLUMNS.map((c) => [c, r[c] ?? ""])));
-  return { devs, products, logs, contacts, staff, productTypes: productTypesOf(t.APP_CONFIG.rows), today: todayBkk() };
+  return { devs, products, logs, contacts, staff, staffUsers, productTypes: productTypesOf(t.APP_CONFIG.rows), today: todayBkk() };
 }
 
 function manualLog(dev: Dev, from: string, to: string, actor: string, now: string) {
