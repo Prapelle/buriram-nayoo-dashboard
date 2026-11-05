@@ -1,5 +1,6 @@
 import { logError } from "@/lib/log";
 import { NextResponse } from "next/server";
+import { migratingResponse } from "@/lib/http-errors";
 import { requireRole } from "@/lib/guard";
 import { parseDocType } from "@/lib/account";
 import { AccError, addProductType, convertDoc, listDocs, saveDoc, setDocStatus } from "@/lib/account-service";
@@ -8,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 function fail(e: unknown) {
   if (e instanceof AccError) return NextResponse.json({ error: e.message, code: e.code, ...e.extra }, { status: e.status });
-  logError("/api/account", e); return NextResponse.json({ error: e instanceof Error ? e.message : "unknown error" }, { status: 500 });
+  { const mg = migratingResponse(e); if (mg) return mg; } logError("/api/account", e); return NextResponse.json({ error: e instanceof Error ? e.message : "unknown error" }, { status: 500 });
 }
 
 // ระบบบัญชี: ดู / ออก / แก้เอกสาร = Super Admin, Admin, AE · ยืนยันชำระเงิน / เริ่มงาน แยกไปที่ /api/account/pay (Super Admin, Admin)

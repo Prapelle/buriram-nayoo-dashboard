@@ -1,5 +1,6 @@
 import { logError } from "@/lib/log";
 import { NextResponse } from "next/server";
+import { migratingResponse } from "@/lib/http-errors";
 import { requireRole } from "@/lib/guard";
 import { parseKind } from "@/lib/developers";
 import { addProductType, changeDevStatus, recordContact, deleteDeveloper, deleteProduct, DevError, importDevelopers, listDevelopers, saveDeveloper, saveProduct } from "@/lib/developers-service";
@@ -8,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 function fail(e: unknown) {
   if (e instanceof DevError) return NextResponse.json({ error: e.message, code: e.code, ...e.extra }, { status: e.status });
-  { logError("/api/developers", e); return NextResponse.json({ error: e instanceof Error ? e.message : "unknown error" }, { status: 500 }); }
+  { { const mg = migratingResponse(e); if (mg) return mg; } logError("/api/developers", e); return NextResponse.json({ error: e instanceof Error ? e.message : "unknown error" }, { status: 500 }); }
 }
 
 // Developer (มีเบอร์/Line ผู้ติดต่อ) — เฉพาะ Admin และ AE

@@ -1,5 +1,6 @@
 import { logError } from "@/lib/log";
 import { NextResponse } from "next/server";
+import { migratingResponse } from "@/lib/http-errors";
 import { requireRole } from "@/lib/guard";
 import { initializeSpreadsheet } from "@/lib/init-sheet";
 
@@ -11,6 +12,6 @@ export async function POST() {
   try {
     return NextResponse.json(await initializeSpreadsheet(g.email));
   } catch (e) {
-    { logError("/api/init", e); return NextResponse.json({ error: e instanceof Error ? e.message : "unknown error" }, { status: 500 }); }
+    { { const mg = migratingResponse(e); if (mg) return mg; } logError("/api/init", e); return NextResponse.json({ error: e instanceof Error ? e.message : "unknown error" }, { status: 500 }); }
   }
 }

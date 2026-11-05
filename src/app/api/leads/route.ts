@@ -1,5 +1,6 @@
 import { logError } from "@/lib/log";
 import { NextResponse } from "next/server";
+import { migratingResponse } from "@/lib/http-errors";
 import { requireRole } from "@/lib/guard";
 import { changeLeadStatus, deleteLead, LeadError, listLeads, saveLead } from "@/lib/leads-service";
 
@@ -7,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 function fail(e: unknown) {
   if (e instanceof LeadError) return NextResponse.json({ error: e.message, code: e.code, ...e.extra }, { status: e.status });
-  { logError("/api/leads", e); return NextResponse.json({ error: e instanceof Error ? e.message : "unknown error" }, { status: 500 }); }
+  { { const mg = migratingResponse(e); if (mg) return mg; } logError("/api/leads", e); return NextResponse.json({ error: e instanceof Error ? e.message : "unknown error" }, { status: 500 }); }
 }
 
 // ข้อมูลลูกค้า (PII) — เฉพาะ Admin และ AE

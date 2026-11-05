@@ -149,4 +149,9 @@ await t("รายงานลูกค้า: รวมเฉพาะงาน
   assert.equal((await CS.getReport(dev.developer_id, today, today, false)).rows.some((x) => x.card_id === R.card_id), false); // ส่งแล้วไม่รวมโดยปริยาย
   assert.equal((await CS.getReport(dev.developer_id, today, today, true)).rows.some((x) => x.card_id === R.card_id), true);
 });
+await t("สร้างการ์ดพร้อมกัน 3 ใบ → รหัส CT- ไม่ซ้ำกัน (5/11/2026)", async () => {
+  const rs = await Promise.all([1, 2, 3].map((k) => CS.saveCard({ title: `พร้อมกัน ${k}`, content_type: "Knowledge" }, ADMIN)));
+  const codes = (await CS.getBoard()).cards.filter((c: { title: string }) => c.title.startsWith("พร้อมกัน")).map((c: { card_code: string }) => c.card_code);
+  assert.equal(new Set(codes).size, 3, codes.join()); void rs;
+});
 console.log("content: ผ่านทั้งหมด");
