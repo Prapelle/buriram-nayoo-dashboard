@@ -54,14 +54,19 @@ export async function getHistory(cardId: string) {
   return { history: t.CONTENT_HISTORY.rows.filter((h) => h.card_id === cardId).map((h) => ({ ...h, actor_name: userName(t, h.actor) })) };
 }
 
+/** ลบแถวทั้งหมดของการ์ดหนึ่งใบในตารางลูก — อ่านสดทันทีก่อนลบ (ไม่ใช้เลขแถวจากตอนโหลดต้นคำขอ ซึ่งอาจเลื่อนถ้ามีคนลบแถวอื่นพร้อมกัน) ลบจากล่างขึ้นบน */
+async function deleteRowsOf(tab: string, cardId: string) {
+  const fresh = (await readTabs([tab]))[tab], sid = (await listTabs()).find((x) => x.title === tab)?.sheetId;
+  if (sid === undefined) return;
+  const rows = fresh.rows.map((r, i) => ({ r, row: i + 2 })).filter((x) => x.r.card_id === cardId).reverse();
+  for (const o of rows) await deleteRow(sid, o.row);
+}
 function checkMembers(t: Record<string, Tab>, input: { email: string }[]) {
   const known = new Set(activeUsers(t).map((u) => u.email.toLowerCase()));
   for (const m of input) if (!known.has(m.email)) throw new ContentError(422, `ไม่พบผู้ใช้ ${m.email} (หรือถูกปิดใช้งาน)`, "VALIDATION", { fields: { members: `ไม่พบผู้ใช้ ${m.email}` } });
 }
 async function replaceMembers(t: Record<string, Tab>, cardId: string, input: { email: string; duty: string; is_main: boolean }[], now: string) {
-  const sid = (await listTabs()).find((x) => x.title === "CONTENT_MEMBERS")?.sheetId;
-  const old = t.CONTENT_MEMBERS.rows.map((r, i) => ({ r, row: i + 2 })).filter((x) => x.r.card_id === cardId).reverse();
-  if (sid !== undefined) for (const o of old) await deleteRow(sid, o.row); // ลบจากล่างขึ้นบน เลขแถวไม่เลื่อน
+  await deleteRowsOf("CONTENT_MEMBERS", cardId);
   if (input.length) await appendRows("CONTENT_MEMBERS", input.map((m) => toRow(MEMBER_COLUMNS, { ...blank(MEMBER_COLUMNS), member_id: crypto.randomUUID(), card_id: cardId, email: m.email, display_name: userName(t, m.email), duty: m.duty, is_main: m.is_main ? "TRUE" : "FALSE", created_at: now })));
 }
 
@@ -104,7 +109,13 @@ export async function saveCard(input: Record<string, unknown>, actor: string, id
   const rec: Rec = { ...cur, ...fields, updated_by: actor, updated_at: now };
   // ถ้าเปลี่ยนระยะติดตามผลหลังเผยแพร่แล้ว คำนวณวันครบกำหนดใหม่
   if (rec.published_at && rec.sales_tag === "TRUE" && Number(rec.follow_days) >= 1 && rec.report_due_date && rec.stage !== "ส่งให้ลูกค้าแล้ว") rec.report_due_date = addDays(rec.published_at, Number(rec.follow_days));
+  // ติดแท็กงานขายทีหลังขณะการ์ดเผยแพร่แล้ว (ค้างที่ PUBLISHED) → เข้าคิวรายงานเหมือนงานขายทั่วไป เมื่อมีระยะติดตามผล
+  let advanced = false;
+  if (rec.sales_tag === "TRUE" && cur.sales_tag !== "TRUE" && rec.stage === "PUBLISHED" && rec.published_at && Number(rec.follow_days) >= 1) {
+    Object.assign(rec, { stage: "รอครบเพื่อทำรายงาน", stage_at: now, report_due_date: addDays(rec.published_at, Number(rec.follow_days)) }); advanced = true;
+  }
   await batchUpdateValues([{ range: rowRange("CONTENT_CARDS", t.CONTENT_CARDS.headers, g.row), values: [toRow(t.CONTENT_CARDS.headers, rec)] }]);
+  if (advanced) await logMove(id, "PUBLISHED", rec.stage, actor, now, "ติดแท็กงานขายหลังเผยแพร่ → เลื่อนอัตโนมัติ");
   await replaceMembers(t, id, c.members, now);
   await writeAudit(actor, "content_update", "content_card", id, `${cur.card_code} ${rec.title}`);
   return { card_id: id, card_code: cur.card_code };
@@ -135,11 +146,12 @@ export async function deleteCard(id: string, actor: string) {
   const cur = t.CONTENT_CARDS.rows[i];
   const g = await guardRow("CONTENT_CARDS", t.CONTENT_CARDS.headers, "card_id", id, i + 2);
   if ("error" in g) throw new ContentError(404, "ไม่พบการ์ด (อาจถูกลบแล้ว)", "NOT_FOUND");
-  const tabs = await listTabs(), sid = (n: string) => tabs.find((x) => x.title === n)!.sheetId;
-  await replaceMembers(t, id, [], new Date().toISOString());
-  const hist = t.CONTENT_HISTORY.rows.map((r, k) => ({ r, row: k + 2 })).filter((x) => x.r.card_id === id).reverse();
-  for (const h of hist) await deleteRow(sid("CONTENT_HISTORY"), h.row);
-  await deleteRow(sid("CONTENT_CARDS"), g.row);
+  const sid = (await listTabs()).find((x) => x.title === "CONTENT_CARDS")!.sheetId;
+  await deleteRowsOf("CONTENT_MEMBERS", id);
+  await deleteRowsOf("CONTENT_HISTORY", id);
+  const g2 = await guardRow("CONTENT_CARDS", t.CONTENT_CARDS.headers, "card_id", id, g.row); // แถวอาจเลื่อนระหว่างลบตารางลูก
+  if ("error" in g2) return;
+  await deleteRow(sid, g2.row);
   await writeAudit(actor, "content_delete", "content_card", id, `${cur.card_code} ${cur.title}`);
 }
 

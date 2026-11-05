@@ -6,7 +6,7 @@ export function ProductionTabs({ active }: { active: "content" | "reports" }) {
   return (
     <nav aria-label="มุมมอง Production" className="flex flex-wrap gap-2 print:hidden">
       <Link href="/production/content" className={t(active === "content")} aria-current={active === "content" ? "page" : undefined}>บอร์ด Content</Link>
-      <Link href="/production/reports" className={t(active === "reports")} aria-current={active === "reports" ? "page" : undefined}>รายงานลูกค้า</Link>
+      <Link href="/production/content/reports" className={t(active === "reports")} aria-current={active === "reports" ? "page" : undefined}>รายงานลูกค้า</Link>
     </nav>
   );
 }

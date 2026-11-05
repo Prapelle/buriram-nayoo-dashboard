@@ -14,11 +14,10 @@ export { colLetter, toRow, firstRowOf } from "./sheets-google";
 
 const tabOf = (range: string) => (/^'((?:[^']|'')+)'/.exec(range)?.[1] ?? "").replace(/''/g, "'");
 
-const ensured = new WeakSet<object>();
 async function route() {
   const r = await d1Routing();
   // ตารางที่เกิดบน D1 (Content) — สร้างให้อัตโนมัติครั้งแรกต่อเครื่อง (CREATE IF NOT EXISTS ไม่แตะข้อมูลเดิม)
-  if (r.db && !ensured.has(r.db)) { await D.ensureSchema(r.db, NATIVE_DEFS); ensured.add(r.db); }
+  if (r.db && !D.nativeState.ensured) { await D.ensureSchema(r.db, NATIVE_DEFS); D.nativeState.ensured = true; }
   if (r.tabs.size && !r.db) throw new Error("ฐานข้อมูล D1 (binding DB) ไม่พร้อมใช้งาน");
   return r;
 }

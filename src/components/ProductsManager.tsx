@@ -17,9 +17,10 @@ export function ProductsManager({ canDelete }: { canDelete: boolean }) {
   const [name, setName] = useState(""); const [edit, setEdit] = useState<{ from: string; name: string } | null>(null); const [err, setErr] = useState("");
   const load = useCallback(async () => { try { setRows((await api("/api/account/products")).products); } catch (e) { setMsg({ type: "error", text: e instanceof Error ? e.message : "โหลดไม่สำเร็จ" }); setRows([]); } }, []);
   const [sets, setSets] = useState<Record<string, { c: string; d: string }> | null>(null);
-  const loadSets = useCallback(async () => { try { const r = await api("/api/content/products"); setSets(Object.fromEntries((r.settings as S[]).map((x) => [x.product, { c: x.content_count ? String(x.content_count) : "", d: x.report_days ? String(x.report_days) : "" }]))); } catch { setSets(null); } }, []);
+  const loadSets = useCallback(async () => { try { const r = await api("/api/content/products"); const m = Object.fromEntries((r.settings as S[]).map((x) => [x.product, { c: x.content_count ? String(x.content_count) : "", d: x.report_days ? String(x.report_days) : "" }])); setSets(m); setOrig(m); } catch { setSets(null); } }, []);
   useEffect(() => { void load(); void loadSets(); }, [load, loadSets]);
-  const saveSet = (p: string) => run(async () => { const v = sets?.[p] ?? { c: "", d: "" }; await api("/api/content/products", json("PUT", { product: p, content_count: v.c, report_days: v.d })); setMsg({ type: "ok", text: `บันทึกตั้งค่า Content ของ "${p}" แล้ว` }); await loadSets(); });
+  const [orig, setOrig] = useState<Record<string, { c: string; d: string }>>({});
+  const saveSet = (p: string) => { const v = sets?.[p] ?? { c: "", d: "" }, o = orig[p] ?? { c: "", d: "" }; if (v.c === o.c && v.d === o.d) return Promise.resolve(); return run(async () => { await api("/api/content/products", json("PUT", { product: p, content_count: v.c, report_days: v.d })); setMsg({ type: "ok", text: `บันทึกตั้งค่า Content ของ "${p}" แล้ว` }); await loadSets(); }); };
   const run = async (fn: () => Promise<void>) => { setBusy(true); setErr(""); try { await fn(); } catch (x) { const er = x as Error & { fields?: Record<string, string> }; setErr(er.fields?.name ?? ""); setMsg({ type: "error", text: er.message }); } finally { setBusy(false); } };
   const add = () => run(async () => {
     if (!name.trim()) { setErr("ใส่ชื่อ Product เช่น Top ads"); setMsg({ type: "error", text: "ใส่ชื่อ Product ก่อน" }); return; }

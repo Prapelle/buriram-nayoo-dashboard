@@ -149,4 +149,14 @@ await t("รายงานลูกค้า: รวมเฉพาะงาน
   assert.equal((await CS.getReport(dev.developer_id, today, today, false)).rows.some((x) => x.card_id === R.card_id), false); // ส่งแล้วไม่รวมโดยปริยาย
   assert.equal((await CS.getReport(dev.developer_id, today, today, true)).rows.some((x) => x.card_id === R.card_id), true);
 });
+await t("ติดแท็กงานขายทีหลังเผยแพร่แล้ว → เข้าคิวรายงานอัตโนมัติ · แก้ลบผู้ร่วมงานไม่ลบของการ์ดอื่น", async () => {
+  const a = await CS.saveCard({ title: "การ์ด ก", members: [{ email: "ae@example.com", duty: "Writer", is_main: true }] }, ADMIN);
+  const b2 = await CS.saveCard({ title: "การ์ด ข", members: [{ email: "pd@example.com", duty: "Writer", is_main: true }] }, ADMIN);
+  for (const s of ["CONTENT PLANS", "REVIEW", "SCHEDULED", "PUBLISHED"]) await CS.moveCard(a.card_id, s, ADMIN);
+  const cur = (await CS.getBoard()).cards.find((c) => c.card_id === a.card_id)!; assert.equal(cur.stage, "PUBLISHED");
+  await CS.saveCard({ title: "การ์ด ก", sales_tag: true, follow_days: "10", members: [{ email: "ae@example.com", duty: "Writer", is_main: true }], updated_at_seen: cur.updated_at }, ADMIN, a.card_id);
+  const n2 = (await CS.getBoard()).cards; const na = n2.find((c) => c.card_id === a.card_id)!;
+  assert.equal(na.stage, "รอครบเพื่อทำรายงาน"); assert.equal(na.report_due_date, C.addDays(today, 10));
+  assert.equal(n2.find((c) => c.card_id === b2.card_id)!.members.length, 1); // ของการ์ดอื่นยังอยู่
+});
 console.log("content: ผ่านทั้งหมด");

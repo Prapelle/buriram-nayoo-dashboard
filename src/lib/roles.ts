@@ -103,7 +103,7 @@ export const navOfSystem = (items: NavItem[], sys: SystemId | null) => items.fil
 export const homeFor = (_role?: string) => "/";
 
 /** สิทธิ์เข้าหน้า (ใช้ NAV เป็นที่เดียว) · หน้าย่อยใช้สิทธิ์ของเมนูที่ยาวที่สุดที่ตรงกัน เช่น /settings/metrics/x → /settings/metrics · /sales/import = นำเข้า (DATA) */
-const EXTRA: Record<string, Role[]> = { "/account/revenue/import": DATA, "/": ALL, "/production": [...SALES, "production"], "/production/reports": [...SALES, "production"] }; // /production = มุมมอง Job ในเมนูเดียวกับบอร์ด Content
+const EXTRA: Record<string, Role[]> = { "/account/revenue/import": DATA, "/": ALL, "/production": [...SALES, "production"] }; // /production = มุมมอง Job ในเมนูเดียวกับบอร์ด Content
 export function canAccess(role: Role | null | undefined, path: string): boolean {
   if (!role) return false;
   if (EXTRA[path]) return EXTRA[path].includes(role);

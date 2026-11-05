@@ -3,7 +3,8 @@
  * กติกาจับคู่อัตโนมัติ (ระวังจับผิดมากกว่าจับไม่ได้): การ์ดที่ยังไม่มี Post ID · วันเผยแพร่ของโพสต์ห่างจากวันที่การ์ด (เผยแพร่จริง/กำหนด) ไม่เกิน 1 วัน
  * · ข้อความชื่อ Content คล้ายข้อความโพสต์ (bigram) ≥ 0.5 · เป็นโพสต์เดียวที่ผ่าน หรือคะแนนนำอันดับสองชัดเจน (≥ 0.15) · โพสต์ที่ถูกจับคู่แล้วไม่ถูกใช้ซ้ำ
  */
-import { batchGet, batchUpdateValues, colLetter, toRow } from "./sheets";
+import { batchGet, batchUpdateValues, colLetter } from "./sheets";
+import { guardRow } from "./row-guard";
 import { addDays, type Rec } from "./content";
 import { getD1 } from "./d1";
 import { readTabs } from "./sheets";
@@ -68,14 +69,20 @@ export async function matchFacebookPosts(actor: string): Promise<{ matched: numb
   const taken = new Set(t.rows.map((c) => c.post_id).filter(Boolean));
   const picks = pickMatches(cards, posts, taken);
   if (!picks.length) return { matched: 0, checked: cards.length };
+  // เขียนทีละเซลล์ (post_id / updated_by / updated_at) หลังยืนยันแถวด้วย id และ post_id ยังว่าง — ไม่เขียนทับทั้งแถว กันทับสิ่งที่คนอื่นเพิ่งแก้
   const now = new Date().toISOString(), ups: { range: string; values: (string | number)[][] }[] = [];
-  const lastCol = colLetter(t.headers.length - 1);
+  const cell = (name: string, row: number) => `'CONTENT_CARDS'!${colLetter(t.headers.indexOf(name))}${row}`;
+  let matched = 0;
   for (const p of picks) {
     const i = t.rows.findIndex((r) => r.card_id === p.card_id); if (i < 0) continue;
-    ups.push({ range: `'CONTENT_CARDS'!A${i + 2}:${lastCol}${i + 2}`, values: [toRow(t.headers, { ...t.rows[i], post_id: p.post_id, updated_by: actor, updated_at: now })] });
+    const g = await guardRow("CONTENT_CARDS", t.headers, "card_id", p.card_id, i + 2); if ("error" in g) continue;
+    const cur = (await batchGet([cell("post_id", g.row)]))[0]?.[0]?.[0];
+    if (String(cur ?? "")) continue;
+    ups.push({ range: cell("post_id", g.row), values: [[p.post_id]] }, { range: cell("updated_by", g.row), values: [[actor]] }, { range: cell("updated_at", g.row), values: [[now]] });
+    matched++;
   }
-  await batchUpdateValues(ups);
-  return { matched: ups.length, checked: cards.length };
+  if (ups.length) await batchUpdateValues(ups);
+  return { matched, checked: cards.length };
 }
 
 export type PostMetrics = { post_id: string; permalink: string; publish_time: string; scope: "lifetime" | "daily" | "none"; as_of: string; views: number; reach: number; reactions: number; comments: number; shares: number; link_clicks: number; total_clicks: number };

@@ -16,7 +16,9 @@ export type D1Like = { prepare(sql: string): D1Stmt; batch(s: D1Stmt[]): Promise
 
 let testDb: D1Like | null | undefined;
 /** ใช้ในเทสต์เท่านั้น: ใส่ฐานข้อมูลจำลอง (null = บังคับว่าไม่มี D1, undefined = กลับไปใช้ของจริง) */
-export function setD1ForTest(db: D1Like | null | undefined) { testDb = db; colCache.clear(); }
+/** ตารางที่เกิดบน D1 (Content) สร้างแล้วหรือยังในเครื่องนี้ — ใช้ธงระดับโมดูล (ไม่ผูกกับอ็อบเจ็กต์ binding ซึ่งอาจเป็นอินสแตนซ์ใหม่ทุกคำขอ) */
+export const nativeState = { ensured: false };
+export function setD1ForTest(db: D1Like | null | undefined) { testDb = db; colCache.clear(); nativeState.ensured = false; }
 
 export async function getD1(): Promise<D1Like | null> {
   if (testDb !== undefined) return testDb;

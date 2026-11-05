@@ -4,7 +4,7 @@ import { ProductionTabs } from "@/components/ProductionTabs";
 import { ReportBuilder } from "@/components/ReportBuilder";
 
 export default async function ReportsPage() {
-  await requirePage("/production/reports");
+  await requirePage("/production/content/reports");
   return (
     <section className="max-w-6xl space-y-4">
       <ProductionTabs active="reports" />
