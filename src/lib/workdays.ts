@@ -29,9 +29,11 @@ export type WaitRow = { card_id: string; kind: string; started_day: string; ende
 export function waitSummary(card: { published_at?: string; planned_date?: string; report_due_date?: string }, waits: WaitRow[], today: string, holidays: ReadonlySet<string>) {
   let prod = 0, report = 0, open: { kind: string; since: string; days: number } | null = null;
   for (const w of waits) {
-    const days = workdaysBetween(w.started_day, w.ended_day || today, holidays);
-    if (card.published_at && w.started_day >= card.published_at) report += days; else prod += days;
-    if (!w.ended_day) open = { kind: w.kind, since: w.started_day, days };
+    const end = w.ended_day || today, pub = card.published_at;
+    // รอที่คาบเกี่ยววันเผยแพร่: ก่อนเผยแพร่นับเป็นช่วงผลิต · ตั้งแต่วันเผยแพร่นับเป็นช่วงรายงาน (กันวันรอหลังเผยแพร่ไปเลื่อนวันลงจนงานที่ช้าดูเหมือนทัน)
+    if (pub && end > pub) { prod += workdaysBetween(w.started_day, pub, holidays); report += workdaysBetween(w.started_day > pub ? w.started_day : pub, end, holidays); }
+    else prod += workdaysBetween(w.started_day, end, holidays);
+    if (!w.ended_day) open = { kind: w.kind, since: w.started_day, days: workdaysBetween(w.started_day, today, holidays) };
   }
   return {
     prod, report, open, alert: !!open && open.days > WAIT_ALERT_DAYS,

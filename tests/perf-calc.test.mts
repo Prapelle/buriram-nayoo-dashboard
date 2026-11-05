@@ -115,6 +115,13 @@ await t("waitSummary: แยกช่วงผลิต/ช่วงรายง
   assert.ok(s.alert && s.open?.days === 4 && s.open.kind === "คอนเฟิร์มงาน");
   assert.equal(W.waitSummary(card, [{ card_id: "k", kind: "x", started_day: "2026-11-13", ended_day: "" }], "2026-11-16", none).alert, false); // 2 วัน
 });
+await t("waitSummary: รอที่คาบเกี่ยววันเผยแพร่ แยกก่อน/หลังเผยแพร่ (ไม่เลื่อนวันลงด้วยวันรอหลังเผยแพร่)", () => {
+  const card = { planned_date: "2026-11-10", published_at: "2026-11-12", report_due_date: "2026-12-12" };
+  const s = W.waitSummary(card, [{ card_id: "k", kind: "รอบรีฟ", started_day: "2026-11-09", ended_day: "2026-11-16" }], "2026-11-30", none); // จ.9 ถึง จ.16: ผลิต 9,10,11 = 3 · รายงาน 12,13,14,16 หรือไม่? [12,16) = 12,13,14 = 3
+  assert.equal(s.prod, 3); assert.equal(s.report, 3);
+  const open = W.waitSummary(card, [{ card_id: "k", kind: "x", started_day: "2026-11-09", ended_day: "" }], "2026-11-16", none);
+  assert.equal(open.prod, 3); assert.equal(open.report, 3); assert.equal(open.open?.days, 6); // ป้ายบนการ์ดนับรวมทั้งช่วง
+});
 await t("Production: วันที่รอลูกค้าเลื่อนวันลง (เลยวันลงแต่รอลูกค้า = ยังทัน) · รายงานส่งทันเวลา · ทุกคนได้เต็ม", () => {
   const cards = [
     { card_id: "w1", planned_date: "2026-11-10", stage: "PUBLISHED" },   // เผยแพร่ 11-12 แต่รอลูกค้า 2 วันทำการ → due 11-12 → ทัน
