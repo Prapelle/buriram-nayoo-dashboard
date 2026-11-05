@@ -142,6 +142,12 @@ await t("Super Admin แก้รายการสิ่งที่รอจ�
   await CS.startWait(id, "รอรูปจริง", "ae@example.com");
   await PS.saveWaitKinds(["x1"], ADMIN); assert.equal((await (await import("../src/lib/sheets")).readTabs(["APP_CONFIG"])).APP_CONFIG.rows.filter((r: Record<string, string>) => r.config_key === "content_wait_kinds").length, 1); // อัปเดตแถวเดิม ไม่เพิ่ม
 });
+await t("ส่งรายงานให้ลูกค้าแล้ว → ปิดการรอลูกค้าที่ค้างอยู่อัตโนมัติ", async () => {
+  let c = (await CS.getBoard()).cards.find((x: { card_id: string }) => x.card_id === id)!; assert.ok(c.wait.open); // ค้างจากเทสก่อนหน้า
+  await CS.moveCard(id, "ส่งให้ลูกค้าแล้ว", ADMIN);
+  c = (await CS.getBoard()).cards.find((x: { card_id: string }) => x.card_id === id)!; assert.equal(c.wait.open, null);
+  assert.ok(db.rows("CONTENT_WAITS").filter((w) => w.card_id === id).every((w) => w.ended_at));
+});
 await t("ลบการ์ด: ลบผู้ร่วมงาน + ประวัติด้วย", async () => {
   await CS.deleteCard(id, ADMIN);
   assert.ok(!db.rows("CONTENT_CARDS").some((c) => c.card_id === id)); assert.equal(db.rows("CONTENT_MEMBERS").filter((m) => m.card_id === id).length, 0); assert.equal(db.rows("CONTENT_HISTORY").filter((h) => h.card_id === id).length, 0);

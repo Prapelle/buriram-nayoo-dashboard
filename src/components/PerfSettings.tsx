@@ -32,11 +32,11 @@ export function PerfSettings() {
   const [hol, setHol] = useState({ date: "", name: "" });
   const [kinds, setKinds] = useState<string[] | null>(null); // null = ยังไม่แก้ (ใช้ค่าจากเซิร์ฟเวอร์)
 
-  const load = useCallback(async (m: string) => {
+  const load = useCallback(async (m: string, resetDraft = true) => {
     try {
       const r = await fetch(`/api/perf/settings?month=${m}`); const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
-      setData(j); setDraft(Object.fromEntries((j.targets as Settings["targets"]).map((t) => [tkey(t.user_email, t.metric_key), String(t.value)])));
+      setData(j); if (resetDraft) setDraft(Object.fromEntries((j.targets as Settings["targets"]).map((t) => [tkey(t.user_email, t.metric_key), String(t.value)]))); // ติ๊กตำแหน่ง/เพิ่มวันหยุดแล้วโหลดใหม่ ต้องไม่ล้างเป้าที่พิมพ์ค้างไว้
     } catch (e) { setMsg({ type: "error", text: e instanceof Error ? e.message : "โหลดไม่ได้" }); }
   }, []);
   useEffect(() => { load(month); }, [load, month]);
@@ -52,9 +52,9 @@ export function PerfSettings() {
     return out;
   }, [data, draft, saved]);
 
-  async function run(id: string, fn: () => Promise<string>) {
+  async function run(id: string, fn: () => Promise<string>, resetDraft = false) {
     setBusy(id); setMsg(null);
-    try { const text = await fn(); await load(month); setMsg({ type: "ok", text }); }
+    try { const text = await fn(); await load(month, resetDraft); setMsg({ type: "ok", text }); }
     catch (e) { setMsg({ type: "error", text: e instanceof Error ? e.message : "เกิดข้อผิดพลาด" }); } finally { setBusy(""); }
   }
   const togglePosition = (u: User, key: string) => run(`pos:${u.email}`, async () => {
@@ -62,7 +62,7 @@ export function PerfSettings() {
     await call({ action: "positions", email: u.email, positions: next });
     return `อัปเดตตำแหน่งของ ${u.name} แล้ว`;
   });
-  const saveTargets = () => run("targets", async () => { const j = await call({ action: "targets", month, items: changes }); return `บันทึกเป้า ${thMonth(month)} แล้ว (เปลี่ยน ${j.changed} รายการ)`; });
+  const saveTargets = () => run("targets", async () => { const j = await call({ action: "targets", month, items: changes }); return `บันทึกเป้า ${thMonth(month)} แล้ว (เปลี่ยน ${j.changed} รายการ)`; }, true);
   const saveKinds = () => run("kinds", async () => { await call({ action: "wait_kinds", kinds: shownKinds }); setKinds(null); return "บันทึกรายการสิ่งที่รอจากลูกค้าแล้ว"; });
   const addHoliday = () => run("hol", async () => { await call({ action: "holiday_add", date: hol.date, name: hol.name }); setHol({ date: "", name: "" }); return "เพิ่มวันหยุดแล้ว"; });
   const delHoliday = (h: { date: string; name: string }) => { if (confirm(`ลบวันหยุด ${thDate(h.date)} ${h.name} ?`)) run(`del:${h.date}`, async () => { await call({ action: "holiday_delete", date: h.date }); return "ลบวันหยุดแล้ว"; }); };

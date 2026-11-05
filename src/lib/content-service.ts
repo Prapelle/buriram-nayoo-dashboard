@@ -133,6 +133,10 @@ export async function moveCard(id: string, to: string, actor: string, updatedAtS
   const now = new Date().toISOString(), final = plan.steps[plan.steps.length - 1];
   const rec: Rec = { ...cur, ...plan.patch, stage: final, stage_at: now, updated_by: actor, updated_at: now };
   await batchUpdateValues([{ range: rowRange("CONTENT_CARDS", t.CONTENT_CARDS.headers, g.row), values: [toRow(t.CONTENT_CARDS.headers, rec)] }]);
+  if (final === "ส่งให้ลูกค้าแล้ว") { // ส่งรายงานแล้ว = ไม่ต้องรอลูกค้าต่อ: ปิดที่ค้างอยู่ (กันป้ายเตือนค้างบนงานที่เสร็จแล้ว)
+    const open = t.CONTENT_WAITS.rows.map((w, k) => ({ w, k })).filter((x) => x.w.card_id === id && !x.w.ended_at);
+    if (open.length) await batchUpdateValues(open.map((x) => ({ range: rowRange("CONTENT_WAITS", t.CONTENT_WAITS.headers, x.k + 2), values: [toRow(t.CONTENT_WAITS.headers, { ...x.w, ended_at: now, ended_by: actor })] })));
+  }
   let prev = cur.stage;
   for (const s of plan.steps) { await logMove(id, prev, s, actor, now, s !== to ? "เลื่อนอัตโนมัติ (งานขาย)" : ""); prev = s; }
   return { stage: final, auto: final !== to };
