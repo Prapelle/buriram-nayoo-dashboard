@@ -61,8 +61,7 @@ export const NAV: NavItem[] = [
   { href: "/account", label: "เอกสารบัญชี", roles: SALES, icon: "money", system: "account" },
   { href: "/account/customers", label: "รายชื่อลูกค้า", roles: SALES, icon: "users", system: "account" },
   { href: "/account/products", label: "Product", roles: SALES, icon: "board", system: "account" },
-  { href: "/production", label: "งาน Production", roles: [...SALES, "production"], icon: "board", system: "production" },
-  { href: "/production/content", label: "บอร์ด Content", roles: [...SALES, "production"], icon: "board", system: "production" }, // Kanban Content + รายงานลูกค้า (5/11/2026)
+  { href: "/production/content", label: "งาน Production", roles: [...SALES, "production"], icon: "board", system: "production" },
   { href: "/dashboard/import", label: "นำเข้า CSV", roles: DATA, group: "ข้อมูล", icon: "upload", system: "dashboard" },
   { href: "/dashboard/export", label: "ส่งออกข้อมูล", roles: DATA, group: "ข้อมูล", icon: "download", system: "dashboard" },
   // ตั้งค่า: เมนูย่อย — ตั้งค่าระบบ (Admin) · คู่มือนำเข้าข้อมูล และ คำอธิบายตัวเลข (ทุก Role)
@@ -89,7 +88,7 @@ export const SYSTEMS: SystemDef[] = [
   { id: "dashboard", label: "Dashboard", desc: "การตลาด · Facebook / Google / LINE OA / Website · นำเข้า-ส่งออกข้อมูล", href: "/dashboard/facebook-ads", prefix: "/dashboard", roles: MKT },
   { id: "work", label: "ติดตามงาน", desc: "Leads คนต้องการซื้อ / ขาย · Developer · Home Builder", href: "/work/leads", prefix: "/work", roles: SALES },
   { id: "account", label: "บัญชี", desc: "ใบเสนอราคา · ใบวางบิล · ใบแจ้งหนี้ · ใบเสร็จ · สรุปยอดรอเรียกเก็บ · Revenue", href: "/account", prefix: "/account", roles: SALES },
-  { id: "production", label: "Production", desc: "งานผลิตที่สร้างอัตโนมัติจากการชำระเงิน · เช็กลิสต์ตามรายละเอียดแพ็กเกจ", href: "/production", prefix: "/production", roles: [...SALES, "production"] },
+  { id: "production", label: "Production", desc: "บอร์ด Content ผลิตถึงเผยแพร่ · รายงานลูกค้า · สร้างการ์ดอัตโนมัติเมื่อเปิด Job", href: "/production/content", prefix: "/production", roles: [...SALES, "production"] },
 ];
 export const systemsFor = (role: Role) => SYSTEMS.filter((x) => !x.soon && x.roles.includes(role));
 /** ระบบของ path (หน้าที่ใช้ร่วมกันคืน null) */
@@ -104,7 +103,7 @@ export const navOfSystem = (items: NavItem[], sys: SystemId | null) => items.fil
 export const homeFor = (_role?: string) => "/";
 
 /** สิทธิ์เข้าหน้า (ใช้ NAV เป็นที่เดียว) · หน้าย่อยใช้สิทธิ์ของเมนูที่ยาวที่สุดที่ตรงกัน เช่น /settings/metrics/x → /settings/metrics · /sales/import = นำเข้า (DATA) */
-const EXTRA: Record<string, Role[]> = { "/account/revenue/import": DATA, "/": ALL };
+const EXTRA: Record<string, Role[]> = { "/account/revenue/import": DATA, "/": ALL, "/production": [...SALES, "production"], "/production/reports": [...SALES, "production"] }; // /production = มุมมอง Job ในเมนูเดียวกับบอร์ด Content
 export function canAccess(role: Role | null | undefined, path: string): boolean {
   if (!role) return false;
   if (EXTRA[path]) return EXTRA[path].includes(role);

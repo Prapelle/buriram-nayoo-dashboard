@@ -1,13 +1,5 @@
+import { redirect } from "next/navigation";
 import { requirePage } from "@/lib/page-guard";
-import { PageHeader } from "@/components/PageHeader";
-import { ProductionBoard } from "@/components/ProductionBoard";
 
-export default async function ProductionPage() {
-  const role = await requirePage("/production");
-  return (
-    <section className="max-w-7xl space-y-4">
-      <PageHeader crumb="Production" title="งาน Production" sub="สร้างอัตโนมัติเมื่อยืนยันชำระเงิน (หรือกดเริ่มงานกรณีมัดจำ) · หนึ่งรายการสินค้าในเอกสาร = หนึ่ง Job" />
-      <ProductionBoard canEdit={role === "super_admin" || role === "admin"} />
-    </section>
-  );
-}
+// หน้า Job เดิมปิดแล้ว — งาน Production ทั้งหมดอยู่ที่บอร์ด Content (ลิงก์/บุ๊กมาร์กเก่าพามาที่นี่)
+export default async function ProductionPage() { await requirePage("/production"); redirect("/production/content"); }

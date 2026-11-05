@@ -190,3 +190,41 @@ export async function createCardsForJobs(jobs: { job_id: string; job_code: strin
   await appendRows("CONTENT_HISTORY", rows.map((r) => toRow(HISTORY_COLUMNS, { log_id: crypto.randomUUID(), card_id: r.card_id, from_stage: "", to_stage: S_FIRST, actor, at: now, note: `สร้างอัตโนมัติจาก ${r.job_code}` })));
   return { created: rows.length };
 }
+
+/** รายงานลูกค้า: การ์ดงานขายของลูกค้าหนึ่งราย (เผยแพร่ในช่วงวันที่) พร้อมตัวเลขโพสต์ Facebook และยอดรวม */
+export async function getReport(customerId: string, from: string, to: string, includeSent: boolean) {
+  const { validDate } = await import("./content");
+  if (!customerId) throw new ContentError(422, "เลือกลูกค้าก่อน", "VALIDATION", { fields: { customer: "เลือกลูกค้า" } });
+  if ((from && !validDate(from)) || (to && !validDate(to)) || (from && to && from > to)) throw new ContentError(422, "ช่วงวันที่ไม่ถูกต้อง", "VALIDATION", { fields: { from: "ช่วงวันที่ไม่ถูกต้อง" } });
+  const t = await load();
+  const cards = t.CONTENT_CARDS.rows.filter((c) => c.card_id && c.developer_id === customerId && isTrue(c.sales_tag) && c.published_at
+    && (!from || c.published_at >= from) && (!to || c.published_at <= to) && (includeSent || c.stage !== "ส่งให้ลูกค้าแล้ว"));
+  cards.sort((a, b) => a.published_at.localeCompare(b.published_at) || a.card_code.localeCompare(b.card_code));
+  let mx = new Map<string, import("./fb-match").PostMetrics>();
+  try { mx = await (await import("./fb-match")).metricsForPosts(cards.map((c) => c.post_id)); } catch { /* ไม่มีแท็บ/อ่านไม่ได้ = ไม่มีตัวเลข รายงานยังออกได้ */ }
+  const rows = cards.map((c) => ({ card_id: c.card_id, card_code: c.card_code, title: c.title, content_type: c.content_type, sales_goal: c.sales_goal, product: c.product, stage: c.stage, published_at: c.published_at,
+    report_due_date: c.report_due_date, report_link: c.report_link, post_id: c.post_id, metrics: mx.get(c.post_id) ?? null }));
+  const sum = (k: "views" | "reach" | "reactions" | "comments" | "shares" | "link_clicks") => rows.reduce((s, r) => s + (r.metrics?.[k] ?? 0), 0);
+  const dev = t.DEVELOPERS.rows.find((d) => d.developer_id === customerId);
+  return { customer: dev ? dev.company_name || dev.project_main || dev.dev_code : "", rows, matched: rows.filter((r) => r.metrics && r.metrics.scope !== "none").length,
+    totals: { views: sum("views"), reach: sum("reach"), reactions: sum("reactions"), comments: sum("comments"), shares: sum("shares"), link_clicks: sum("link_clicks") } };
+}
+
+/** บันทึกว่ารายงานเสร็จ/ส่งแล้ว ให้หลายการ์ดพร้อมกัน (ใส่ลิงก์ไฟล์รายงานได้) — ย้ายตามกติกาเดิม การ์ดที่ย้ายไม่ได้ถูกข้ามและรายงานเหตุผล */
+export async function markReports(ids: string[], stage: string, link: string, actor: string) {
+  if (!["กำลังทำรายงาน", "รายงานเสร็จแล้ว", "ส่งให้ลูกค้าแล้ว"].includes(stage)) throw new ContentError(422, "สถานะไม่ถูกต้อง", "VALIDATION");
+  if (!ids.length || ids.length > 100) throw new ContentError(422, "เลือกการ์ด 1–100 ใบ", "VALIDATION");
+  const l = link.trim();
+  if (l) { const v = validateCard({ title: "x", report_link: l }); if (!v.ok && v.errors.report_link) throw new ContentError(422, v.errors.report_link, "VALIDATION", { fields: { report_link: v.errors.report_link } }); }
+  const done: string[] = [], skipped: { card_id: string; reason: string }[] = [];
+  for (const id of new Set(ids)) {
+    try {
+      if (l) { // ใส่ลิงก์ก่อนย้าย
+        const t = await load(), i = t.CONTENT_CARDS.rows.findIndex((r) => r.card_id === id);
+        if (i >= 0) await batchUpdateValues([{ range: rowRange("CONTENT_CARDS", t.CONTENT_CARDS.headers, i + 2), values: [toRow(t.CONTENT_CARDS.headers, { ...t.CONTENT_CARDS.rows[i], report_link: l, updated_by: actor, updated_at: new Date().toISOString() })] }]);
+      }
+      await moveCard(id, stage, actor); done.push(id);
+    } catch (e) { skipped.push({ card_id: id, reason: e instanceof Error ? e.message : "ไม่สำเร็จ" }); }
+  }
+  return { done: done.length, skipped };
+}
