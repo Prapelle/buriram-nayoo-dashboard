@@ -2,7 +2,7 @@ import { requirePage } from "@/lib/page-guard";
 import { PerfReport } from "@/components/PerfReport";
 
 export default async function PerformancePage() {
-  await requirePage("/performance");
+  await requirePage("/staff-performance");
   return (
     <section className="max-w-5xl space-y-4">
       <div>

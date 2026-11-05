@@ -64,6 +64,10 @@ for (const p of ["/work/leads", "/work/buyer-leads", "/work/developers", "/accou
 for (const p of ["/dashboard", "/work/leads", "/work/developers", "/account/revenue", "/account/revenue/import", "/dashboard/import", "/dashboard/export", "/settings/targets", "/settings/metrics", "/dashboard/facebook-ads"]) assert.ok(can("admin", p), `Admin ต้องเข้า ${p} ได้`);
 for (const r of ["admin", "ae", "marketing", "production"] as const) assert.ok(!can(r, "/settings/performance"), `${r} ต้องเข้า /settings/performance ไม่ได้ (Super Admin เท่านั้น)`);
 assert.ok(can("super_admin", "/settings/performance"));
+// หน้าประสิทธิภาพรายคน: ห้ามใช้ /performance (next.config redirect ไป /dashboard/performance) — ต้องไม่ชนกับ redirect เดิมทุกตัว
+for (const r of ["super_admin", "admin", "ae", "production"] as const) assert.ok(can(r, "/staff-performance"), `${r} ต้องเข้า /staff-performance ได้`);
+assert.ok(!can("marketing", "/staff-performance"));
+{ const cfg = (await import("node:fs")).readFileSync("next.config.ts", "utf8"); const legacy = /const DASH = \[([^\]]*)\]/.exec(cfg)![1]; assert.ok(!legacy.includes('"staff-performance"'), "ชื่อหน้าชนกับ redirect เดิม"); }
 assert.ok(!can("admin", "/settings"), "Admin ต้องเข้าตั้งค่าระบบไม่ได้");
 for (const n of NAV.flatMap((x) => ("children" in x && x.children ? x.children : [x]) as { href: string }[])) assert.ok(can("super_admin", n.href), `Super Admin ต้องเข้า ${n.href} ได้`);
 assert.equal(normRole("sales"), "ae"); assert.equal(normRole("Admin"), "admin"); assert.equal(normRole("x"), null); assert.equal(homeFor("marketing"), "/"); assert.equal(homeFor("ae"), "/");
@@ -146,7 +150,7 @@ assert.equal(csvSafe(5), 5); ok("ข้อความที่ขึ้นต�
 {
   const { navFor } = await import("../src/lib/roles");
   const kids = (r: "super_admin" | "admin" | "marketing" | "ae") => navFor(r).find((n) => n.label === "ตั้งค่า");
-  assert.deepEqual(kids("super_admin")!.children!.map((c) => c.href), ["/settings", "/settings/targets", "/settings/performance", "/settings/import-guide", "/settings/metrics"]); assert.equal(kids("super_admin")!.href, "/settings");
+  assert.deepEqual(kids("super_admin")!.children!.map((c) => c.href), ["/settings", "/settings/targets", "/settings/import-guide", "/settings/metrics", "/settings/performance"]); assert.equal(kids("super_admin")!.href, "/settings");
   assert.deepEqual(kids("admin")!.children!.map((c) => c.href), ["/settings/targets", "/settings/import-guide", "/settings/metrics"]);
   assert.deepEqual(kids("marketing")!.children!.map((c) => c.href), ["/settings/metrics"]); assert.equal(kids("ae"), undefined);
   ok("เมนู ตั้งค่า: Super Admin เห็นทั้งหมด · Admin ไม่เห็น ตั้งค่าระบบ · Marketing เห็นเฉพาะคำอธิบายตัวเลข · AE ไม่เห็นเมนูตั้งค่า");
