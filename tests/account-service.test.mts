@@ -208,7 +208,8 @@ await t("ลบเอกสาร: มีใบถัดไป/มีงาน P
   await fails(A.deleteDoc(b.doc_id, ADMIN), "NOT_FOUND");
   await A.deleteDoc(q.doc_id, ADMIN); // ใบเสนอราคาลบได้แล้วเมื่อใบวางบิลถูกลบ
   if (!A.DELETE_RESTRICTED) { // โหมดทดสอบ: ลบใบที่มีใบต่อและงานแล้วได้
-    const jd = rows("PRODUCTION_JOBS")[0].doc_id, jobs0 = rows("PRODUCTION_JOBS").length; await A.deleteDoc(jd, ADMIN);
+    const jd = rows("PRODUCTION_JOBS")[0].doc_id, jobs0 = rows("PRODUCTION_JOBS").length, prod0 = rows("DEVELOPER_PRODUCTS").length, pid0 = rows("ACC_LINES").filter((l) => l.doc_id === jd && l.product_id).map((l) => l.product_id); await A.deleteDoc(jd, ADMIN);
+    assert.ok(pid0.length > 0 && rows("DEVELOPER_PRODUCTS").length === prod0 - pid0.length && !rows("DEVELOPER_PRODUCTS").some((p) => pid0.includes(p.product_id)), "ลบเอกสาร → ลบ Product/ยอดขายตามด้วย");
     assert.ok(!rows("ACC_DOCS").some((d) => d.doc_id === jd)); assert.ok(rows("PRODUCTION_JOBS").length < jobs0); assert.ok(!rows("PRODUCTION_JOBS").some((j) => j.doc_id === jd));
   }
 });

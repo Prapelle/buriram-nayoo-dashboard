@@ -11,7 +11,7 @@ import {
 } from "./account";
 import { kindOf, PRODUCT_CATEGORIES, todayBkk, validateProduct, DEV_COLUMNS } from "./developers";
 import { normRole } from "./roles";
-import { productTypesOf, saveProduct, saveDeveloper, deleteDeveloper, DevError, addProductType } from "./developers-service";
+import { productTypesOf, saveProduct, deleteProduct as deleteDevProduct, saveDeveloper, deleteDeveloper, DevError, addProductType } from "./developers-service";
 import { dedupeCode, guardRow } from "./row-guard";
 import { createCardsForJobs, renameProductInContent } from "./content-service";
 import { appendRows, atomicWrite, batchUpdateValues, casRow, colLetter, deleteRow, listTabs, readTabs, toRow } from "./sheets";
@@ -420,6 +420,10 @@ export async function deleteDoc(id: string, actor: string) {
   const receipts = t.ACC_DOCS.rows.filter((d) => d.parent_doc_id === id && d.doc_type === "receipt").map((d) => d.doc_id);
   const gone = [id, ...receipts], goneSet = new Set(gone);
   const files = t.ACC_FILES.rows.filter((f) => f.file_id && goneSet.has(f.doc_id));
+  // Product ที่สร้างให้ลูกค้าตอน "เริ่มงาน" จากใบนี้ = ยอดขายของ Sale → ลบเอกสารต้องลบ Product (ยอดขาย) ตามไปด้วย
+  const productIds = [...new Set(t.ACC_LINES.rows.filter((l) => goneSet.has(l.doc_id) && l.product_id).map((l) => l.product_id))];
+  let productsRemoved = 0;
+  for (const pid of productIds) { try { await deleteDevProduct(pid, actor); productsRemoved++; } catch (e) { if (!(e instanceof DevError && e.status === 404)) throw e; } }
   await deleteRowsBy(t, "ACC_LINES", "doc_id", gone);
   await deleteRowsBy(t, "ACC_PAYMENTS", "doc_id", gone);
   await deleteRowsBy(t, "ACC_FILES", "doc_id", gone);
@@ -428,7 +432,7 @@ export async function deleteDoc(id: string, actor: string) {
     if (pi >= 0) { const g = await guardRow("ACC_PAYMENTS", t.ACC_PAYMENTS.headers, "payment_id", t.ACC_PAYMENTS.rows[pi].payment_id, pi + 2); if ("row" in g) await batchUpdateValues([{ range: rowRange("ACC_PAYMENTS", t.ACC_PAYMENTS.headers, g.row), values: [toRow(t.ACC_PAYMENTS.headers, { ...t.ACC_PAYMENTS.rows[pi], receipt_doc_id: "" })] }]); }
   }
   if (!DELETE_RESTRICTED) {
-    // โหมดทดสอบ: ลบ Job ของใบนี้ และถ้าสายเอกสารไม่เหลือ Job แล้ว ล้างธง "เริ่มงานแล้ว" ที่ใบแรก เพื่อทดสอบเริ่มงานซ้ำได้ (Product ที่เพิ่มให้ลูกค้าแล้วไม่ถูกลบ)
+    // โหมดทดสอบ: ลบ Job ของใบนี้ และถ้าสายเอกสารไม่เหลือ Job แล้ว ล้างธง "เริ่มงานแล้ว" ที่ใบแรก เพื่อทดสอบเริ่มงานซ้ำได้ (Product/ยอดขายที่เพิ่มให้ลูกค้าจากใบนี้ถูกลบตามด้วย)
     await deleteRowsBy(t, "PRODUCTION_JOBS", "doc_id", gone);
     const rootId = doc.root_id || doc.doc_id, ri = t.ACC_DOCS.rows.findIndex((d) => d.doc_id === rootId);
     const left = t.PRODUCTION_JOBS.rows.some((j) => j.job_id && !goneSet.has(j.doc_id) && t.ACC_DOCS.rows.some((d) => d.doc_id === j.doc_id && (d.root_id || d.doc_id) === rootId));
@@ -440,8 +444,8 @@ export async function deleteDoc(id: string, actor: string) {
   await deleteRowsBy(t, "ACC_DOCS", "doc_id", gone);
   const store = await fileStore();
   for (const f of files) { try { await store?.delete?.(f.storage_key); } catch { /* ignore */ } }
-  await writeAudit(actor, "account_doc_delete", "account_doc", id, `${doc.doc_no} (${DOC_LABEL[doc.doc_type as DocType]}) ${doc.customer_name} รวม ${doc.total} · ลบพร้อมใบเสร็จ ${receipts.length} · ไฟล์ ${files.length}`);
-  return { deleted: id, receipts: receipts.length };
+  await writeAudit(actor, "account_doc_delete", "account_doc", id, `${doc.doc_no} (${DOC_LABEL[doc.doc_type as DocType]}) ${doc.customer_name} รวม ${doc.total} · ลบพร้อมใบเสร็จ ${receipts.length} · ไฟล์ ${files.length} · ลบ Product/ยอดขาย ${productsRemoved}`);
+  return { deleted: id, receipts: receipts.length, products: productsRemoved };
 }
 
 // ── Production Job ──
