@@ -182,4 +182,59 @@ await t("Sale developer: ลากเข้าสถานะเดิมซ้�
   const r = C.computeMonth({ month: M, users: us, cards: [], members: [], history: [], leadLogs: [], developers: { devs: [dev("z1", "เอส"), dev("z2", "เอส")], products: [], logs, contacts: [] }, homeBuilders: { devs: [], products: [], logs: [], contacts: [] } });
   assert.equal(r.actuals["s@x.com"]["sale_developer.planned"], 2); assert.equal(r.actuals["s@x.com"]["sale_developer.won"], 1);
 });
+await t("KPI ครบตำแหน่ง (6/11/2026): อัตราปิด · ทรัพย์เข้าระบบ · ไม่ค้างสถานะ · บริหารข้อมูล · ค่าคอม · Production", () => {
+  const us = [
+    { email: "buy@x.com", name: "ซื้อ", positions: ["ae_buy"] }, { email: "sell@x.com", name: "ขาย", positions: ["ae_sell"] },
+    { email: "dv@x.com", name: "เดฟ", positions: ["sale_developer"] }, { email: "pr@x.com", name: "โปร", positions: ["production"] },
+  ];
+  const D = (d: string) => `2026-11-${d}T03:00:00.000Z`; // 10:00 เวลาไทย
+  const ll = [
+    // ซื้อ: B1 ติดต่อได้ (พุธ 4) → เข้าชม (พฤ 5) = ไม่ค้าง ; B2 ติดต่อได้แล้วค้างจน จ.9 (พ.4→จ.9 = 4 วันทำการ) = ค้าง ; B3 ซื้อสำเร็จ
+    L("B1", "call_status", "รอติดต่อ", "ติดต่อได้แล้ว", "ซื้อ", D("04")), L("B1", "call_status", "ติดต่อได้แล้ว", "ซื้อสำเร็จ", "ซื้อ", D("05")),
+    L("B2", "call_status", "รอติดต่อ", "ติดต่อได้แล้ว", "ซื้อ", D("04")), L("B2", "call_status", "ติดต่อได้แล้ว", "เข้าชมแล้ว", "ซื้อ", D("09")),
+    // ขาย: S1 สร้าง (ทรัพย์เข้าระบบ) → เซ็นสัญญา ; S2 สร้าง → สัญญาเปิด
+    L("S1", "sell_status", "", "รอติดต่อ", "ขาย", D("02")), L("S1", "sell_status", "รอติดต่อ", "เซ็นสัญญา", "ขาย", D("03")),
+    L("S2", "sell_status", "", "รอติดต่อ", "ขาย", D("02")), L("S2", "sell_status", "รอติดต่อ", "สัญญาเปิด", "ขาย", D("03")),
+  ];
+  const fu = [
+    { log_id: "1", kind: "lead", item_id: "B1", due_day: "2026-11-05", done_day: "2026-11-05", staff: "ซื้อ", done_by: "x" }, // ทัน
+    { log_id: "2", kind: "lead", item_id: "B2", due_day: "2026-11-03", done_day: "2026-11-06", staff: "ซื้อ", done_by: "x" }, // ช้า
+    { log_id: "3", kind: "lead", item_id: "B2", due_day: "2026-11-03", done_day: "2026-11-04", staff: "ซื้อ", done_by: "x" }, // ซ้ำรอบเดียวกัน → ใช้ครั้งแรก (ทัน?) 04 > 03 ช้า
+    { log_id: "4", kind: "developer", item_id: "d9", due_day: "2026-11-04", done_day: "2026-11-04", staff: "เดฟ", done_by: "x" },
+  ];
+  const leads = [{ lead_id: "B1", need: "ซื้อ" }, { lead_id: "B2", need: "ซื้อ" }, { lead_id: "B7", need: "ซื้อ", staff: "ซื้อ", next_follow_up_at: "2026-11-03", call_status: "ติดต่อได้แล้ว" }]; // B7 เลยกำหนดไม่มีใครทำ
+  const accDocs = [
+    { doc_id: "r1", doc_type: "receipt", doc_date: "2026-11-05", seller_name: "ซื้อ", total: "30000", parent_doc_id: "iv1" },
+    { doc_id: "r2", doc_type: "receipt", doc_date: "2026-11-06", seller_name: "ซื้อ", total: "10000", parent_doc_id: "iv2" }, // ชำระบางส่วนของใบที่ค่าคอมครึ่งหนึ่ง
+    { doc_id: "r3", doc_type: "receipt", doc_date: "2026-10-06", seller_name: "ซื้อ", total: "99999", parent_doc_id: "iv3" }, // เดือนอื่น
+    { doc_id: "iv2", doc_type: "invoice", doc_date: "2026-11-01", seller_name: "ซื้อ", total: "100000" },
+  ];
+  const accLines = [
+    { doc_id: "r1", product: "ค่าคอมมิชชัน", amount: "30000" }, { doc_id: "r1", product: "ค่าบริการอื่น", amount: "5000" },
+    { doc_id: "r2", product: "ชำระบางส่วน / มัดจำ ตามใบแจ้งหนี้", amount: "10000" },
+    { doc_id: "iv2", product: "ค่าคอมมิชชัน", amount: "50000" }, { doc_id: "iv2", product: "อื่น ๆ", amount: "50000" },
+  ];
+  const dvs = { devs: [{ ...dev("d9", "เดฟ"), next_follow_up_at: "2026-11-02" }], products: [], logs: [DL("d9", "เข้าพบแล้ว", "เดฟ"), DL("d9", "ปิดการขาย", "เดฟ"), DL("d8", "เข้าพบแล้ว", "เดฟ"), DL("d7", "เข้าพบแล้ว", "เดฟ")], contacts: [] };
+  const cards = [{ card_id: "k1", planned_date: "2026-11-10", sales_tag: "TRUE", stage: "PUBLISHED" }, { card_id: "k2", planned_date: "2026-11-05", sales_tag: "TRUE", stage: "PUBLISHED" }, { card_id: "k3", planned_date: "2026-11-05", sales_tag: "", stage: "PUBLISHED" }, { card_id: "k4", stage: "ART WORK / VIDEO" }];
+  const r = C.computeMonth({
+    month: M, users: us, leadLogs: ll, leads, followups: fu, accDocs, accLines, developers: dvs, homeBuilders: { devs: [], products: [], logs: [], contacts: [] },
+    cards, members: [mem("k1", "pr@x.com"), mem("k2", "pr@x.com"), mem("k3", "pr@x.com"), mem("k4", "pr@x.com")],
+    history: [H("k1", "2026-11-08T05:00:00.000Z"), H("k2", "2026-11-08T05:00:00.000Z"), H("k3", "2026-11-08T05:00:00.000Z"),
+      H("k4", "2026-11-02T03:00:00.000Z", "ART WORK / VIDEO")], // ค้างขั้นนี้ ศ.2 → ปัจจุบัน
+    today: "2026-11-12", holidays: [],
+  });
+  const buy = r.actuals["buy@x.com"], sell = r.actuals["sell@x.com"], d = r.actuals["dv@x.com"], pr = r.actuals["pr@x.com"];
+  assert.equal(buy["ae_buy.sold"], 1); assert.equal(buy["ae_buy.contact"], 2);
+  assert.equal(buy["ae_buy.close_rate"], 50, "ซื้อสำเร็จ 1 ÷ ติดต่อได้ 2");
+  assert.equal(buy["ae_buy.commission"], 35000, "30,000 จากใบเสร็จเต็ม + 10,000×(50,000/100,000)=5,000 ; เดือนอื่นไม่นับ");
+  // ไม่ค้าง: B1 ช่วง ติดต่อได้แล้ว (พ.4→พฤ.5 = 1 วัน) ok ; B2 (พ.4→จ.9 = 4 วัน) ค้าง ; ช่วงสุดท้ายของ B1 (ซื้อสำเร็จ) และ B2 (เข้าชมแล้วยังเปิดอยู่ 9→12 = 3 วัน) : B2 เข้าชมแล้ว ok
+  assert.equal(buy["ae_buy.follow"], Math.round((2 / 3) * 1000) / 10, "ok 2 จาก 3 ช่วง (ช่วงสถานะปลายทางไม่นับ)");
+  // บริหารข้อมูล: B1 ทัน, B2 ช้า (รอบเดียวกันนับครั้งแรก=ลงมือ 04 > 03 ช้า), B7 เลยกำหนด → 1/3
+  assert.equal(buy["ae_buy.data_mgmt"], Math.round((1 / 3) * 1000) / 10);
+  assert.equal(sell["ae_sell.intake"], 2); assert.equal(sell["ae_sell.contract"], 1); assert.equal(sell["ae_sell.open_contract"], 1);
+  assert.equal(d["sale_developer.close_rate"], 33.3, "ปิด 1 ÷ เข้าพบ 3");
+  assert.equal(d["sale_developer.data_mgmt"], 50, "รอบนัด 04 ลงมือทัน + รอบนัดปัจจุบัน 02 เลยกำหนดไม่มีใครทำ = 1/2");
+  assert.equal(pr["production.sales_ontime"], 50, "k1 ทัน k2 ช้า (k3 ไม่ใช่งานขาย)");
+  assert.equal(pr["production.data_mgmt"], 0, "k4 ค้างขาร์ตเวิร์ก ศ.2→พ.12 = 8 วันทำการ เกิน 3");
+});
 console.log("perf-calc: ผ่านทั้งหมด");

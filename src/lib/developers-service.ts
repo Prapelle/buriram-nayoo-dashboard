@@ -5,7 +5,8 @@
  * - ไม่ลบ log · ตรวจข้อมูลเก่าก่อนแก้ (updated_at) · เตือนชื่อบริษัท/โครงการ/เบอร์/Line ซ้ำ (ไม่ merge อัตโนมัติ) · บันทึก Audit Log
  */
 import { writeAudit } from "./audit";
-import { checkStaff, mergeStaff, staffUserNames } from "./perf";
+import { checkStaff, followupRow, mergeStaff, staffUserNames } from "./perf";
+import { logFollowup } from "./perf-log";
 import { normRole } from "./roles";
 import {
   addDays, AUTO_STATUS, KIND_LABEL, kindOf, type DevKind, autoChanges, CONTACT_COLUMNS, CONTACT_METHODS, NEXT_CONTACT_DAYS, DEFAULT_PRODUCTS, DEV_COLUMNS, DEV_DEFAULT, DEV_EDITABLE, DEV_STATUS, findDevDuplicates, IMPORT_HEADERS, LOG_COLUMNS, nextDevCode, normLine, normName, normPhone,
@@ -97,6 +98,8 @@ export async function listDevelopers(kind: DevKind = "developer") {
   return { devs, products, logs, contacts, staff, staffUsers, productTypes: productTypesOf(t.APP_CONFIG.rows), today: todayBkk() };
 }
 
+const followKind = (d: { kind?: string }) => (d.kind === "home_builder" ? "home_builder" : "developer") as "home_builder" | "developer";
+const followLog = (prev: Dev, rec: Dev, actor: string, now: string) => logFollowup(followupRow(followKind(prev), { id: prev.developer_id, code: prev.dev_code, staff: rec.staff ?? "" }, prev.next_follow_up_at, actor, now));
 function manualLog(dev: Dev, from: string, to: string, actor: string, now: string) {
   return { log_id: crypto.randomUUID(), developer_id: dev.developer_id, staff: dev.staff ?? "", from_status: from, to_status: to, kind: "manual", counts_as: "", month: todayBkk().slice(0, 7), changed_by: actor, changed_at: now };
 }
@@ -180,6 +183,7 @@ export async function saveDeveloper(input: Record<string, unknown>, actor: strin
   await batchUpdateValues([{ range: rowRange("DEVELOPERS", t.DEVELOPERS.headers, rowNo), values: [toRow(t.DEVELOPERS.headers, rec)] }]);
   if (statusChanged) await writeLogs(t, [manualLog(rec, prev.status, rec.status, actor, now)]);
   if (met) await writeContact(t, rec, v.rec.last_contact_method, rec.last_contacted_at, "status", "", actor, now);
+  if (statusChanged || met || (prev.last_contacted_at || "") !== (rec.last_contacted_at || "")) await followLog(prev, rec, actor, now);
   const changed = DEV_EDITABLE.filter((k) => (prev![k] ?? "") !== (rec[k] ?? "")).map((k) => k === "status" ? `Status ${prev!.status} → ${rec.status}` : k);
   await writeAudit(actor, "developer_update", "developer", rec.developer_id, `${rec.dev_code}: ${changed.join(", ") || "ไม่มีการเปลี่ยนแปลง"}`);
   return { created: false, dev: rec };
@@ -203,6 +207,7 @@ export async function changeDevStatus(id: string, to: string, updatedAtSeen: str
   await batchUpdateValues([{ range: rowRange("DEVELOPERS", t.DEVELOPERS.headers, await safeRow("DEVELOPERS", t.DEVELOPERS.headers, "developer_id", id, i + 2, prev.updated_at)), values: [toRow(t.DEVELOPERS.headers, rec)] }]);
   await writeLogs(t, [manualLog(rec, prev.status || DEV_DEFAULT, to, actor, now)]);
   if (to === "เข้าพบแล้ว") await writeContact(t, rec, String(method), rec.last_contacted_at, "status", "", actor, now);
+  await followLog(prev, rec, actor, now);
   await writeAudit(actor, "developer_status", "developer", id, `${rec.dev_code}: ${prev.status || DEV_DEFAULT} → ${to}`);
   return { changed: true, dev: rec };
 }
@@ -222,6 +227,7 @@ export async function recordContact(id: string, method: string, date: string, no
   if (!prev.last_contacted_at || d >= prev.last_contacted_at) touchContact(rec, d, method);
   await batchUpdateValues([{ range: rowRange("DEVELOPERS", t.DEVELOPERS.headers, await safeRow("DEVELOPERS", t.DEVELOPERS.headers, "developer_id", id, i + 2, prev.updated_at)), values: [toRow(t.DEVELOPERS.headers, rec)] }]);
   await writeContact(t, rec, method, d, "manual", String(note ?? "").trim(), actor, now);
+  await followLog(prev, rec, actor, now);
   await writeAudit(actor, "developer_contact", "developer", id, `${rec.dev_code}: ติดต่อ (${method}) ${d}`);
   return { dev: rec };
 }

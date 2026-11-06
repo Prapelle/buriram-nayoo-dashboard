@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { migratingResponse } from "@/lib/http-errors";
 import { requireRole } from "@/lib/guard";
 import { PerfError } from "@/lib/perf";
-import { addHoliday, deleteHoliday, getPerfSettings, savePositions, saveTargets, saveWaitKinds } from "@/lib/perf-service";
+import { addHoliday, deleteHoliday, getPerfSettings, savePositions, saveDefaultTargets, saveTargets, saveWaitKinds } from "@/lib/perf-service";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +30,7 @@ export async function POST(req: Request) {
     switch (b.action) {
       case "positions": return NextResponse.json(await savePositions(String(b.email ?? ""), b.positions, g.email));
       case "targets": return NextResponse.json(await saveTargets(b.month, b.items ?? [], g.email));
+      case "default_targets": return NextResponse.json(await saveDefaultTargets(b.items ?? [], g.email));
       case "wait_kinds": return NextResponse.json(await saveWaitKinds(b.kinds, g.email));
       case "holiday_add": return NextResponse.json(await addHoliday(b.date, b.name, g.email));
       case "holiday_delete": return NextResponse.json(await deleteHoliday(b.date, g.email));

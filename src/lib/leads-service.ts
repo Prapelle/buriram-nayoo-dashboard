@@ -2,7 +2,8 @@ import { normRole } from "./roles";
 import { canonChannel } from "./dashboard";
 import { dedupeCode, guardRow } from "./row-guard";
 import { writeAudit } from "./audit";
-import { checkStaff, leadStatusChanges, mergeStaff, staffUserNames } from "./perf";
+import { checkStaff, followupRow, leadStatusChanges, mergeStaff, staffUserNames } from "./perf";
+import { logFollowup } from "./perf-log";
 import { logLeadStatus } from "./perf-service";
 import { CALL_DEFAULT, CALL_STATUS, isSellerLead, normCall, SELL_DEFAULT, SELL_STATUS } from "./lead-options";
 import { areaLabel, AREA_SUGGEST, contactableFor, findDuplicates, LEAD_COLUMNS, leadStatusOf, nextLeadCode, normalizeEmail, normalizeLine, normalizePhone, pipelineOf, resolveNeedStatus, stampStatus, statusFieldOf, todayBkk, validateLead, type DupMatch, type Lead } from "./leads";
@@ -148,7 +149,9 @@ export async function saveLead(input: Record<string, unknown>, actor: string, ro
   rowNo = await safeRow(tab.headers, prev.lead_id, rowNo, prev.updated_at);
   await batchUpdateValues([{ range: `'LEADS'!A${rowNo}:${colLetter(tab.headers.length - 1)}${rowNo}`, values: [toRow(tab.headers, rec)] }]);
   if (pd) await applyProps(rec.lead_id, pd, actor, now);
-  await logLeadStatus(leadStatusChanges(prev, rec, STATUS_DEFAULTS, logFieldOf(rec)), rec, actor, now);
+  const moved = leadStatusChanges(prev, rec, STATUS_DEFAULTS, logFieldOf(rec));
+  await logLeadStatus(moved, rec, actor, now);
+  if (moved.length || (rec.last_contacted_at || "") !== (prev.last_contacted_at || "")) await logFollowup(followupRow("lead", { id: rec.lead_id, code: rec.lead_code, staff: rec.staff ?? "" }, prev.next_follow_up_at, actor, now));
   const ps = leadStatusOf(prev), cs = leadStatusOf(rec);
   const parts = [prev.need !== rec.need ? `Need ${prev.need || "(ว่าง)"} → ${rec.need}` : "", ps !== cs ? `สถานะ ${ps || "(ว่าง)"} → ${cs || "(ว่าง)"}` : "",
     ns.conflict ? `ล้าง ${ns.conflict.field}="${ns.conflict.value}"` : "", prev.call_status !== rec.call_status ? `Call ${prev.call_status || "(ว่าง)"} → ${rec.call_status}` : "", propSummary(pd)].filter(Boolean);
@@ -229,6 +232,7 @@ export async function changeLeadStatus(leadId: string, field: StatusField, value
   const at = await safeRow(tab.headers, leadId, rowNo, prev.updated_at);
   await batchUpdateValues([{ range: `'LEADS'!A${at}:${colLetter(tab.headers.length - 1)}${at}`, values: [toRow(tab.headers, rec)] }]);
   await logLeadStatus(leadStatusChanges(prev, rec, STATUS_DEFAULTS, logFieldOf(rec)), rec, actor, rec.updated_at);
+  await logFollowup(followupRow("lead", { id: rec.lead_id, code: rec.lead_code, staff: rec.staff ?? "" }, prev.next_follow_up_at, actor, rec.updated_at));
   if (field === "sell_status") await writeAudit(actor, "lead_status_change", "lead", rec.lead_id, `${rec.lead_code}: สถานะ ${before} → ${value}`);
   else await writeAudit(actor, "lead_update", "lead", rec.lead_id, `${rec.lead_code}: Call ${before} → ${value}`);
   return { changed: true, lead: rec };

@@ -4,9 +4,10 @@
  * (Lead เปลี่ยนสถานะสำเร็จแล้วตอนนี้ ผู้ใช้ไม่ควรเห็น error เพราะตารางประวัติ)
  */
 import { writeAudit } from "./audit";
+export { logFollowup } from "./perf-log";
 import { logError } from "./log";
 import {
-  LEAD_LOG_COLUMNS, METRICS, parsePositions, PerfError, POSITIONS, POSITION_KEYS, staffNameOf, validateHoliday, validateMonth, validateTarget,
+  DEFAULT_TARGETS, DEFAULT_TARGETS_KEY, defaultTargetsOf, FOLLOWUP_COLUMNS, LEAD_LOG_COLUMNS, METRICS, metricByKey, parsePositions, PerfError, POSITIONS, POSITION_KEYS, staffNameOf, validateHoliday, validateMonth, validateTarget,
   type LeadStatusChange, type TargetInput,
 } from "./perf";
 import { validateWaitKinds, waitKindsOf, WAIT_KINDS_KEY } from "./content";
@@ -27,6 +28,7 @@ export async function logLeadStatus(changes: LeadStatusChange[], lead: Record<st
 
 // ── หน้าตั้งค่า: ตำแหน่ง / เป้ารายเดือน / วันหยุดบริษัท (Super Admin) ──
 const POS = "PERF_POSITIONS", TGT = "PERF_TARGETS", HOL = "PERF_HOLIDAYS";
+type Row = Record<string, string>;
 type Tab = { headers: string[]; rows: Record<string, string>[] };
 const norm = (e: unknown) => String(e ?? "").trim().toLowerCase();
 const isActive = (v: unknown) => String(v ?? "").toUpperCase() === "TRUE";
@@ -54,7 +56,7 @@ export async function getPerfSettings(monthRaw?: string) {
   const duplicateNames = [...new Set(users.filter((u) => (count.get(u.name.trim().toLowerCase()) ?? 0) > 1).map((u) => u.name))];
   const targets = t[TGT].rows.filter((r) => r.month === month && r.metric_key && r.target_value !== "").map((r) => ({ user_email: norm(r.user_email), metric_key: r.metric_key, value: Number(r.target_value) }));
   const holidays = t[HOL].rows.filter((r) => r.holiday_date).map((r) => ({ date: r.holiday_date, name: r.name })).sort((a, b) => b.date.localeCompare(a.date));
-  return { month, positions: POSITIONS, metrics: METRICS, users, targets, holidays, duplicateNames, waitKinds: waitKindsOf(t.APP_CONFIG?.rows ?? []) };
+  return { month, positions: POSITIONS, metrics: METRICS, users, targets, holidays, duplicateNames, waitKinds: waitKindsOf(t.APP_CONFIG?.rows ?? []), defaults: defaultTargetsOf(t.APP_CONFIG?.rows ?? []) };
 }
 
 /** แก้รายการสิ่งที่รอจากลูกค้า (Super Admin) — รายการเก่าที่เคยใช้แล้วยังอยู่ในประวัติ ไม่กระทบวันที่ที่นับไปแล้ว */
@@ -69,6 +71,24 @@ export async function saveWaitKinds(raw: unknown, actor: string) {
   await writeAudit(actor, "content_wait_kinds", "config", WAIT_KINDS_KEY, v.value.join(" | "));
   return { kinds: v.value };
 }
+
+/** เป้าตั้งต้นต่อตำแหน่ง (Super Admin): ใช้กับทุกคนที่มีตำแหน่งนั้นที่ไม่มีเป้ารายคนของเดือน · ค่าว่าง = ไม่มีเป้าตั้งต้นข้อนั้น */
+export async function saveDefaultTargets(items: { metric_key: string; value: unknown }[], actor: string) {
+  if (!Array.isArray(items) || !items.length) throw new PerfError(422, "ไม่มีเป้าให้บันทึก", "VALIDATION");
+  const checked = items.map((it) => { const v = validateTarget({ user_email: "", metric_key: it.metric_key, value: it.value }); return { key: v.metric.key, value: v.value }; });
+  const t = await load(), rows = t.APP_CONFIG?.rows ?? [], headers = t.APP_CONFIG?.headers ?? [];
+  const cur = defaultTargetsOf(rows);
+  for (const c of checked) { if (c.value === null) delete cur[c.key]; else cur[c.key] = c.value; }
+  const stored: Record<string, number | null> = {};
+  for (const m of METRICS) { const v = cur[m.key]; if (v !== undefined) stored[m.key] = v; else if (DEFAULT_TARGETS_HAS(m.key)) stored[m.key] = null; }
+  const i = rows.findIndex((r) => r.config_key === DEFAULT_TARGETS_KEY);
+  const row = { config_key: DEFAULT_TARGETS_KEY, config_value: JSON.stringify(stored), description: "เป้าตั้งต้นต่อตำแหน่ง (ประสิทธิภาพรายคน)", updated_at: new Date().toISOString() };
+  if (i >= 0) await batchUpdateValues([{ range: `'APP_CONFIG'!A${i + 2}:${colLetter(headers.length - 1)}${i + 2}`, values: [toRow(headers, row)] }]);
+  else await appendRows("APP_CONFIG", [toRow(headers, row)]);
+  await writeAudit(actor, "perf_default_targets", "config", DEFAULT_TARGETS_KEY, `เป้าตั้งต้นต่อตำแหน่ง: ${checked.map((c) => `${metricByKey(c.key)?.label}=${c.value ?? "ไม่ตั้ง"}`).join(", ")}`.slice(0, 900));
+  return { defaults: cur };
+}
+const DEFAULT_TARGETS_HAS = (k: string) => k in DEFAULT_TARGETS;
 
 export async function savePositions(emailRaw: string, positions: unknown, actor: string) {
   const email = norm(emailRaw);
@@ -157,11 +177,18 @@ export async function getPerfReport(monthRaw: string | undefined, viewer: { emai
   let t: Record<string, Tab>;
   try { t = await readTabs(["LEAD_STATUS_LOG", "CONTENT_CARDS", "CONTENT_MEMBERS", "CONTENT_HISTORY", "CONTENT_WAITS", "PERF_HOLIDAYS"]); }
   catch { throw new PerfError(409, "ฐานข้อมูล D1 ยังไม่พร้อม — ตารางประวัติอยู่บน D1", "DB_NOT_READY"); }
-  const [developers, homeBuilders] = await Promise.all([devData("developer"), devData("home_builder")]);
+  const opt = async (name: string): Promise<Row[]> => { try { return (await readTabs([name]))[name]?.rows ?? []; } catch { return []; } };
+  const [developers, homeBuilders, leads, followups, accDocs, accLines] = await Promise.all([devData("developer"), devData("home_builder"), opt("LEADS"), opt("FOLLOWUP_LOG"), opt("ACC_DOCS"), opt("ACC_LINES")]);
   const users = settings.users.map((u) => ({ email: u.email, name: u.name, positions: u.positions }));
-  const calc = computeMonth({ month: settings.month, users, leadLogs: t.LEAD_STATUS_LOG.rows, developers, homeBuilders, cards: t.CONTENT_CARDS.rows, members: t.CONTENT_MEMBERS.rows, history: t.CONTENT_HISTORY.rows, waits: t.CONTENT_WAITS.rows, holidays: t.PERF_HOLIDAYS.rows.map((h) => h.holiday_date).filter(Boolean) });
+  const calc = computeMonth({ month: settings.month, users, leadLogs: t.LEAD_STATUS_LOG.rows, leads, followups, accDocs, accLines, developers, homeBuilders, cards: t.CONTENT_CARDS.rows, members: t.CONTENT_MEMBERS.rows, history: t.CONTENT_HISTORY.rows, waits: t.CONTENT_WAITS.rows, holidays: t.PERF_HOLIDAYS.rows.map((h) => h.holiday_date).filter(Boolean) });
   const all = viewer.role === "super_admin" || viewer.role === "admin";
   const me = norm(viewer.email);
-  const people = buildReport(users, calc.actuals, settings.targets).filter((p) => all || norm(p.email) === me);
+  // เป้าที่ใช้จริง: เป้ารายคนของเดือน (ถ้ามี) ทับ เป้าตั้งต้นต่อตำแหน่ง
+  const personal = new Set(settings.targets.map((x) => `${norm(x.user_email)}|${x.metric_key}`));
+  const effective = [...settings.targets];
+  for (const u of users) for (const pos of u.positions) for (const m of METRICS.filter((x) => x.position === pos)) {
+    const dv = settings.defaults[m.key]; if (dv !== undefined && !personal.has(`${norm(u.email)}|${m.key}`)) effective.push({ user_email: u.email, metric_key: m.key, value: dv });
+  }
+  const people = buildReport(users, calc.actuals, effective).filter((p) => all || norm(p.email) === me);
   return { month: settings.month, canSeeAll: all, people, unmatched: all ? calc.unmatched : [], duplicateNames: all ? settings.duplicateNames : [] };
 }

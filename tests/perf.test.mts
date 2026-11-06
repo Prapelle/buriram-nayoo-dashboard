@@ -85,6 +85,14 @@ await t("แก้ผ่านฟอร์ม (saveLead) แล้วสถา�
   const r2 = await saveLead({ ...buyer, lead_id: buyer.lead_id, updated_at_seen: buyer.updated_at, call_status: "เข้าชมแล้ว" }, "ae2@example.com"); buyer = r2.lead;
   assert.equal(log().length, n + 1); const last = log().pop()!; assert.deepEqual([last.from_status, last.to_status], ["ติดต่อได้แล้ว", "เข้าชมแล้ว"]);
 });
+await t("ติดตามทันกำหนด: ย้ายสถานะ Lead ที่มีวันนัด → บันทึก FOLLOWUP_LOG (วันนัดเดิม · วันที่ลงมือ) · ไม่มีวันนัด → ไม่บันทึก", async () => {
+  const rowsOf = () => (db.rows("FOLLOWUP_LOG") as Record<string, string>[]).filter((x) => x.item_id === buyer.lead_id);
+  const n = rowsOf().length;
+  const withDue = (await saveLead({ ...buyer, lead_id: buyer.lead_id, updated_at_seen: buyer.updated_at, next_follow_up_at: "2026-11-03" }, "ae2@example.com")).lead; buyer = withDue;
+  const r = await changeLeadStatus(buyer.lead_id, "call_status", "จอง", buyer.updated_at, "ae2@example.com"); buyer = r.lead;
+  const rows = rowsOf(); assert.equal(rows.length, n + 1);
+  const last = rows[rows.length - 1]; assert.deepEqual([last.kind, last.due_day, last.staff, last.done_by], ["lead", "2026-11-03", "สมชาย", "ae2@example.com"]); assert.match(last.done_day, /^\d{4}-\d{2}-\d{2}$/);
+});
 await t("Lead ขาย: เปลี่ยน Sell Status → บันทึกช่อง sell_status", async () => {
   const s = (await saveLead({ ...base, phone: "0822222222", customer_name: "ผู้ขาย", need: "ขาย", staff: "สมหญิง" }, "ae1@example.com")).lead;
   const r = await changeSellStatus(s.lead_id, "สนใจขาย", s.updated_at, "ae1@example.com"); assert.ok(r.changed);
@@ -194,6 +202,19 @@ await t("วันหยุดบริษัท: เพิ่ม · ซ้ำ 4
   await PS.deleteHoliday("2026-12-31", ADM);
   assert.deepEqual((await S()).holidays.map((h) => h.date), ["2026-12-05"]);
   await rej(PS.deleteHoliday("2026-12-31", ADM), "NOT_FOUND");
+});
+await t("เป้าตั้งต้นต่อตำแหน่ง: ค่าเริ่มต้นตามที่กำหนด · Super Admin แก้/ยกเลิกได้ · เป้ารายคนทับเป้าตั้งต้น · ค่าผิด 422", async () => {
+  assert.equal((await S()).defaults["sale_developer.sales"], 100000); assert.equal((await S()).defaults["ae_buy.commission"], 60000); assert.equal((await S()).defaults["production.sales_ontime"], 100);
+  await rej(PS.saveDefaultTargets([{ metric_key: "ae_buy.follow", value: "120" }], ADM), "VALIDATION");
+  await rej(PS.saveDefaultTargets([{ metric_key: "nope", value: "1" }], ADM), "VALIDATION");
+  await PS.saveDefaultTargets([{ metric_key: "sale_developer.sales", value: "120000" }, { metric_key: "ae_sell.follow", value: "" }], ADM);
+  const d = (await S()).defaults; assert.equal(d["sale_developer.sales"], 120000); assert.equal(d["ae_sell.follow"], undefined); assert.equal(d["ae_buy.visited"], 15);
+  await PS.savePositions("ae1@example.com", ["sale_developer"], ADM);
+  await PS.saveTargets("2026-11", [{ user_email: "ae1@example.com", metric_key: "sale_developer.met", value: "8" }], ADM);
+  const rep = await PS.getPerfReport("2026-11", { email: ADM, role: "super_admin" });
+  const me = rep.people.find((p) => p.email === "ae1@example.com")!.positions[0].metrics;
+  assert.equal(me.find((m) => m.key === "sale_developer.sales")!.target, 120000, "ใช้เป้าตั้งต้น");
+  assert.equal(me.find((m) => m.key === "sale_developer.met")!.target, 8, "เป้ารายคนทับเป้าตั้งต้น (15)");
 });
 await t("ไม่มี D1 → 409 DB_NOT_READY (ไม่ใช่ error ดิบ)", async () => {
   D.setD1ForTest(null); ST.invalidateD1State(); await rej(S(), "DB_NOT_READY");

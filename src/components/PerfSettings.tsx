@@ -9,7 +9,7 @@ import { thDate, thMonth } from "@/lib/thdate";
 type User = { email: string; name: string; role: string; positions: string[] };
 type Settings = {
   month: string; users: User[]; targets: { user_email: string; metric_key: string; value: number }[];
-  holidays: { date: string; name: string }[]; duplicateNames: string[]; waitKinds: string[];
+  holidays: { date: string; name: string }[]; duplicateNames: string[]; waitKinds: string[]; defaults: Record<string, number>;
 };
 const UNIT: Record<Metric["unit"], string> = { count: "ครั้ง/งาน", baht: "บาท", percent: "%" };
 const monthNow = () => new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 7);
@@ -30,6 +30,7 @@ export function PerfSettings() {
   const [msg, setMsg] = useState<Msg>(null);
   const [busy, setBusy] = useState("");
   const [hol, setHol] = useState({ date: "", name: "" });
+  const [defDraft, setDefDraft] = useState<Record<string, string> | null>(null); // null = ยังไม่แก้ (ใช้ค่าจากเซิร์ฟเวอร์)
   const [kinds, setKinds] = useState<string[] | null>(null); // null = ยังไม่แก้ (ใช้ค่าจากเซิร์ฟเวอร์)
 
   const load = useCallback(async (m: string, resetDraft = true) => {
@@ -67,6 +68,10 @@ export function PerfSettings() {
   const addHoliday = () => run("hol", async () => { await call({ action: "holiday_add", date: hol.date, name: hol.name }); setHol({ date: "", name: "" }); return "เพิ่มวันหยุดแล้ว"; });
   const delHoliday = (h: { date: string; name: string }) => { if (confirm(`ลบวันหยุด ${thDate(h.date)} ${h.name} ?`)) run(`del:${h.date}`, async () => { await call({ action: "holiday_delete", date: h.date }); return "ลบวันหยุดแล้ว"; }); };
 
+  const defShown = (k: string) => (defDraft ?? Object.fromEntries(Object.entries(data?.defaults ?? {}).map(([a, b]) => [a, String(b)])))[k] ?? "";
+  const defChanges = POSITIONS.flatMap((p) => metricsOf(p.key)).filter((m) => defShown(m.key).trim() !== (data?.defaults[m.key] !== undefined ? String(data.defaults[m.key]) : "")).map((m) => ({ metric_key: m.key, value: defShown(m.key).trim() }));
+  const saveDefaults = () => run("defaults", async () => { await call({ action: "default_targets", items: defChanges }); setDefDraft(null); return `บันทึกเป้าตั้งต้นแล้ว (${defChanges.length} รายการ)`; });
+
   if (!data) return <><Notice msg={msg} onClose={() => setMsg(null)} /><Skeleton kind={"rows"} /></>;
   const withPos = data.users.filter((u) => u.positions.length);
   const shownKinds = kinds ?? data.waitKinds;
@@ -101,8 +106,27 @@ export function PerfSettings() {
       </section>
 
       <section className={card}>
+        <div><h2 className="font-semibold">2. เป้าตั้งต้นต่อตำแหน่ง</h2><p className="text-xs text-slate-500">ใช้กับทุกคนที่มีตำแหน่งนั้นโดยอัตโนมัติ · ถ้าตั้งเป้ารายคนของเดือนในหัวข้อ 3 จะใช้เป้ารายคนแทน · เว้นว่าง = ไม่มีเป้าตั้งต้นข้อนั้น</p></div>
+        <div className="space-y-3">{POSITIONS.map((p) => (
+          <div key={p.key} className="rounded-lg border border-slate-200 p-3">
+            <div className="mb-1 text-xs font-semibold text-slate-600">{p.label}</div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{metricsOf(p.key).map((m) => (
+              <label key={m.key} className="text-sm" title={m.how}>
+                <span className="mb-0.5 block text-xs text-slate-600">{m.label} <span className="text-slate-400">({UNIT[m.unit]})</span></span>
+                <input inputMode="decimal" aria-label={`เป้าตั้งต้น ${p.label}: ${m.label}`} value={defShown(m.key)} onChange={(e) => setDefDraft({ ...(defDraft ?? Object.fromEntries(Object.entries(data.defaults).map(([a, b]) => [a, String(b)]))), [m.key]: e.target.value })}
+                  className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm tabular-nums" />
+              </label>
+            ))}</div>
+          </div>
+        ))}</div>
+        <button onClick={saveDefaults} disabled={busy === "defaults" || defChanges.length === 0} className="rounded-lg bg-brand-600 px-5 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-40">
+          {busy === "defaults" ? "กำลังบันทึก..." : defChanges.length ? `บันทึกเป้าตั้งต้น (${defChanges.length} รายการที่เปลี่ยน)` : "ยังไม่มีการเปลี่ยนแปลง"}
+        </button>
+      </section>
+
+      <section className={card}>
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <div><h2 className="font-semibold">2. เป้าหมายรายเดือน</h2><p className="text-xs text-slate-500">เว้นว่าง = ไม่ตั้งเป้า · แสดงเฉพาะตัวชี้วัดของตำแหน่งที่คนนั้นมี</p></div>
+          <div><h2 className="font-semibold">3. เป้าหมายรายเดือน (รายคน)</h2><p className="text-xs text-slate-500">เว้นว่าง = ใช้เป้าตั้งต้นของตำแหน่ง (หัวข้อ 2) · ตัวเลขในช่องนี้ทับเป้าตั้งต้นของเดือนนี้ · แสดงเฉพาะตัวชี้วัดของตำแหน่งที่คนนั้นมี</p></div>
           <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">เดือน</span><DateInput month aria-label="เดือน" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} className="rounded-md border border-slate-300 px-2 py-1.5 text-sm" /></label>
         </div>
         {withPos.length === 0 ? <p className="text-sm text-slate-500">ยังไม่ได้กำหนดตำแหน่งให้ใคร — ติ๊กตำแหน่งในหัวข้อ 1 ก่อน</p> : (
@@ -116,7 +140,7 @@ export function PerfSettings() {
                     <label key={m.key} className="text-sm" title={m.how}>
                       <span className="mb-0.5 block text-xs text-slate-600">{m.label} <span className="text-slate-400">({UNIT[m.unit]})</span></span>
                       <input inputMode="decimal" aria-label={`${u.name}: ${m.label}`} value={draft[tkey(u.email, m.key)] ?? ""} onChange={(e) => setDraft({ ...draft, [tkey(u.email, m.key)]: e.target.value })}
-                        className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm tabular-nums" />
+                        placeholder={data.defaults[m.key] !== undefined ? `ตั้งต้น ${data.defaults[m.key]}` : ""} className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm tabular-nums" />
                       <span className="block text-[11px] leading-tight text-slate-400">{m.how}</span>
                     </label>
                   ))}</div>
@@ -131,7 +155,7 @@ export function PerfSettings() {
       </section>
 
       <section className={card}>
-        <h2 className="font-semibold">3. วันหยุดบริษัท</h2>
+        <h2 className="font-semibold">4. วันหยุดบริษัท</h2>
         <p className="text-xs text-slate-500">วันทำการ = จันทร์–เสาร์ (ตัดวันอาทิตย์) และตัดวันในรายการนี้ · ใช้นับเวลาที่รอลูกค้าและความทันเวลาของงาน</p>
         <div className="flex flex-wrap items-end gap-2">
           <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">วันที่</span><DateInput aria-label="วันที่หยุด" value={hol.date} onChange={(e) => setHol({ ...hol, date: e.target.value })} className="rounded-md border border-slate-300 px-2 py-1.5 text-sm" /></label>
@@ -147,7 +171,7 @@ export function PerfSettings() {
       </section>
 
       <section className={card}>
-        <h2 className="font-semibold">4. สิ่งที่รอจากลูกค้า (การ์ด Content งานขาย)</h2>
+        <h2 className="font-semibold">5. สิ่งที่รอจากลูกค้า (การ์ด Content งานขาย)</h2>
         <p className="text-xs text-slate-500">รายการที่ให้เลือกตอนกด “เริ่มรอลูกค้า” — เพิ่ม/แก้ชื่อ/ลบได้ 1–12 รายการ · ที่เคยบันทึกไปแล้วยังนับวันรอตามเดิม</p>
         <div className="space-y-1.5">{shownKinds.map((k, i) => (
           <div key={i} className="flex gap-1.5">
