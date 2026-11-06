@@ -74,7 +74,7 @@ export function ContentBoard({ canDelete }: { canDelete: boolean }) {
         <div className="font-medium leading-snug">{c.title}</div>
         <div className="mt-0.5 text-xs text-slate-500">{[c.customer_name, c.product].filter(Boolean).join(" · ") || <span className="text-slate-300">—</span>}</div>
         <div className="mt-1 flex flex-wrap gap-1 text-[11px]">
-          {c.sales_tag === "TRUE" && <span className="rounded bg-emerald-100 px-1.5 py-0.5 font-medium text-emerald-800">งานขาย</span>}
+          {c.sales_tag === "TRUE" && <span className="rounded bg-red-50 px-1.5 py-0.5 font-medium text-red-700">งานขาย</span>}
           {c.content_type && <span className="rounded bg-slate-100 px-1.5 py-0.5">{c.content_type}</span>}
           {c.sales_tag === "TRUE" && c.sales_goal && <span className="rounded bg-slate-100 px-1.5 py-0.5">{c.sales_goal}</span>}
         </div>
@@ -127,7 +127,7 @@ export function ContentBoard({ canDelete }: { canDelete: boolean }) {
                   {(cols[k] ?? []).map((c) => (
                     <li key={c.card_id} draggable={!busy.has(c.card_id)}
                       onDragStart={(e) => { e.dataTransfer.setData("text/plain", c.card_id); e.dataTransfer.effectAllowed = "move"; setDragId(c.card_id); }} onDragEnd={() => { setDragId(""); setOver(""); }}
-                      className={`rounded-md border border-slate-200 bg-white p-2.5 text-sm shadow-sm ${busy.has(c.card_id) ? "opacity-50" : "cursor-grab active:cursor-grabbing"} ${dragId === c.card_id ? "opacity-40" : ""}`}>
+                      className={`rounded-md bg-white p-2.5 text-sm shadow-sm ${c.sales_tag === "TRUE" ? "border-2 border-red-500" : "border border-slate-200"} ${busy.has(c.card_id) ? "opacity-50" : "cursor-grab active:cursor-grabbing"} ${dragId === c.card_id ? "opacity-40" : ""}`}>
                       <button type="button" onClick={() => setEdit(c)} className="block w-full text-left">{chip(c)}</button>
                       <select aria-label={`ย้ายสถานะ ${c.card_code}`} value={c.stage} disabled={busy.has(c.card_id)} onChange={(e) => void move(c.card_id, e.target.value)} className="mt-2 w-full rounded border border-slate-300 bg-white px-1.5 py-1 text-xs">
                         {STAGES.map((s) => <option key={s}>{s}</option>)}
