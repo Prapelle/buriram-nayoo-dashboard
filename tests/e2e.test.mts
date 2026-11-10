@@ -239,7 +239,7 @@ assert.equal(filterLeads(all, { q: "081 234" }).length, 2); assert.equal(filterL
 assert.equal(filterLeads(all, { q: `LD-${year}-0002` }).length, 1); assert.equal(filterLeads(all, { service: "Product" }).length, 3); assert.equal(normalizePhone("812345678"), "0812345678");
 ok("ค้นหา (ชื่อ/รหัส/เบอร์คนละรูปแบบ) และกรอง ช่องทาง/พื้นที่/สถานะ/บริการ ทำงานถูกต้อง");
 const dl = computeDashboard(await fetchDashboardData("admin"), {}, "admin"); const kl = Object.fromEntries(dl.groups.flatMap((g) => g.items).map((k) => [k.key, k]));
-assert.equal(kl.leads.value, 3); assert.equal(kl.qualified.value, 0); /* Qualified = Call Status รอเข้าชม — Lead ในส่วนนี้ยังไม่มีใครติดต่อได้ */ assert.equal((dl.charts.pipelineBuy?.[0].value ?? 0) + (dl.charts.pipelineSell?.[0].value ?? 0), 3); assert.equal(dl.charts.pipelineBuy?.find((p) => p.label === "Qualified")?.value ?? 0, 0); assert.equal(dl.charts.leadsByChannel![0].label, "Facebook Ads");
+assert.equal(kl.leads.value, 3); assert.equal(kl.qualified.value, 1); /* Qualified = Call Status รอเข้าชม — LD-0001 ตั้งเป็นรอเข้าชมด้านบน (5/11/2026) */ assert.equal((dl.charts.pipelineBuy?.[0].value ?? 0) + (dl.charts.pipelineSell?.[0].value ?? 0), 3); assert.equal(dl.charts.pipelineBuy?.find((p) => p.label === "Qualified")?.value ?? 0, 1); /* Pipeline ใช้นิยามเดียวกับ KPI */ assert.equal(dl.charts.leadsByChannel![0].label, "Facebook Ads");
 const ml = await fetchDashboardData("marketing"); assert.ok(ml.leads.every((r) => !("phone" in r) && !("email" in r) && !("customer_name" in r))); ok("Dashboard นับ Lead/Qualified/Pipeline ถูก และข้อมูล Marketing ไม่มี PII (ชื่อ/เบอร์/อีเมล)");
 assert.ok(col("AUDIT_LOG", "action").includes("lead_create") && col("AUDIT_LOG", "action").includes("lead_status_change")); ok("Audit Log: lead_create / lead_status_change");
 void validateLead; 
@@ -335,7 +335,7 @@ const lm = await exp("line_oa_monthly", {}, "marketing"); assert.equal(lm.rows.l
 const sm = await exp("marketing_monthly_summary", {}, "admin"); const sep = sm.rows.find((r) => r.month === "2026-09")!;
 const metaTotal = total("META_ADS", "amount_spent_thb"), gTotal = total("GOOGLE_ADS_CAMPAIGNS", "cost_thb");
 assert.equal(Number(sep.meta_ads_spend_thb), metaTotal); assert.equal(Number(sep.google_ads_campaign_spend_thb), gTotal); assert.equal(Number(sep.total_paid_media_spend_thb), Math.round((metaTotal + gTotal) * 100) / 100);
-assert.equal(sep.line_new_friends, ""); assert.equal(sep.line_leads, "0"); assert.equal(sep.leads_total, "3"); assert.equal(sep.leads_qualified, ""); assert.equal(sep.won_deals, ""); assert.equal(sep.deal_value_thb, "");
+assert.equal(sep.line_new_friends, ""); assert.equal(sep.line_leads, "0"); assert.equal(sep.leads_total, "3"); assert.equal(sep.leads_qualified, "1"); /* LD-0001 Call Status = รอเข้าชม */ assert.equal(sep.won_deals, ""); assert.equal(sep.deal_value_thb, "");
 assert.equal(sep.fb_posts_published, "54"); assert.equal(sep.fb_posts_reach_sum_lifetime, "191119"); assert.equal(sep.fb_link_clicks, "2646");
 const { buildSummary } = await import("../src/lib/export/service"); const mini = buildSummary({ meta: [], google: [], posts: [{ page_id: "1", page_name: "p", publish_time: "2026-08-03 10:00", reach: "10", link_clicks: "" }], line: [], leads: [], sales: [], excluded: [] }, {}, "admin");
 assert.deepEqual(mini.rows[0].slice(0, 6), ["2026-08", "", "", "", "", 1]); assert.equal(mini.rows[0][mini.columns.indexOf("fb_link_clicks")], ""); assert.equal(new Set(sm.rows.map((r) => r.month)).size, sm.rows.length); assert.deepEqual(sm.rows.map((r) => r.month), [...sm.rows.map((r) => r.month)].sort());
@@ -380,7 +380,7 @@ await assert.rejects(deleteLead("no-such", "x", "s@x.com"), isLead("NOT_FOUND"))
 const dB = await deleteLead(cB.lead_id, cB.updated_at, "admin@example.com"); assert.equal(dB.lead_code, cB.lead_code);
 const afterB = (await listLeads()).rows; assert.equal(rowsOf("LEADS"), nBefore - 1); assert.ok(!afterB.some((r) => r.lead_id === cB.lead_id)); assert.ok(afterB.some((r) => r.lead_id === cA.lead_id) && afterB.some((r) => r.lead_id === cC.lead_id));
 await assert.rejects(deleteLead(cB.lead_id, cB.updated_at, "admin@example.com"), isLead("NOT_FOUND"));
-const cCnow = afterB.find((r) => r.lead_id === cC.lead_id)!; const upd = await saveLead({ ...cCnow, call_status: "รอเข้าชม", lead_id: cCnow.lead_id, updated_at_seen: cCnow.updated_at }, "s@x.com"); assert.equal(upd.lead.status, "Contacted"); assert.equal(rowsOf("LEADS"), nBefore - 1);
+const cCnow = afterB.find((r) => r.lead_id === cC.lead_id)!; const upd = await saveLead({ ...cCnow, call_status: "รอเข้าชม", lead_id: cCnow.lead_id, updated_at_seen: cCnow.updated_at }, "s@x.com"); assert.equal(upd.lead.status, "Qualified"); /* ฝั่งซื้อ: รอเข้าชม = Qualified */ assert.equal(rowsOf("LEADS"), nBefore - 1);
 ok("ลบแถวกลาง: เหลือแถวอื่นครบ, ลบซ้ำ → NOT_FOUND, แก้ไข Lead ที่แถวเลื่อนขึ้นแล้วยังถูกแถว");
 const num = (c: string) => Number(c.split("-")[2]);
 const dC = await deleteLead(upd.lead.lead_id, upd.lead.updated_at, "admin@example.com"); const fresh = (await nl("ใหม่หลังลบ", "0811110009")).lead;
@@ -498,7 +498,7 @@ ok("Close / ขายแล้ว = Won (ตั้ง won_at) · บ้านไ
 const all15 = (await listLeads()).rows;
 assert.equal(filterLeads(all15, { need: "ขาย" }).length, 2); assert.equal(filterLeads(all15, { status: "Warm" }).length, 1); assert.equal(filterLeads(all15, { staff: "พี่บี" }).length, 1);
 assert.equal(filterLeads(all15, { callStatus: "รอติดต่อ" }).length, 3); assert.equal(filterLeads(all15, { from: "2026-09-01", to: "2026-09-30" }).length, all15.length - 1); assert.equal(filterLeads(all15, { q: "ขายด่วน" }).length, 1);
-assert.deepEqual((await listLeads()).staff, ["พี่บี", "พี่เอ"]);
+assert.deepEqual((await listLeads()).staff, ["เซลส์ 1", "เซลส์ 2", "พี่บี", "พี่เอ", "Initial Admin"]); /* รายชื่อ Staff = ผู้ใช้ที่เป็น Staff ได้ทุกคน (5/11/2026) */
 ok("กรองตาม Need / Status / Staff / Call Status / ช่วงวันที่ และค้นหาใน Remark ได้ · รายชื่อ Staff สำหรับเลือกซ้ำ");
 dash15 = Object.fromEntries(computeDashboard(await fetchDashboardData("admin"), {}, "admin").groups.flatMap((g) => g.items).map((k) => [k.key, k.value]));
 assert.equal(dash15.leads, all15.length); assert.equal(dash15.qualified, all15.filter((r) => (r.need === "ขาย" ? ["เซ็นสัญญา", "สัญญาเปิด", "ขายแล้ว"].includes(r.sell_status) : r.call_status === "รอเข้าชม")).length); assert.equal(dash15.qualified, 2);

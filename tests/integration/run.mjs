@@ -66,7 +66,7 @@ try {
   ok("Login", `Admin คนแรก (INITIAL_ADMIN_EMAIL) เตรียม Google Sheet ได้ — สร้าง ${r.json.createdTabs.length} แท็บ`);
   // เพิ่มสมาชิกผ่านหน้า ตั้งค่า (API /api/users) แทนการแก้ Sheet ด้วยมือ
   for (const [email, role, active] of [[MKT, "marketing", true], [SALES, "sales", true], [OFF, "ae", false], [IMP, "admin", true], [PRD, "production", true]]) {
-    r = await call("/api/users", { as: ADMIN, method: "POST", body: { email: email.toUpperCase(), display_name: role, role, active } }); assert.equal(r.status, 200, r.text);
+    r = await call("/api/users", { as: ADMIN, method: "POST", body: { email: email.toUpperCase(), display_name: email === SALES ? "พี่เอ" : role, role, active } }); // ช่อง Staff ของ Lead ต้องเป็นชื่อผู้ใช้ (5/11/2026) assert.equal(r.status, 200, r.text);
   }
   r = await call("/api/users", { as: ADMIN }); assert.equal(r.json.users.length, 6); assert.equal(r.json.users.find((u) => u.email === SALES).role, "ae"); assert.ok(r.json.users.every((u) => u.email === u.email.toLowerCase()));
   assert.equal((await call("/api/users", { as: ADMIN, method: "POST", body: { email: MKT, role: "sales" } })).json.code, "DUPLICATE_EMAIL");
@@ -155,7 +155,7 @@ try {
   ok("Overview", "กรอง 10–20 ก.ย. (รายงานเป็นยอดทั้งเดือน) → แจ้งเตือนว่าตัวเลขเป็นยอดเต็มของรายงาน");
   const lead = (x) => ({ received_at: "2026-09-05", source_channel: "Referral", customer_name: "ทดสอบ", need: "ซื้อ", ...x });
   r = await call("/api/leads", { as: SALES, method: "POST", body: lead({ customer_name: "ผู้ขาย", phone: "0811111111", need: "ขาย", sell_status: "นัดทำสัญญา", staff: "พี่เอ" }) }); assert.equal(r.status, 200, r.text);
-  const sellLead = r.json.lead; assert.equal(sellLead.status, "Qualified");
+  const sellLead = r.json.lead; assert.equal(sellLead.status, "Contacted"); // ฝั่งขาย: นัดทำสัญญา = Contacted (Qualified เริ่มที่ เซ็นสัญญา — 5/11/2026)
   r = await call("/dashboard?from=2026-09-01&to=2026-09-30", { as: ADMIN }); assert.ok(/CPL \(Lead จากโฆษณา\)[\s\S]{0,400}N\/A/.test(r.html), "CPL N/A");
   ok("Overview", "มี Lead แต่ไม่มี Lead จากโฆษณา → CPL จาก Ads = N/A (หารด้วย 0)");
   r = await call("/api/leads", { as: SALES, method: "POST", body: lead({ customer_name: "ซ้ำ", phone: "+66 81 111 1111", need: "ขาย" }) }); assert.equal(r.status, 409); assert.equal(r.json.code, "DUPLICATE_SAME_SIDE");
@@ -171,7 +171,7 @@ try {
   r = await call("/dashboard?from=2026-09-01&to=2026-09-30", { as: MKT }); assert.ok(r.html.includes("33,186.18"), "CPL ads = 66372.36/2"); assert.ok(r.html.includes("22,124.12"), "CPL all = /3");
   assert.ok(!r.html.includes("0811111111"));
   ok("Overview", "CPL จาก Ads = 66,372.36 ÷ 2 = 33,186.18 · CPL ทั้งหมด ÷ 3 = 22,124.12 (Lead ต.ค. ไม่นับ) · หน้า Marketing ไม่มีเบอร์ลูกค้า");
-  r = await call("/api/leads", { as: SALES }); assert.equal(r.json.rows.length, 4); assert.deepEqual(r.json.staff, ["พี่เอ"]);
+  r = await call("/api/leads", { as: SALES }); assert.equal(r.json.rows.length, 4); assert.deepEqual(r.json.staff, ["พี่เอ", "admin", "Initial Admin"]); // รายชื่อ Staff = ผู้ใช้ที่เป็น Staff ได้ทุกคน (Super Admin / Admin / AE ที่ใช้งานอยู่)
   const toCall = r.json.rows.find((x) => x.source_channel === "Google Ads");
   r = await call("/api/leads", { as: SALES, method: "POST", body: { ...toCall, call_status: "รอเข้าชม", updated_at_seen: toCall.updated_at } }); assert.equal(r.status, 200, r.text);
   r = await call("/dashboard?from=2026-09-01&to=2026-09-30", { as: MKT });

@@ -28,7 +28,8 @@ try {
   const api = (p, body) => fetch(BASE + p, { method: "POST", headers: { cookie: `authjs.session-token=${adminC}`, "sec-fetch-site": "same-origin", "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
   assert.equal((await api("/api/init")).status, 200);
   assert.equal((await api("/api/users", { email: "marketing@example.com", display_name: "mkt", role: "marketing", active: "TRUE" })).status, 200);
-  assert.equal((await api("/api/users", { email: "importer@example.com", display_name: "imp", role: "admin", active: "TRUE" })).status, 200); // Admin (ใหม่): นำเข้า + ฝ่ายขาย + Project
+  assert.equal((await api("/api/users", { email: "importer@example.com", display_name: "imp", role: "admin", active: "TRUE" })).status, 200);
+  for (const [e, n] of [["sale-a@example.com", "เซลส์ ก"], ["sale-b@example.com", "เซลส์ ข"]]) assert.equal((await api("/api/users", { email: e, display_name: n, role: "ae", active: "TRUE" })).status, 200); // Staff ของ Developer = เลือกจากผู้ใช้ (5/11/2026) // Admin (ใหม่): นำเข้า + ฝ่ายขาย + Project
   // หน้าสาธารณะสำหรับ Google OAuth consent screen (Privacy policy URL) — เปิดได้โดยไม่ล็อกอิน
   const pv = await fetch(BASE + "/privacy", { redirect: "manual" }); const pvt = await pv.text();
   assert.equal(pv.status, 200); assert.ok(pvt.includes("นโยบายความเป็นส่วนตัว") && pvt.includes("Limited Use") && pvt.includes("openid"));
@@ -122,7 +123,7 @@ try {
   await page.getByText("ผู้ขาย ก").dragTo(col(page, "สนใจขาย")); await page.getByText("ผู้ขาย ก: รอติดต่อ → สนใจขาย").waitFor();
   await page.getByLabel("เปลี่ยน Sell Status ผู้ขาย ข").selectOption("เซ็นสัญญา"); await page.getByText("ผู้ขาย ข: ค่าเดิม → เซ็นสัญญา").waitFor();
   let lr = await tab("LEADS"); const H = lr[0], get = (id, c) => lr.find((r) => r[H.indexOf("lead_id")] === id)[H.indexOf(c)];
-  assert.equal(get("S1", "sell_status"), "สนใจขาย"); assert.equal(get("S1", "status"), "Qualified"); assert.equal(get("S2", "sell_status"), "เซ็นสัญญา"); assert.equal(get("S1", "updated_by"), "admin@example.com");
+  assert.equal(get("S1", "sell_status"), "สนใจขาย"); assert.equal(get("S1", "status"), "Contacted"); /* สนใจขาย = Contacted (ฝั่งขาย Qualified เริ่มที่ เซ็นสัญญา) */ assert.equal(get("S2", "sell_status"), "เซ็นสัญญา"); assert.equal(get("S1", "updated_by"), "admin@example.com");
   ok("Seller Leads: ลากการ์ด รอติดต่อ → สนใจขาย และเปลี่ยนด้วยเมนู (ค่าเดิม ทำสัญญา อยู่คอลัมน์ ค่าเดิมที่ไม่รู้จัก → เซ็นสัญญา) · บันทึกลง Sheet + ขั้น Pipeline = Qualified");
   await page.goto(BASE + "/work/buyer-leads"); await page.getByText("ผู้ซื้อ ก").waitFor();
   assert.ok(await col(page, "รอติดต่อ").getByText("ผู้ซื้อ ก").isVisible()); assert.ok(await col(page, "เข้าชมแล้ว").getByText("ผู้ซื้อ ข").isVisible());
@@ -266,14 +267,14 @@ try {
   const dform = () => page.locator("section", { has: page.getByRole("heading", { name: "เพิ่ม Developer ใหม่" }) }).last();
   await dform().getByLabel("ชื่อบริษัท").fill("บริษัท บ้านดี จำกัด"); await dform().getByLabel("โครงการหลัก").fill("บ้านดี วิลล์"); await dform().getByLabel("โครงการรอง 1").fill("บ้านดี 2");
   await dform().getByLabel("ชื่อผู้ติดต่อ").fill("คุณดี"); await dform().getByLabel("เบอร์").fill("0812223333"); await dform().getByLabel("Line", { exact: true }).fill("@baandee");
-  await dform().getByLabel("Tier", { exact: true }).selectOption("C"); await dform().getByLabel("Nayoo URL").fill("https://nayoo.co/baandee"); await dform().getByLabel("Staff", { exact: true }).fill("เซลส์ ก");
+  await dform().getByLabel("Tier", { exact: true }).selectOption("C"); await dform().getByLabel("Nayoo URL").fill("https://nayoo.co/baandee"); await dform().getByLabel("Staff", { exact: true }).selectOption("เซลส์ ก");
   if (process.env.SHOT_DIR) await page.locator("section", { has: page.getByRole("heading", { name: "เพิ่ม Developer ใหม่" }) }).last().screenshot({ path: process.env.SHOT_DIR + "/dev-form.png" });
   await page.getByRole("button", { name: "บันทึก", exact: true }).click(); await page.getByText("สร้าง DV-0001 แล้ว").waitFor();
   await page.getByRole("button", { name: "+ เพิ่ม Product" }).click();
   await page.getByLabel("Product", { exact: true }).selectOption("Top ads"); await page.getByLabel("วันเริ่ม").fill(dAdd(-1)); await page.getByLabel("วันหมดอายุ").fill(dAdd(90)); await page.getByLabel("ราคา (บาท)").fill("25000");
   await page.getByRole("button", { name: "บันทึก Product" }).click(); await page.getByText("บันทึก Top ads แล้ว · Status ตอนนี้: กำลังใช้ Product").waitFor();
   await page.getByRole("button", { name: "+ เพิ่ม Developer" }).click();
-  await dform().getByLabel("ชื่อบริษัท").fill("บริษัท สวนสวย"); await dform().getByLabel("โครงการหลัก").fill("สวนสวย โฮม"); await dform().getByLabel("Status", { exact: true }).selectOption("เข้าร่วมแล้ว"); await dform().getByLabel("Staff", { exact: true }).fill("เซลส์ ข");
+  await dform().getByLabel("ชื่อบริษัท").fill("บริษัท สวนสวย"); await dform().getByLabel("โครงการหลัก").fill("สวนสวย โฮม"); await dform().getByLabel("Status", { exact: true }).selectOption("เข้าร่วมแล้ว"); await dform().getByLabel("Staff", { exact: true }).selectOption("เซลส์ ข");
   await page.getByRole("button", { name: "บันทึก", exact: true }).click(); await page.getByText("สร้าง DV-0002 แล้ว").waitFor();
   if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/developers.png", fullPage: true });
   const dv = await tab("DEVELOPERS"); assert.equal(dv.length - 1, 2); assert.equal(dv[1][dv[0].indexOf("status")], "กำลังใช้ Product"); assert.equal(dv[1][dv[0].indexOf("tier")], "C");
