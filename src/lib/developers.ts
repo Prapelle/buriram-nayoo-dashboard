@@ -175,10 +175,14 @@ export function devFollowUps(devs: Dev[], today: string) {
 export type DevMonthRow = {
   staff: string; planned: number; met: number; noMeeting: number; won: number; productSales: number;
   calls: number; line: number; meet: number; // ยอดการติดต่อ โทร / Line / เจอหน้า (ประวัติการติดต่อ)
+  callsUnique: number; // จำนวนลูกค้าที่โทรหาในเดือน (ไม่ซ้ำราย) — ใช้กับประสิทธิภาพรายคน: 1 ครั้งต่อลูกค้าต่อเดือน (10/11/2026)
   metProjects: number; productProjects: number; productRatePct: number | null; // โครงการที่เข้าพบ (ไม่ซ้ำ) / โครงการที่เพิ่ม Product ในเดือนนี้
   byCategory: Record<string, number>; // ยอดเงิน Product / Service / Event
 };
-const isClose = (l: Record<string, string>) => l.to_status === "ปิดการขาย" && l.kind === "manual";
+/** ประวัติที่นับเป็นผลงานของคน: ลากเอง (manual) หรือ ปิดการขายที่ระบบบันทึกให้ตอนยืนยันชำระเงิน/เริ่มงาน (auto_payment — 10/11/2026) */
+export const AUTO_PAYMENT = "auto_payment";
+const countsAsMove = (l: Record<string, string>) => l.kind === "manual" || (l.kind === AUTO_PAYMENT && l.to_status === "ปิดการขาย");
+export const isClose = (l: Record<string, string>) => l.to_status === "ปิดการขาย" && countsAsMove(l);
 const isMet = (l: Record<string, string>) => l.to_status === "เข้าพบแล้ว" && l.kind === "manual";
 /**
  * เดือนที่นับยอดของ Product (31/10/2026): เดือนของการ "ปิดการขาย" ครั้งล่าสุดที่เกิดก่อนหรือวันเดียวกับวันที่เพิ่ม Product
@@ -200,7 +204,7 @@ export function monthlyReport(logs: Record<string, string>[], products: DevProdu
   const m = new Map<string, DevMonthRow & { _met: Set<string>; _prod: Set<string> }>();
   const row = (s: string) => {
     const k = (s ?? "").trim() || "(ไม่ระบุ Staff)";
-    if (!m.has(k)) m.set(k, { staff: k, planned: 0, met: 0, noMeeting: 0, won: 0, productSales: 0, calls: 0, line: 0, meet: 0, metProjects: 0, productProjects: 0, productRatePct: null, byCategory: Object.fromEntries(PRODUCT_CATEGORIES.map((c) => [c, 0])), _met: new Set(), _prod: new Set() });
+    if (!m.has(k)) m.set(k, { staff: k, planned: 0, met: 0, noMeeting: 0, won: 0, productSales: 0, calls: 0, line: 0, meet: 0, callsUnique: 0, metProjects: 0, productProjects: 0, productRatePct: null, byCategory: Object.fromEntries(PRODUCT_CATEGORIES.map((c) => [c, 0])), _met: new Set(), _prod: new Set() });
     return m.get(k)!;
   };
   // ประวัติอัตโนมัติอาจถูกบันทึกซ้ำถ้าเปิดหน้าพร้อมกันหลายคน (รหัสเดียวกัน) → นับครั้งเดียวต่อรหัส
@@ -210,7 +214,7 @@ export function monthlyReport(logs: Record<string, string>[], products: DevProdu
   const seenMove = new Set<string>();
   for (const l of uniq) {
     const mk = `${l.developer_id}|${l.to_status}`;
-    if (l.kind === "manual" && bkkDay(l.changed_at).slice(0, 7) === month && !(l.developer_id && seenMove.has(mk))) {
+    if (countsAsMove(l) && bkkDay(l.changed_at).slice(0, 7) === month && !(l.developer_id && seenMove.has(mk))) {
       if (l.developer_id) seenMove.add(mk);
       if (l.to_status === "มีแผนเข้าพบ") row(l.staff).planned++;
       if (l.to_status === "เข้าพบแล้ว") { const r = row(l.staff); r.met++; r._met.add(l.developer_id); }
@@ -225,11 +229,13 @@ export function monthlyReport(logs: Record<string, string>[], products: DevProdu
     const r = row(a.staff ?? staffOf.get(p.developer_id) ?? ""); const v = Number(p.price_thb) || 0;
     r.productSales += v; r.byCategory[categoryOf(p)] += v; r._prod.add(p.developer_id);
   }
-  const seenC = new Set<string>();
-  for (const c of contacts) {
+  const seenC = new Set<string>(), called = new Set<string>(); // called: ลูกค้าที่นับการโทรไปแล้วในเดือนนี้ (ให้คนแรกที่โทร)
+  for (const c of [...contacts].sort((a, b) => String(a.contacted_at).localeCompare(String(b.contacted_at)) || String(a.created_at ?? "").localeCompare(String(b.created_at ?? "")))) {
     if (c.contact_id) { if (seenC.has(c.contact_id)) continue; seenC.add(c.contact_id); }
     if (day(c.contacted_at).slice(0, 7) !== month) continue;
-    const r = row(c.staff); if (c.method === "โทร") r.calls++; else if (c.method === "Line") r.line++; else if (c.method === "เจอหน้า") r.meet++;
+    const r = row(c.staff);
+    if (c.method === "โทร" && !(c.developer_id && called.has(c.developer_id))) { if (c.developer_id) called.add(c.developer_id); r.callsUnique++; }
+    if (c.method === "โทร") r.calls++; else if (c.method === "Line") r.line++; else if (c.method === "เจอหน้า") r.meet++;
   }
   return [...m.values()].map(({ _met, _prod, ...r }) => ({ ...r, metProjects: _met.size, productProjects: _prod.size, productRatePct: _met.size ? Math.round((_prod.size / _met.size) * 1000) / 10 : null }))
     .sort((a, b) => b.won - a.won || b.met - a.met || a.staff.localeCompare(b.staff));

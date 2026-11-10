@@ -11,9 +11,9 @@ import {
 } from "./account";
 import { kindOf, PRODUCT_CATEGORIES, todayBkk, validateProduct, DEV_COLUMNS } from "./developers";
 import { normRole } from "./roles";
-import { productTypesOf, saveProduct, deleteProduct as deleteDevProduct, saveDeveloper, deleteDeveloper, DevError, addProductType } from "./developers-service";
+import { productTypesOf, saveProduct, deleteProduct as deleteDevProduct, saveDeveloper, deleteDeveloper, DevError, addProductType, recordPaidClose } from "./developers-service";
 import { casWrite, dedupeCode } from "./row-guard";
-import { createCardsForJobs, renameProductInContent } from "./content-service";
+import { createCardsForJobs, deleteCardsForJobs, renameProductInContent } from "./content-service";
 import { appendRows, atomicWrite, casRow, patchById, readTabs, toRow, updateById } from "./sheets";
 
 export class AccError extends Error {
@@ -187,6 +187,19 @@ export async function setDocStatus(id: string, status: string, actor: string) {
 }
 
 /**
+ * ยอดขายต่อรายการหลังเฉลี่ยส่วนลดท้ายบิลตามสัดส่วน (ก่อน VAT) — ใช้เป็นราคา Product ของลูกค้า = ยอดขายของ Sale (ผู้ใช้กำหนด 10/11/2026)
+ * เศษสตางค์จากการปัดลงที่รายการสุดท้าย ให้ผลรวมเท่ากับ ยอดรวม − ส่วนลด พอดี
+ */
+export function netLineAmounts(doc: { discount?: string }, lines: Record<string, string>[]): Map<string, number> {
+  const out = new Map<string, number>();
+  const sum = round2(lines.reduce((a, l) => a + Number(l.amount || 0), 0)), discount = Math.min(Math.max(Number(doc.discount || 0), 0), sum);
+  if (!(discount > 0) || !(sum > 0)) { for (const l of lines) out.set(l.line_id, round2(Number(l.amount || 0))); return out; }
+  let left = round2(sum - discount);
+  lines.forEach((l, i) => { const v = i === lines.length - 1 ? left : round2(Number(l.amount || 0) * (1 - discount / sum)); out.set(l.line_id, v); left = round2(left - v); });
+  return out;
+}
+
+/**
  * เริ่มงาน: เพิ่ม Product ให้ลูกค้า (DEVELOPER_PRODUCTS ผ่าน saveProduct → Status ลูกค้าเปลี่ยนตามวัน Product) + สร้าง Job ต่อรายการ
  * ตรวจทุกรายการก่อนเขียนอะไร (วันเริ่ม/สิ้นสุด · ชื่อ Product ยังอยู่ในรายการ · ลูกค้ายังอยู่) เพื่อไม่ให้เหลือครึ่ง ๆ กลาง ๆ
  */
@@ -211,13 +224,16 @@ async function applyWork(t: Record<string, Tab>, doc: Rec, actor: string) {
     t.ACC_DOCS.rows[rootIdx] = claimed;
   }
   const LH = t.ACC_LINES.headers;
+  // เงินเข้า/เริ่มงาน = ปิดการขาย: บันทึกให้ Staff ของลูกค้าก่อนเพิ่ม Product (ยอดขายจะนับเข้าเดือนและคนเดียวกัน) · พลาดไม่ให้เริ่มงานล้ม
+  try { await recordPaidClose(dev.developer_id, actor); } catch { /* ไม่กระทบการเริ่มงาน */ }
+  const net = netLineAmounts(doc, lines);
   for (const l of lines) {
     if (l.job_id) continue; // ทำไปแล้วในรอบก่อนที่ล้มกลางทาง — ไม่สร้างซ้ำ
     try {
       const k = t.ACC_LINES.rows.findIndex((x) => x.line_id === l.line_id);
       let productId = l.product_id;
       if (!productId) {
-        const r = await saveProduct({ developer_id: dev.developer_id, product: l.product, category: l.category, start_date: l.start_date, end_date: l.end_date, price_thb: l.amount, notes: `จากเอกสาร ${doc.doc_no}` }, actor);
+        const r = await saveProduct({ developer_id: dev.developer_id, product: l.product, category: l.category, start_date: l.start_date, end_date: l.end_date, price_thb: String(net.get(l.line_id) ?? l.amount), notes: `จากเอกสาร ${doc.doc_no}` }, actor);
         productId = r.product.product_id;
         Object.assign(t.ACC_LINES.rows[k], { product_id: productId });
         await atomicWrite([{ update: "ACC_LINES", idCol: "line_id", id: l.line_id, values: toRow(LH, t.ACC_LINES.rows[k]) }]); // จำไว้ทันที รอบหน้าไม่สร้าง Product ซ้ำ
@@ -426,6 +442,7 @@ export async function deleteDoc(id: string, actor: string) {
   }
   if (!DELETE_RESTRICTED) {
     // โหมดทดสอบ: ลบ Job ของใบนี้ และถ้าสายเอกสารไม่เหลือ Job แล้ว ล้างธง "เริ่มงานแล้ว" ที่ใบแรก เพื่อทดสอบเริ่มงานซ้ำได้ (Product/ยอดขายที่เพิ่มให้ลูกค้าจากใบนี้ถูกลบตามด้วย)
+    try { await deleteCardsForJobs(t.PRODUCTION_JOBS.rows.filter((j) => j.job_id && goneSet.has(j.doc_id)).map((j) => j.job_id)); } catch { /* การ์ด Content ลบไม่สำเร็จ ไม่ให้การลบเอกสารล้ม */ }
     await deleteRowsBy(t, "PRODUCTION_JOBS", "doc_id", gone);
     const rootId = doc.root_id || doc.doc_id, ri = t.ACC_DOCS.rows.findIndex((d) => d.doc_id === rootId);
     const left = t.PRODUCTION_JOBS.rows.some((j) => j.job_id && !goneSet.has(j.doc_id) && t.ACC_DOCS.rows.some((d) => d.doc_id === j.doc_id && (d.root_id || d.doc_id) === rootId));

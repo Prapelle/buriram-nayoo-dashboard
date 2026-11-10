@@ -328,4 +328,19 @@ await t("จำนวนเงินเป็นตัวอักษร: 1,000,
   const { bahtText } = await import("../src/lib/account");
   assert.equal(bahtText(1000001), "หนึ่งล้านเอ็ดบาทถ้วน"); assert.equal(bahtText(2000021.5), "สองล้านยี่สิบเอ็ดบาทห้าสิบสตางค์"); assert.equal(bahtText(11000000), "สิบเอ็ดล้านบาทถ้วน"); assert.equal(bahtText(5000), "ห้าพันบาทถ้วน");
 });
+await t("10/11/2026: ชำระเต็มโดยไม่เคยลากการ์ดไป ปิดการขาย → ระบบบันทึกปิดการขายให้ Staff ของลูกค้า (เดือนเดียวกันไม่ซ้ำ) · ยอดขาย = ราคาหลังหักส่วนลดท้ายบิล", async () => {
+  const d3 = (await saveDeveloper({ company_name: "ลูกค้าจ่ายก่อนลาก", project_main: "ลูกค้าจ่ายก่อนลาก", phone: "0811111199" }, ADMIN)).dev;
+  const mk = async (discount: number) => (await A.saveDoc({ ...form({ discount, lines: [{ product: "Top ads", category: "Product", description: "- ลงโฆษณา", qty: 1, unit_price: 3000, start_date: "2026-11-01", end_date: "2027-01-31" }, { product: "แพ็กเกจ STD", category: "Product", description: "- แพ็กเกจ", qty: 1, unit_price: 1000, start_date: "2026-11-01", end_date: "2027-01-31" }] }), customer_id: d3.developer_id }, ADMIN)).doc;
+  const closes = () => rows("DEVELOPER_STATUS_LOG").filter((l) => l.developer_id === d3.developer_id && l.to_status === "ปิดการขาย");
+  const q = await mk(400); assert.equal(q.total, "3600");
+  const r = await payNow(q.doc_id, { amount: 3600, paid_at: today, method: "โอนเงิน", updated_at_seen: q.updated_at }, ADMIN);
+  assert.ok(r.started, r.startError);
+  assert.equal(closes().length, 1); assert.equal(closes()[0].kind, "auto_payment"); assert.equal(closes()[0].from_status, "ยังไม่เข้าร่วม");
+  const mine = rows("DEVELOPER_PRODUCTS").filter((p) => p.developer_id === d3.developer_id);
+  assert.deepEqual(mine.map((p) => p.price_thb).sort(), ["2700", "900"]); // 3000 และ 1000 หักส่วนลด 400 ตามสัดส่วน รวม 3600
+  assert.equal(rows("DEVELOPERS").find((x) => x.developer_id === d3.developer_id)!.status, "กำลังใช้ Product");
+  // ใบที่สองในเดือนเดียวกัน: ไม่บันทึกปิดการขายซ้ำ
+  const q2 = await mk(0); const r2 = await payNow(q2.doc_id, { amount: 4000, paid_at: today, method: "โอนเงิน", updated_at_seen: q2.updated_at }, ADMIN);
+  assert.ok(r2.started, r2.startError); assert.equal(closes().length, 1);
+});
 console.log("\nระบบบัญชี (Sheets จำลอง) ผ่านทั้งหมด");

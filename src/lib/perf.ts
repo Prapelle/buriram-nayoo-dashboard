@@ -103,6 +103,9 @@ export const positionLabel = (k: string) => POSITIONS.find((p) => p.key === k)?.
  */
 export const SELL_POSITIVE = ["สนใจขาย", "นัดทำสัญญา", "เซ็นสัญญา", "สัญญาเปิด", "ขายแล้ว"];
 export const BUY_POSITIVE = ["ติดต่อได้แล้ว", "รอเข้าชม", "เข้าชมแล้ว", "จอง", "ซื้อสำเร็จ"];
+/** Qualified Lead ฝั่งผู้ซื้อ (นิยามเดียวกับ Dashboard — 30/10/2026): ติดต่อได้แล้ว ยังไม่นับ · นับเมื่อ "เพิ่งเป็น" Qualified (ย้ายมาจากสถานะที่ยังไม่ Qualified) */
+export const BUY_QUALIFIED = ["รอเข้าชม", "เข้าชมแล้ว", "จอง", "ซื้อสำเร็จ", "กู้ไม่ผ่าน"];
+export const BUY_NOT_QUALIFIED = ["", "รอติดต่อ", "ติดต่อได้แล้ว", "ติดต่อไม่ได้", "ไม่สนใจ"];
 
 export type MetricUnit = "count" | "baht" | "percent";
 /** rule = วิธีนับ (ตัวคำนวณขั้นถัดไปอ่านจากนี้) — how = คำอธิบายภาษาไทยที่แสดงในหน้าตั้งเป้า */
@@ -126,34 +129,35 @@ export type MetricRule =
 export type Metric = { key: string; position: PositionKey; label: string; unit: MetricUnit; how: string; rule: MetricRule };
 
 const devMetrics = (position: "sale_developer" | "sale_home_builder"): Metric[] => [
-  { key: `${position}.calls`, position, label: "โทรหาลูกค้า", unit: "count", how: "จำนวนครั้งที่บันทึกการติดต่อแบบ โทร", rule: { kind: "dev_contact", method: "โทร" } },
+  { key: `${position}.calls`, position, label: "โทรหาลูกค้า", unit: "count", how: "จำนวนลูกค้าที่บันทึกการติดต่อแบบ โทร ในเดือนนั้น (นับ 1 ครั้งต่อลูกค้าต่อเดือน)", rule: { kind: "dev_contact", method: "โทร" } },
   { key: `${position}.planned`, position, label: "นัดเข้าพบ", unit: "count", how: "ย้ายการ์ดไป มีแผนเข้าพบ", rule: { kind: "dev_status", to: "มีแผนเข้าพบ" } },
   { key: `${position}.met`, position, label: "เข้าพบแล้ว", unit: "count", how: "ย้ายการ์ดไป เข้าพบแล้ว", rule: { kind: "dev_status", to: "เข้าพบแล้ว" } },
-  { key: `${position}.won`, position, label: "ปิดการขาย", unit: "count", how: "ย้ายการ์ดไป ปิดการขาย", rule: { kind: "dev_status", to: "ปิดการขาย" } },
+  { key: `${position}.won`, position, label: "ปิดการขาย", unit: "count", how: "ย้ายการ์ดไป ปิดการขาย หรือยืนยันชำระเงิน / เริ่มงานในระบบบัญชี (ระบบบันทึกปิดการขายให้ · 1 ครั้งต่อลูกค้าต่อเดือน)", rule: { kind: "dev_status", to: "ปิดการขาย" } },
   { key: `${position}.close_rate`, position, label: "อัตราปิดการขาย (%)", unit: "percent", how: "ปิดการขายเดือนนี้ ÷ เข้าพบเดือนนี้", rule: { kind: "dev_close_rate" } },
   { key: `${position}.data_mgmt`, position, label: "บริหารข้อมูล (%)", unit: "percent", how: "การ์ดที่ถึงวัน 'ติดต่อครั้งถัดไป' แล้วมีการติดต่อหรือย้ายสถานะภายในวันนั้น ÷ การ์ดที่ถึงกำหนดทั้งหมดในเดือน (เริ่มนับ 6/11/2026)", rule: { kind: "follow_ontime", source: "dev" } },
-  { key: `${position}.sales`, position, label: "ยอดขาย (บาท)", unit: "baht", how: "ราคารวมของ Product ที่ปิดการขายในเดือนนั้น", rule: { kind: "dev_sales" } },
+  { key: `${position}.sales`, position, label: "ยอดขาย (บาท)", unit: "baht", how: "ราคารวมของ Product ที่ปิดการขายในเดือนนั้น (จากเอกสารบัญชี = ราคาหลังหักส่วนลดท้ายบิล ก่อน VAT)", rule: { kind: "dev_sales" } },
 ];
 
 export const METRICS: Metric[] = [
-  { key: "ae_sell.contact", position: "ae_sell", label: "ติดต่อผู้ขายได้", unit: "count", how: "ย้ายจาก รอติดต่อ ไปสถานะที่เป็นบวก (สนใจขาย · นัดทำสัญญา · เซ็นสัญญา · สัญญาเปิด · ขายแล้ว)", rule: { kind: "lead_move", field: "sell_status", from: ["รอติดต่อ"], to: SELL_POSITIVE } },
+  { key: "ae_sell.contact", position: "ae_sell", label: "ติดต่อผู้ขายได้", unit: "count", how: "ย้ายจาก รอติดต่อ ไปสถานะที่เป็นบวก (สนใจขาย · นัดทำสัญญา · เซ็นสัญญา · สัญญาเปิด · ขายแล้ว) หรือสร้าง Lead ที่สถานะบวกตั้งแต่แรก", rule: { kind: "lead_move", field: "sell_status", from: ["", "รอติดต่อ"], to: SELL_POSITIVE } },
   { key: "ae_sell.contract", position: "ae_sell", label: "สัญญารับฝากขายแบบปิด (เซ็นสัญญา)", unit: "count", how: "ย้ายการ์ดไป เซ็นสัญญา", rule: { kind: "lead_move", field: "sell_status", to: ["เซ็นสัญญา"] } },
   { key: "ae_sell.sold", position: "ae_sell", label: "ขายแล้ว", unit: "count", how: "ย้ายการ์ดไป ขายแล้ว", rule: { kind: "lead_move", field: "sell_status", to: ["ขายแล้ว"] } },
-  { key: "ae_buy.contact", position: "ae_buy", label: "ติดต่อผู้ซื้อได้", unit: "count", how: "ย้ายจาก รอติดต่อ หรือ ติดต่อไม่ได้ ไปสถานะที่เป็นบวก (ติดต่อได้แล้ว · รอเข้าชม · เข้าชมแล้ว · จอง · ซื้อสำเร็จ)", rule: { kind: "lead_move", field: "call_status", from: ["รอติดต่อ", "ติดต่อไม่ได้"], to: BUY_POSITIVE } },
+  { key: "ae_buy.contact", position: "ae_buy", label: "ติดต่อผู้ซื้อได้", unit: "count", how: "ย้ายจาก รอติดต่อ หรือ ติดต่อไม่ได้ ไปสถานะที่เป็นบวก (ติดต่อได้แล้ว · รอเข้าชม · เข้าชมแล้ว · จอง · ซื้อสำเร็จ) หรือสร้าง Lead ที่สถานะบวกตั้งแต่แรก", rule: { kind: "lead_move", field: "call_status", from: ["", "รอติดต่อ", "ติดต่อไม่ได้"], to: BUY_POSITIVE } },
+  { key: "ae_buy.qualified", position: "ae_buy", label: "Qualified Lead", unit: "count", how: "Lead ผู้ซื้อที่เพิ่งเป็น Qualified ในเดือนนั้น = ย้ายเข้า รอเข้าชม · เข้าชมแล้ว · จอง · ซื้อสำเร็จ · กู้ไม่ผ่าน จากสถานะที่ยังไม่ Qualified (ติดต่อได้แล้ว ยังไม่นับ)", rule: { kind: "lead_move", field: "call_status", from: BUY_NOT_QUALIFIED, to: BUY_QUALIFIED } },
   { key: "ae_buy.visited", position: "ae_buy", label: "เข้าชมแล้ว", unit: "count", how: "ย้ายการ์ดไป เข้าชมแล้ว", rule: { kind: "lead_move", field: "call_status", to: ["เข้าชมแล้ว"] } },
   { key: "ae_buy.booked", position: "ae_buy", label: "จอง", unit: "count", how: "ย้ายการ์ดไป จอง", rule: { kind: "lead_move", field: "call_status", to: ["จอง"] } },
   { key: "ae_buy.sold", position: "ae_buy", label: "ซื้อสำเร็จ", unit: "count", how: "ย้ายการ์ดไป ซื้อสำเร็จ", rule: { kind: "lead_move", field: "call_status", to: ["ซื้อสำเร็จ"] } },
-  { key: "ae_sell.intake", position: "ae_sell", label: "ทรัพย์เข้าระบบ", unit: "count", how: "จำนวน Lead ผู้ขาย (Need = ขาย) ที่สร้างในเดือนนั้น (เริ่มนับ 5/11/2026)", rule: { kind: "lead_intake" } },
+  { key: "ae_sell.intake", position: "ae_sell", label: "ทรัพย์เข้าระบบ", unit: "count", how: "จำนวน Lead ผู้ขาย (Need = ขาย) ที่สร้างในเดือนนั้น หรือเปลี่ยน Need มาเป็น ขาย ในเดือนนั้น · 1 ครั้งต่อ Lead ต่อเดือน (เริ่มนับ 5/11/2026)", rule: { kind: "lead_intake" } },
   { key: "ae_sell.open_contract", position: "ae_sell", label: "สัญญารับฝากขายแบบเปิด", unit: "count", how: "ย้ายการ์ดไป สัญญาเปิด", rule: { kind: "lead_move", field: "sell_status", to: ["สัญญาเปิด"] } },
   { key: "ae_sell.follow", position: "ae_sell", label: "ติดตาม Lead ไม่ค้างเกิน 3 วัน (%)", unit: "percent", how: "ช่วงที่ Lead ผู้ขายอยู่ในสถานะเดียว ที่ไม่เกิน 3 วันทำการ (จันทร์–เสาร์ ตัดวันหยุดบริษัท) ÷ ทุกช่วงที่จบหรือค้างในเดือน · สถานะปลายทาง (ขายแล้ว / ยกเลิก / บ้านไม่พร้อมขาย) ไม่นับเป็นค้าง", rule: { kind: "lead_stale", field: "sell_status" } },
   { key: "ae_sell.data_mgmt", position: "ae_sell", label: "บริหารข้อมูล (%)", unit: "percent", how: "Lead ที่ถึงวัน 'ติดต่อครั้งถัดไป' แล้วมีการติดต่อหรือย้ายสถานะภายในวันนั้น ÷ ที่ถึงกำหนดทั้งหมดในเดือน (เริ่มนับ 6/11/2026)", rule: { kind: "follow_ontime", source: "lead" } },
   { key: "ae_buy.commission", position: "ae_buy", label: "รายได้ค่าคอมมิชชัน (บาท)", unit: "baht", how: "ผลรวมรายการ 'ค่าคอมมิชชัน' ในใบเสร็จรับเงินของเดือนนั้น แยกตามชื่อผู้ขายในเอกสาร (ใบเสร็จชำระบางส่วนคิดตามสัดส่วน)", rule: { kind: "commission" } },
-  { key: "ae_buy.close_rate", position: "ae_buy", label: "อัตราปิดการขาย (%)", unit: "percent", how: "ซื้อสำเร็จ ÷ ติดต่อผู้ซื้อได้ (Qualified Lead) ในเดือนนั้น · 1 ดีลต่อ 15 Qualified ≈ 6.7%", rule: { kind: "lead_ratio", num: "ae_buy.sold", den: "ae_buy.contact" } },
+  { key: "ae_buy.close_rate", position: "ae_buy", label: "อัตราปิดการขาย (%)", unit: "percent", how: "ซื้อสำเร็จ ÷ Qualified Lead ในเดือนนั้น · 1 ดีลต่อ 15 Qualified ≈ 6.7%", rule: { kind: "lead_ratio", num: "ae_buy.sold", den: "ae_buy.qualified" } },
   { key: "ae_buy.follow", position: "ae_buy", label: "ติดตาม Lead ไม่ค้างเกิน 3 วัน (%)", unit: "percent", how: "ช่วงที่ Lead ผู้ซื้อ/เช่า อยู่ในสถานะเดียว ที่ไม่เกิน 3 วันทำการ ÷ ทุกช่วงที่จบหรือค้างในเดือน · สถานะปลายทาง (ซื้อสำเร็จ / ไม่สนใจ / กู้ไม่ผ่าน) ไม่นับเป็นค้าง", rule: { kind: "lead_stale", field: "call_status" } },
   { key: "ae_buy.data_mgmt", position: "ae_buy", label: "บริหารข้อมูล (%)", unit: "percent", how: "Lead ที่ถึงวัน 'ติดต่อครั้งถัดไป' แล้วมีการติดต่อหรือย้ายสถานะภายในวันนั้น ÷ ที่ถึงกำหนดทั้งหมดในเดือน (เริ่มนับ 6/11/2026)", rule: { kind: "follow_ontime", source: "lead" } },
   ...devMetrics("sale_developer"),
   ...devMetrics("sale_home_builder"),
-  { key: "production.done", position: "production", label: "งานที่เสร็จ", unit: "count", how: "การ์ด Content ที่เสร็จ โดยผู้ร่วมงานทุกคนในการ์ดได้ครบ 1 งาน", rule: { kind: "content_done" } },
+  { key: "production.done", position: "production", label: "งานที่เสร็จ", unit: "count", how: "การ์ด Content ที่เผยแพร่ในเดือนนั้น โดยผู้ร่วมงานทุกคนในการ์ดได้ครบ 1 งาน (การ์ดที่ถูกย้ายกลับแล้วเผยแพร่ใหม่ นับเฉพาะครั้งล่าสุด)", rule: { kind: "content_done" } },
   { key: "production.ontime", position: "production", label: "ทันเวลา (%)", unit: "percent", how: "งานที่เผยแพร่ไม่เกินวันลง ÷ งานที่เสร็จและมีวันลง (วันลงเลื่อนออกตามวันทำการที่รอลูกค้า ตัดวันอาทิตย์/วันหยุดบริษัท)", rule: { kind: "content_ontime" } },
   { key: "production.data_mgmt", position: "production", label: "บริหารข้อมูล (%)", unit: "percent", how: "ช่วงที่การ์ดอยู่ขั้นเดียวไม่เกิน 3 วันทำการ (ไม่รวมวันที่รอลูกค้า) ÷ ทุกช่วงที่จบหรือค้างในเดือน · ผู้ร่วมงานทุกคนในการ์ดได้ครบ", rule: { kind: "content_stale" } },
   { key: "production.sales_ontime", position: "production", label: "ส่งงานขาย ทันเวลา (%)", unit: "percent", how: "การ์ดที่ติดแท็กงานขาย เสร็จและเผยแพร่ไม่เกินวันลง (วันลงเลื่อนตามวันที่รอลูกค้า) ÷ การ์ดงานขายที่เสร็จและมีวันลง", rule: { kind: "content_sales_ontime" } },

@@ -21,6 +21,7 @@ echo "== d1 (ย้าย Sheets → D1)"; npx tsx tests/d1.test.mts
 echo "== content (บอร์ด Content บน D1)"; npx tsx tests/content.test.mts
 echo "== perf (ประสิทธิภาพรายคน: ประวัติสถานะ Lead)"; npx tsx tests/perf.test.mts
 echo "== perf-calc (ตัวคำนวณประสิทธิภาพรายคน)"; npx tsx tests/perf-calc.test.mts
+echo "== audit-fixes (แก้จากการตรวจโค้ด 10/11/2026)"; npx tsx tests/audit-fixes.test.mts
 echo "== import-delete (ลบข้อมูลรายงานที่นำเข้า)"; npx tsx tests/import-delete.test.mts
 if ls "$FIX"/Page.csv >/dev/null 2>&1; then
   echo "== import";    npx tsx tests/import.test.ts

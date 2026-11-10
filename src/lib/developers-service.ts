@@ -9,7 +9,7 @@ import { checkStaff, followupRow, mergeStaff, staffUserNames } from "./perf";
 import { logFollowup } from "./perf-log";
 import { normRole } from "./roles";
 import {
-  addDays, AUTO_STATUS, KIND_LABEL, kindOf, type DevKind, autoChanges, CONTACT_COLUMNS, CONTACT_METHODS, NEXT_CONTACT_DAYS, DEFAULT_PRODUCTS, DEV_COLUMNS, DEV_DEFAULT, DEV_EDITABLE, DEV_STATUS, findDevDuplicates, IMPORT_HEADERS, LOG_COLUMNS, nextDevCode, normLine, normName, normPhone,
+  addDays, AUTO_PAYMENT, AUTO_STATUS, bkkDay, isClose, KIND_LABEL, kindOf, type DevKind, autoChanges, CONTACT_COLUMNS, CONTACT_METHODS, NEXT_CONTACT_DAYS, DEFAULT_PRODUCTS, DEV_COLUMNS, DEV_DEFAULT, DEV_EDITABLE, DEV_STATUS, findDevDuplicates, IMPORT_HEADERS, LOG_COLUMNS, nextDevCode, normLine, normName, normPhone,
   PRODUCT_COLUMNS, productDrivenStatus, productState, todayBkk, validateDev, validateProduct, type Dev, type DevDup, type DevProduct,
 } from "./developers";
 import { appendRows, atomicWrite, deleteWhere, listTabs, readTabs, toRow, updateById } from "./sheets";
@@ -271,6 +271,29 @@ export async function saveProduct(input: Record<string, unknown>, actor: string)
   await writeAudit(actor, pid ? "developer_product_update" : "developer_product_create", "developer", devId, `${rec.product} ${rec.start_date}–${rec.end_date}${rec.price_thb ? ` ฿${rec.price_thb}` : ""}`);
   const dev = pickDev(t.DEVELOPERS.rows.find((r) => r.developer_id === devId)!);
   return { product: rec, dev, statusHint: productDrivenStatus(dev.status, t.DEVELOPER_PRODUCTS.rows.filter((r) => r.developer_id === devId), todayBkk()) };
+}
+
+/**
+ * ยืนยันชำระเงิน / เริ่มงาน = ปิดการขาย (ผู้ใช้กำหนด 10/11/2026): บันทึกประวัติ "ปิดการขาย" ให้ Staff ของลูกค้ารายนั้น
+ * - เดือนนี้มีการปิดการขายของลูกค้ารายนี้อยู่แล้ว (ลากเอง หรือระบบบันทึก) → ไม่บันทึกซ้ำ
+ * - การ์ดที่ยังไม่อยู่ ปิดการขาย / สถานะตาม Product → ย้ายเป็น ปิดการขาย (แล้วระบบเปลี่ยนต่อตามวันของ Product เอง)
+ * เรียกก่อนเพิ่ม Product เพื่อให้ยอดขายนับเข้าเดือนและ Staff เดียวกับการปิดการขาย · คืน true ถ้าบันทึก
+ */
+export async function recordPaidClose(developerId: string, actor: string): Promise<boolean> {
+  const t = await load();
+  const row = t.DEVELOPERS.rows.find((r) => r.developer_id === developerId);
+  if (!row) return false;
+  const dev = pickDev(row), month = todayBkk().slice(0, 7), now = new Date().toISOString();
+  const from = dev.status || DEV_DEFAULT;
+  // ปิดการขายไว้แล้ว (การ์ดยังอยู่ ปิดการขาย รอ Product เริ่ม) หรือเดือนนี้นับไปแล้ว → ไม่นับซ้ำ
+  if (from === "ปิดการขาย" || t.DEVELOPER_STATUS_LOG.rows.some((l) => l.developer_id === developerId && isClose(l) && bkkDay(l.changed_at).slice(0, 7) === month)) return false;
+  if (!AUTO_STATUS.includes(from)) {
+    const rec: Dev = { ...dev, status: "ปิดการขาย", status_changed_at: now, won_at: todayBkk(), updated_by: actor, updated_at: now };
+    await casWrite("DEVELOPERS", t.DEVELOPERS.headers, "developer_id", developerId, dev.updated_at ?? "", toRow(t.DEVELOPERS.headers, rec)); // มีคนแก้พอดี = ข้ามการย้ายการ์ด แต่ยังบันทึกประวัติ
+  }
+  await writeLogs(t, [{ log_id: crypto.randomUUID(), developer_id: developerId, staff: dev.staff ?? "", from_status: from, to_status: "ปิดการขาย", kind: AUTO_PAYMENT, counts_as: "", month, changed_by: actor, changed_at: now }]);
+  await writeAudit(actor, "developer_status", "developer", developerId, `${dev.dev_code}: ${from} → ปิดการขาย (ระบบบันทึกจากการยืนยันชำระเงิน)`);
+  return true;
 }
 
 export async function deleteProduct(productId: string, actor: string) {

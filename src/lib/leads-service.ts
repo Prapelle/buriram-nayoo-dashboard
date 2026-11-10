@@ -145,7 +145,10 @@ export async function saveLead(input: Record<string, unknown>, actor: string, ro
   const rec: Lead = { ...v.rec, ...stamps, lead_id: prev.lead_id, lead_code: prev.lead_code, created_by: prev.created_by, created_at: prev.created_at, updated_by: actor, updated_at: now };
   await writeLead(tab.headers, prev.lead_id, prev.updated_at, rec);
   if (pd) await applyProps(rec.lead_id, pd, actor, now);
-  const moved = leadStatusChanges(prev, rec, STATUS_DEFAULTS, logFieldOf(rec));
+  // เปลี่ยน Need ข้ามฝั่ง (ซื้อ↔ขาย / เพิ่งระบุ Need): ถือว่า Lead เพิ่งเข้าฝั่งใหม่ → บันทึก "" → สถานะปัจจุบัน
+  // (Lead ที่เปลี่ยนเป็น ขาย จะถูกนับเป็นทรัพย์เข้าระบบ และเริ่มจับเวลาไม่ค้างสถานะ — 10/11/2026)
+  const newField = logFieldOf(rec), sideMoved = !!newField && logFieldOf(prev) !== newField;
+  const moved = sideMoved ? leadStatusChanges(null, rec, STATUS_DEFAULTS, newField) : leadStatusChanges(prev, rec, STATUS_DEFAULTS, newField);
   await logLeadStatus(moved, rec, actor, now);
   if (moved.length || (rec.last_contacted_at || "") !== (prev.last_contacted_at || "")) await logFollowup(followupRow("lead", { id: rec.lead_id, code: rec.lead_code, staff: rec.staff ?? "" }, prev.next_follow_up_at, actor, now));
   const ps = leadStatusOf(prev), cs = leadStatusOf(rec);

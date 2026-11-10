@@ -84,17 +84,22 @@ export function computeMonth(inp: CalcInput): CalcResult {
   // ── Sale developer / Sale home builder (ใช้สรุปรายเดือนเดิมของหน้า Developer) ──
   for (const [pos, d] of [["sale_developer", inp.developers], ["sale_home_builder", inp.homeBuilders]] as const) {
     for (const r of monthlyReport(d.logs, d.products, d.devs, month, d.contacts)) {
-      const n = r.calls + r.planned + r.met + r.won + r.productSales;
+      const n = r.callsUnique + r.planned + r.met + r.won + r.productSales;
       if (!n) continue; // แถวที่ไม่มีผลงาน ไม่ต้องจับคู่/ไม่ต้องรายงานว่าไม่ตรง
       const e = resolve(r.staff === "(ไม่ระบุ Staff)" ? "" : r.staff, "", pos === "sale_developer" ? "Developer" : "Home Builder", pos);
-      add(e, `${pos}.calls`, r.calls); add(e, `${pos}.planned`, r.planned); add(e, `${pos}.met`, r.met); add(e, `${pos}.won`, r.won); add(e, `${pos}.sales`, r.productSales);
+      add(e, `${pos}.calls`, r.callsUnique); add(e, `${pos}.planned`, r.planned); add(e, `${pos}.met`, r.met); add(e, `${pos}.won`, r.won); add(e, `${pos}.sales`, r.productSales);
       bump(`${pos}.close_rate`, e, Math.min(r.won, r.met), r.met); // ปิดเดือนนี้ ÷ เข้าพบเดือนนี้
     }
   }
 
   // ── Production (บอร์ด Content) ──
-  const pubDay = new Map<string, string>(); // card_id → วันที่ย้ายถึง PUBLISHED ครั้งล่าสุดในเดือนนี้
-  for (const h of inp.history) if (h.card_id && h.to_stage === "PUBLISHED" && !(REPORT_STAGES as readonly string[]).includes(h.from_stage) && inMonth(h.at, month)) { const d = bkkDay(h.at); if (d > (pubDay.get(h.card_id) ?? "")) pubDay.set(h.card_id, d); }
+  // card_id → วันที่ย้ายถึง PUBLISHED "ครั้งล่าสุด" · นับเป็นงานเสร็จเฉพาะเมื่อครั้งล่าสุดอยู่ในเดือนนี้ และการ์ดยังเผยแพร่อยู่
+  // (ย้ายกลับแล้วเผยแพร่ใหม่เดือนถัดไป = นับเดือนที่เผยแพร่ล่าสุดเดือนเดียว ไม่นับซ้ำสองเดือน — 10/11/2026)
+  const lastPub = new Map<string, string>();
+  for (const h of inp.history) if (h.card_id && h.to_stage === "PUBLISHED" && !(REPORT_STAGES as readonly string[]).includes(h.from_stage)) { const d = bkkDay(h.at); if (d > (lastPub.get(h.card_id) ?? "")) lastPub.set(h.card_id, d); }
+  const prodStage = new Set(["IDEA", "CONTENT PLANS", "ART WORK / VIDEO", "เสร็จ ART / VIDEO", "REVIEW", "SCHEDULED"]);
+  const pubDay = new Map<string, string>();
+  for (const c of inp.cards) { const d = lastPub.get(c.card_id); if (d && d.slice(0, 7) === month && !prodStage.has(c.stage)) pubDay.set(c.card_id, d); }
   const membersOf = new Map<string, string[]>();
   for (const m of inp.members) if (m.card_id && m.email) (membersOf.get(m.card_id) ?? membersOf.set(m.card_id, []).get(m.card_id)!).push(lc(m.email));
   const hol = new Set(inp.holidays ?? []), today = inp.today ?? bkkDay(new Date().toISOString());
@@ -139,15 +144,17 @@ export function computeMonth(inp: CalcInput): CalcResult {
   const stayPos = (field: string) => (field === "sell_status" ? "ae_sell" : "ae_buy");
   const byLeadField = new Map<string, Row[]>();
   for (const l of inp.leadLogs) if (l.lead_id && l.field) (byLeadField.get(`${l.lead_id}|${l.field}`) ?? byLeadField.set(`${l.lead_id}|${l.field}`, []).get(`${l.lead_id}|${l.field}`)!).push(l);
-  const seenLog = new Set<string>();
+  const curField = new Map((inp.leads ?? []).filter((x) => x.lead_id && x.need).map((x) => [x.lead_id, x.need === "ขาย" ? "sell_status" : "call_status"]));
+  const seenLog = new Set<string>(), seenIntake = new Set<string>(); // ทรัพย์เข้าระบบ: 1 ครั้งต่อ Lead ต่อเดือน (เปลี่ยน Need ไปมาไม่นับซ้ำ)
   for (const [, list] of byLeadField) {
     list.sort((a, b) => String(a.changed_at).localeCompare(String(b.changed_at)));
     list.forEach((l, i) => {
       if (l.log_id) { if (seenLog.has(l.log_id)) return; seenLog.add(l.log_id); }
       const field = l.field, pos = stayPos(field), src = field === "sell_status" ? "คนต้องการขาย" : "คนต้องการซื้อ";
-      if (field === "sell_status" && l.from_status === "" && inMonth(l.changed_at, month)) add(resolve(l.staff, l.changed_by, src, pos), "ae_sell.intake", 1); // ทรัพย์เข้าระบบ
+      if (field === "sell_status" && l.from_status === "" && inMonth(l.changed_at, month) && !seenIntake.has(l.lead_id) && seenIntake.add(l.lead_id)) add(resolve(l.staff, l.changed_by, src, pos), "ae_sell.intake", 1); // ทรัพย์เข้าระบบ
       const next = list[i + 1], start = bkkDay(l.changed_at), end = next ? bkkDay(next.changed_at) : today;
       if (!next && (TERMINAL[field] ?? []).includes(l.to_status)) return; // อยู่สถานะปลายทาง ไม่นับเป็นค้าง
+      if (!next && curField.has(l.lead_id) && curField.get(l.lead_id) !== field) return; // Lead ย้ายไปอีกฝั่งแล้ว (เปลี่ยน Need) — ช่องสถานะเดิมไม่ใช้แล้ว ไม่นับเป็นค้าง
       if (!(next ? inMonth(next.changed_at, month) : today.slice(0, 7) === month)) return; // นับช่วงที่จบในเดือนนี้ (ช่วงที่ยังเปิดอยู่นับในเดือนปัจจุบัน)
       bump(`${pos}.follow`, resolve(l.staff, l.changed_by, src, pos), workdaysBetween(start, end, hol) <= STALE_DAYS ? 1 : 0, 1);
     });

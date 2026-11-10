@@ -244,6 +244,17 @@ export async function createCardsForJobs(jobs: { job_id: string; job_code: strin
   return { created: rows.length };
 }
 
+/** ลบการ์ดที่สร้างอัตโนมัติจาก Job ที่ถูกลบ (ใช้ตอนลบเอกสารบัญชีในโหมดทดสอบ) พร้อมผู้ร่วมงาน / การรอ / ประวัติของการ์ด */
+export async function deleteCardsForJobs(jobIds: string[]) {
+  const ids = new Set(jobIds.filter(Boolean));
+  if (!ids.size || !(await getD1())) return { deleted: 0 };
+  const t = await load(), cards = t.CONTENT_CARDS.rows.filter((c) => c.card_id && ids.has(c.job_id));
+  if (!cards.length) return { deleted: 0 };
+  await atomicWrite(cards.flatMap((c) => [{ deleteWhere: "CONTENT_MEMBERS", col: "card_id", value: c.card_id }, { deleteWhere: "CONTENT_WAITS", col: "card_id", value: c.card_id },
+    { deleteWhere: "CONTENT_HISTORY", col: "card_id", value: c.card_id }, { deleteWhere: "CONTENT_CARDS", col: "card_id", value: c.card_id }]));
+  return { deleted: cards.length };
+}
+
 /** รายงานลูกค้า: การ์ดงานขายของลูกค้าหนึ่งราย (เผยแพร่ในช่วงวันที่) พร้อมตัวเลขโพสต์ Facebook และยอดรวม */
 export async function getReport(customerId: string, from: string, to: string, includeSent: boolean) {
   const { validDate } = await import("./content");
