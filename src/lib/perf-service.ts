@@ -14,7 +14,7 @@ import { validateWaitKinds, waitKindsOf, WAIT_KINDS_KEY } from "./content";
 import { buildReport, computeMonth, type DevData } from "./perf-calc";
 import { listDevelopers } from "./developers-service";
 import { normRole } from "./roles";
-import { appendRows, batchUpdateValues, colLetter, deleteRow, listTabs, readTabs, toRow } from "./sheets";
+import { appendRows, atomicWrite, deleteWhere, readTabs, toRow, updateById } from "./sheets";
 
 export async function logLeadStatus(changes: LeadStatusChange[], lead: Record<string, string>, actor: string, at: string) {
   if (!changes.length) return;
@@ -66,8 +66,7 @@ export async function saveWaitKinds(raw: unknown, actor: string) {
   const t = await load(), rows = t.APP_CONFIG?.rows ?? [], headers = t.APP_CONFIG?.headers ?? [];
   const i = rows.findIndex((r) => r.config_key === WAIT_KINDS_KEY);
   const row = { config_key: WAIT_KINDS_KEY, config_value: v.value.join("|"), description: "สิ่งที่รอจากลูกค้าในการ์ด Content (คั่นด้วย |)", updated_at: new Date().toISOString() };
-  if (i >= 0) await batchUpdateValues([{ range: `'APP_CONFIG'!A${i + 2}:${colLetter(headers.length - 1)}${i + 2}`, values: [toRow(headers, row)] }]);
-  else await appendRows("APP_CONFIG", [toRow(headers, row)]);
+  if (!(i >= 0 && (await updateById("APP_CONFIG", headers, "config_key", row.config_key, toRow(headers, { ...rows[i], ...row }))))) await appendRows("APP_CONFIG", [toRow(headers, row)]);
   await writeAudit(actor, "content_wait_kinds", "config", WAIT_KINDS_KEY, v.value.join(" | "));
   return { kinds: v.value };
 }
@@ -83,8 +82,7 @@ export async function saveDefaultTargets(items: { metric_key: string; value: unk
   for (const m of METRICS) { const v = cur[m.key]; if (v !== undefined) stored[m.key] = v; else if (DEFAULT_TARGETS_HAS(m.key)) stored[m.key] = null; }
   const i = rows.findIndex((r) => r.config_key === DEFAULT_TARGETS_KEY);
   const row = { config_key: DEFAULT_TARGETS_KEY, config_value: JSON.stringify(stored), description: "เป้าตั้งต้นต่อตำแหน่ง (ประสิทธิภาพรายคน)", updated_at: new Date().toISOString() };
-  if (i >= 0) await batchUpdateValues([{ range: `'APP_CONFIG'!A${i + 2}:${colLetter(headers.length - 1)}${i + 2}`, values: [toRow(headers, row)] }]);
-  else await appendRows("APP_CONFIG", [toRow(headers, row)]);
+  if (!(i >= 0 && (await updateById("APP_CONFIG", headers, "config_key", row.config_key, toRow(headers, { ...rows[i], ...row }))))) await appendRows("APP_CONFIG", [toRow(headers, row)]);
   await writeAudit(actor, "perf_default_targets", "config", DEFAULT_TARGETS_KEY, `เป้าตั้งต้นต่อตำแหน่ง: ${checked.map((c) => `${metricByKey(c.key)?.label}=${c.value ?? "ไม่ตั้ง"}`).join(", ")}`.slice(0, 900));
   return { defaults: cur };
 }
@@ -101,8 +99,7 @@ export async function savePositions(emailRaw: string, positions: unknown, actor:
   const now = new Date().toISOString();
   const idx = t[POS].rows.findIndex((r) => norm(r.user_email) === email);
   const rec = { user_email: email, positions: value, updated_by: actor, updated_at: now };
-  if (idx >= 0) { const row = idx + 2; await batchUpdateValues([{ range: `'${POS}'!A${row}:${colLetter(t[POS].headers.length - 1)}${row}`, values: [toRow(t[POS].headers, rec)] }]); }
-  else await appendRows(POS, [toRow(t[POS].headers, rec)]);
+  if (!(idx >= 0 && (await updateById(POS, t[POS].headers, "user_email", t[POS].rows[idx].user_email, toRow(t[POS].headers, rec))))) await appendRows(POS, [toRow(t[POS].headers, rec)]);
   await writeAudit(actor, "perf_positions", "app_user", email, `ตำแหน่ง ${email}: ${value ? parsePositions(value).map((k) => POSITIONS.find((p) => p.key === k)!.label).join(", ") : "(ไม่มี)"}`);
   return { email, positions: parsePositions(value) };
 }
@@ -124,21 +121,22 @@ export async function saveTargets(monthRaw: unknown, items: TargetInput[], actor
   const now = new Date().toISOString();
   const H = t[TGT].headers;
   const at = new Map(t[TGT].rows.map((r, i) => [`${r.month}|${norm(r.user_email)}|${r.metric_key}`, { i, r }]));
-  const updates: { range: string; values: (string | number)[][] }[] = [], adds: (string | number)[][] = [];
+  const updates: { id: string; values: (string | number)[] }[] = [], adds: (string | number)[][] = [];
   let changed = 0;
   for (const c of checked) {
     const ex = at.get(`${month}|${c.email}|${c.metric.key}`);
     const val = c.value === null ? "" : String(c.value);
     if (ex) {
       if ((ex.r.target_value ?? "") === val) continue;
-      const row = ex.i + 2;
-      updates.push({ range: `'${TGT}'!A${row}:${colLetter(H.length - 1)}${row}`, values: [toRow(H, { ...ex.r, target_value: val, updated_by: actor, updated_at: now })] }); changed++;
+      if (ex.r.target_id) updates.push({ id: ex.r.target_id, values: toRow(H, { ...ex.r, target_value: val, updated_by: actor, updated_at: now }) });
+      else adds.push(toRow(H, { ...ex.r, target_id: crypto.randomUUID(), target_value: val, updated_by: actor, updated_at: now })); // แถวเก่าที่ไม่มีรหัส (ไม่ควรมี) → เพิ่มแถวใหม่ที่มีรหัส
+      changed++;
     } else if (c.value !== null) {
       adds.push(toRow(H, { target_id: crypto.randomUUID(), month, user_email: c.email, position: c.metric.position, metric_key: c.metric.key, target_value: val, updated_by: actor, updated_at: now })); changed++;
     }
   }
-  if (updates.length) await batchUpdateValues(updates);
-  if (adds.length) await appendRows(TGT, adds);
+  // เป้าที่มีอยู่แก้ตาม target_id · เป้าใหม่เพิ่มแถว — ชุดเดียวกัน (D1: ทรานแซกชันเดียว)
+  await atomicWrite([...updates.map((u) => ({ update: TGT, idCol: "target_id", id: u.id, values: u.values })), { insert: TGT, rows: adds }]);
   if (changed) await writeAudit(actor, "perf_targets", "perf_target", month, `ตั้งเป้ารายคน ${month}: เปลี่ยน ${changed} รายการ`);
   return { month, changed };
 }
@@ -157,9 +155,7 @@ export async function deleteHoliday(date: unknown, actor: string) {
   const t = await load();
   const idx = t[HOL].rows.findIndex((r) => r.holiday_date === d);
   if (idx < 0) throw new PerfError(404, "ไม่พบวันหยุดนี้ (อาจถูกลบไปแล้ว)", "NOT_FOUND");
-  const sheetId = (await listTabs()).find((x) => x.title === HOL)?.sheetId;
-  if (sheetId === undefined) throw new PerfError(409, "ไม่พบตารางวันหยุด", "DB_NOT_READY");
-  await deleteRow(sheetId, idx + 2);
+  await deleteWhere(HOL, "holiday_date", d);
   await writeAudit(actor, "perf_holiday_delete", "perf_holiday", d, `ลบวันหยุด ${d} ${t[HOL].rows[idx].name}`);
   return { date: d };
 }

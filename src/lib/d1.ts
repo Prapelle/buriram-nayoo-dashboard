@@ -179,6 +179,29 @@ export async function casUpdate(db: D1Like, tab: string, idCol: string, id: stri
   return Number(r.meta.changes) === 1;
 }
 
+/** แก้ทั้งแถวตาม id (ไม่ตรวจ updated_at) — คืนจำนวนแถวที่แก้ (0 = ไม่พบ) · ไม่พึ่งเลขแถว จึงไม่ชนกับการลบ/เพิ่มของคนอื่น (10/11/2026) */
+export async function updateById(db: D1Like, tab: string, idCol: string, id: string, values: (string | number)[]): Promise<number> {
+  const hdr = await mustHeaders(db, tab);
+  if (!hdr.includes(idCol)) throw new Error(`ตาราง ${tab} ไม่มีคอลัมน์ ${idCol}`);
+  const r = await db.prepare(`UPDATE ${tabName(tab)} SET ${hdr.map((h) => `${q(h)}=?`).join(",")} WHERE ${q(idCol)}=?`).bind(...hdr.map((_, i) => str(values[i])), id).run();
+  return Number(r.meta.changes);
+}
+/** แก้บางช่องของแถวตาม id — คืนจำนวนแถวที่แก้ */
+export async function patchById(db: D1Like, tab: string, idCol: string, id: string, patch: Record<string, string | number>): Promise<number> {
+  const hdr = await mustHeaders(db, tab), cols = Object.keys(patch);
+  if (!cols.length) return 0;
+  for (const c of [idCol, ...cols]) if (!hdr.includes(c)) throw new Error(`ตาราง ${tab} ไม่มีคอลัมน์ ${c}`);
+  const r = await db.prepare(`UPDATE ${tabName(tab)} SET ${cols.map((c) => `${q(c)}=?`).join(",")} WHERE ${q(idCol)}=?`).bind(...cols.map((c) => str(patch[c])), id).run();
+  return Number(r.meta.changes);
+}
+/** ลบทุกแถวที่คอลัมน์ col = value — คืนจำนวนแถวที่ลบ */
+export async function deleteWhere(db: D1Like, tab: string, col: string, value: string): Promise<number> {
+  const hdr = await mustHeaders(db, tab);
+  if (!hdr.includes(col)) throw new Error(`ตาราง ${tab} ไม่มีคอลัมน์ ${col}`);
+  const r = await db.prepare(`DELETE FROM ${tabName(tab)} WHERE ${q(col)}=?`).bind(value).run();
+  return Number(r.meta.changes);
+}
+
 export async function atomicStmts(db: D1Like, ops: AtomicOp[]): Promise<D1Stmt[]> {
   const out: D1Stmt[] = [];
   for (const op of ops) {

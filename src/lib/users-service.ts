@@ -8,7 +8,7 @@
 import { writeAudit } from "./audit";
 import { env } from "./env";
 import { normRole, ROLES, type Role } from "./roles";
-import { appendRows, batchUpdateValues, colLetter, readTab, toRow } from "./sheets";
+import { appendRows, readTab, toRow, updateById } from "./sheets";
 
 export class UserError extends Error {
   constructor(public status: number, message: string, public code: string, public fields?: Record<string, string>) { super(message); }
@@ -67,7 +67,8 @@ export async function saveUser(input: SaveUserInput, actor: string) {
 
   const prev = t.rows[idx];
   const rec = { ...prev, email, display_name: name, role, active: active ? "TRUE" : "FALSE", updated_at: now };
-  await batchUpdateValues([{ range: `'APP_USERS'!A${idx + 2}:${colLetter(t.headers.length - 1)}${idx + 2}`, values: [toRow(t.headers, rec)] }]);
+  const idCol = prev.user_id ? "user_id" : "email";
+  if (!(await updateById("APP_USERS", t.headers, idCol, prev[idCol], toRow(t.headers, rec)))) throw new UserError(404, "ไม่พบผู้ใช้นี้ (อาจถูกลบไปแล้ว) กรุณาโหลดใหม่", "NOT_FOUND");
   const changes = [prev.role !== role ? `role ${prev.role} → ${role}` : "", isActive(prev.active) !== active ? (active ? "เปิดใช้งาน" : "ระงับ") : "", norm(prev.email) !== email ? `อีเมล ${norm(prev.email)} → ${email}` : "", (prev.display_name ?? "") !== name ? "แก้ชื่อ" : ""].filter(Boolean);
   await writeAudit(actor, "user_update", "app_user", prev.user_id, `${email}: ${changes.join(" · ") || "ไม่มีการเปลี่ยนแปลง"}`);
   return { created: false };

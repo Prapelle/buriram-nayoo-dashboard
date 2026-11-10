@@ -4,7 +4,7 @@
  * - ว่าง = ไม่ตั้งเป้า (ไม่ใช่ 0)
  */
 import { writeAudit } from "./audit";
-import { appendRows, batchUpdateValues, colLetter, readTab, toRow } from "./sheets";
+import { appendRows, readTab, toRow, updateById } from "./sheets";
 
 export class TargetError extends Error {
   constructor(public status: number, message: string, public code: string, public fields?: Record<string, string>) { super(message); }
@@ -51,8 +51,7 @@ export async function saveTarget(input: SaveTargetInput, actor: string) {
   if (idx >= 0) {
     const prev = t.rows[idx];
     if (input.updated_at_seen !== undefined && (prev.updated_at ?? "") !== input.updated_at_seen) throw new TargetError(409, "เป้าหมายเดือนนี้ถูกแก้ไขไปแล้ว กรุณาโหลดใหม่ก่อนแก้ไข", "STALE");
-    const row = idx + 2;
-    await batchUpdateValues([{ range: `'MONTHLY_TARGETS'!A${row}:${colLetter(t.headers.length - 1)}${row}`, values: [toRow(t.headers, rec)] }]);
+    if (!(await updateById("MONTHLY_TARGETS", t.headers, "month", prev.month, toRow(t.headers, rec)))) throw new TargetError(409, "เป้าหมายเดือนนี้ถูกแก้ไขไปแล้ว กรุณาโหลดใหม่ก่อนแก้ไข", "STALE");
     await writeAudit(actor, "target_update", "target", v.month, `งบ ${prev.ad_budget_thb || "-"} → ${rec.ad_budget_thb || "-"} · เป้า Lead ${prev.lead_target || "-"} → ${rec.lead_target || "-"}`);
     return { created: false, target: toTarget(rec as unknown as Record<string, string>) };
   }

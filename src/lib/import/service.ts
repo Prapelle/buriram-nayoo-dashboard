@@ -1,5 +1,5 @@
 import { AREAS } from "../schema";
-import { appendRows, atomicWrite, batchGet, batchUpdateValues, colLetter, firstRowOf, readTabs, toRow, type AtomicOp } from "../sheets";
+import { appendRows, atomicWrite, batchGet, batchUpdateValues, colLetter, firstRowOf, readTabs, toRow, type AtomicOp, patchById } from "../sheets";
 import { readColumns } from "../tabdata";
 import { isIsoDate } from "./normalize";
 import { buildPlan, compareKeys, detectSpec, parseInput, periodsFromFilename, PlanError, type Ctx, type Existing, type Plan } from "./plan";
@@ -272,8 +272,8 @@ export async function deleteBatchData(batchId: string, actor: string, confirm: b
   const ops: AtomicOp[] = [{ deleteWhere: spec.tab, col: "source_batch_id", value: batchId }];
   for (const r of hit) if (r.source_batch_id !== batchId && r.record_id) ops.push({ deleteWhere: spec.tab, col: "record_id", value: r.record_id });
   await atomicWrite(ops);
-  const now = new Date().toISOString(), last = colLetter(B.headers.length - 1);
-  await batchUpdateValues(batches.map(({ b, i }) => ({ range: `'IMPORT_BATCHES'!A${i + 2}:${last}${i + 2}`, values: [toRow(B.headers, { ...b, status: "deleted", error_summary: `ลบข้อมูลโดย ${actor} ${now}` })] })));
+  const now = new Date().toISOString();
+  for (const { b } of batches) await patchById("IMPORT_BATCHES", "batch_id", b.batch_id, { status: "deleted", error_summary: `ลบข้อมูลโดย ${actor} ${now}` }); // ตาม batch_id ไม่ใช้เลขแถว
   await audit(actor, "import_batch_delete", batchId, `ลบข้อมูลรายงาน ${spec.label} ${summary.period} (${batch.filename}): ${hit.length} แถว · ชุดนำเข้า ${batches.length} ชุด`, now);
   return { ...summary, deleted: true };
 }

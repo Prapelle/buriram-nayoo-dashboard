@@ -1,4 +1,4 @@
-import { batchGet, batchUpdateValues, colLetter } from "./sheets";
+import { batchGet, batchUpdateValues, casRow, colLetter } from "./sheets";
 
 /**
  * ใช้พร้อมกันหลายคน (1/11/2026)
@@ -48,4 +48,15 @@ export async function dedupeCode(tab: string, headers: string[], codeCol: string
     code = fresh;
   }
   return code;
+}
+
+/**
+ * เขียนทั้งแถว "ตาม id" เฉพาะเมื่อ updated_at ยังเท่าที่เห็น (10/11/2026 — แทนการยืนยันเลขแถวแล้วเขียน)
+ * D1 = คำสั่งเดียว ไม่มีช่องว่างให้เขียนผิดแถว · ไม่ผ่าน → บอกว่าแถวถูกลบ (gone) หรือมีคนแก้ก่อน (stale)
+ */
+export async function casWrite(tab: string, headers: string[], idCol: string, id: string, expectUpdatedAt: string, values: (string | number)[]): Promise<"ok" | "gone" | "stale"> {
+  if (await casRow(tab, headers, idCol, id, expectUpdatedAt, values)) return "ok";
+  const c = colLetter(headers.indexOf(idCol));
+  const [col] = await batchGet([`'${tab}'!${c}:${c}`]);
+  return col.some((r, i) => i > 0 && String(r?.[0] ?? "") === id) ? "stale" : "gone";
 }

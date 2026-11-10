@@ -12,9 +12,9 @@ import {
 import { kindOf, PRODUCT_CATEGORIES, todayBkk, validateProduct, DEV_COLUMNS } from "./developers";
 import { normRole } from "./roles";
 import { productTypesOf, saveProduct, deleteProduct as deleteDevProduct, saveDeveloper, deleteDeveloper, DevError, addProductType } from "./developers-service";
-import { dedupeCode, guardRow } from "./row-guard";
+import { casWrite, dedupeCode } from "./row-guard";
 import { createCardsForJobs, renameProductInContent } from "./content-service";
-import { appendRows, atomicWrite, batchUpdateValues, casRow, colLetter, deleteRow, listTabs, readTabs, toRow } from "./sheets";
+import { appendRows, atomicWrite, casRow, patchById, readTabs, toRow, updateById } from "./sheets";
 
 export class AccError extends Error {
   constructor(public status: number, message: string, public code: string, public extra: { fields?: Record<string, string> } = {}) { super(message); }
@@ -32,7 +32,6 @@ async function load(): Promise<Record<string, Tab>> {
   return t;
 }
 const pick = (cols: string[], r: Rec): Rec => Object.fromEntries(cols.map((c) => [c, r[c] ?? ""]));
-const rowRange = (tab: string, headers: string[], row: number) => `'${tab}'!A${row}:${colLetter(headers.length - 1)}${row}`;
 const sheetErr = (e: unknown): never => { if (e instanceof AccError) throw e; if (e instanceof DevError) throw new AccError(e.status, e.message, e.code, { fields: e.extra.fields }); throw e; };
 
 const profileOf = (t: Record<string, Tab>, id: string): Rec => t[PROFILE_TAB].rows.find((r) => r.developer_id === id) ?? {};
@@ -146,10 +145,8 @@ async function rememberCustomer(t: Record<string, Tab>, doc: Rec, actor: string)
     const prev = i >= 0 ? t[PROFILE_TAB].rows[i] : {};
     const rec: Rec = { developer_id: doc.customer_id, contact_name: doc.contact_name || prev.contact_name || "", phone: doc.contact_phone || prev.phone || "", address: doc.customer_address || prev.address || "", tax_id: doc.customer_tax_id || prev.tax_id || "", updated_by: actor, updated_at: new Date().toISOString() };
     if (i >= 0 && ["contact_name", "phone", "address", "tax_id"].every((k) => rec[k] === (prev[k] ?? ""))) return;
-    if (i >= 0) {
-      const g = await guardRow(PROFILE_TAB, t[PROFILE_TAB].headers, "developer_id", doc.customer_id, i + 2);
-      if ("row" in g) await batchUpdateValues([{ range: rowRange(PROFILE_TAB, t[PROFILE_TAB].headers, g.row), values: [toRow(t[PROFILE_TAB].headers, rec)] }]);
-    } else await appendRows(PROFILE_TAB, [toRow(t[PROFILE_TAB].headers, rec)]);
+    if (i >= 0) await updateById(PROFILE_TAB, t[PROFILE_TAB].headers, "developer_id", doc.customer_id, toRow(t[PROFILE_TAB].headers, rec));
+    else await appendRows(PROFILE_TAB, [toRow(t[PROFILE_TAB].headers, rec)]);
     if (i >= 0) Object.assign(t[PROFILE_TAB].rows[i], rec); else t[PROFILE_TAB].rows.push(rec);
   } catch { /* จำไม่สำเร็จก็ไม่เป็นไร ครั้งหน้ากรอกใหม่ */ }
 }
@@ -182,9 +179,9 @@ export async function setDocStatus(id: string, status: string, actor: string) {
   if (!(MANUAL_STATUS as string[]).includes(status)) throw new AccError(422, "สถานะนี้ตั้งเองไม่ได้ (ชำระบางส่วน / ชำระแล้ว ระบบตั้งจากการยืนยันชำระเงิน)", "VALIDATION");
   if (Number(prev.paid_amount) > 0) throw new AccError(409, "เอกสารที่มีการชำระเงินแล้วเปลี่ยนสถานะเองไม่ได้", "LOCKED");
   const rec = { ...prev, status, updated_by: actor, updated_at: new Date().toISOString() };
-  const g = await guardRow("ACC_DOCS", t.ACC_DOCS.headers, "doc_id", id, i + 2);
-  if (!("row" in g)) throw new AccError(404, "ไม่พบเอกสาร", "NOT_FOUND");
-  await batchUpdateValues([{ range: rowRange("ACC_DOCS", t.ACC_DOCS.headers, g.row), values: [toRow(t.ACC_DOCS.headers, rec)] }]);
+  const w = await casWrite("ACC_DOCS", t.ACC_DOCS.headers, "doc_id", id, prev.updated_at, toRow(t.ACC_DOCS.headers, rec));
+  if (w === "gone") throw new AccError(404, "ไม่พบเอกสาร", "NOT_FOUND");
+  if (w === "stale") throw new AccError(409, "เอกสารนี้ถูกแก้ไขโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่", "STALE");
   await writeAudit(actor, "account_doc_status", "account_doc", id, `${prev.doc_no}: ${prev.status} → ${status}`);
   return { doc: pick(DOC_COLUMNS, rec) };
 }
@@ -315,8 +312,7 @@ async function createReceipt(t: Record<string, Tab>, src: Rec, pay: Rec, wholeIn
   await appendRows("ACC_LINES", lines.map((l) => toRow(t.ACC_LINES.headers, l)));
   t.ACC_DOCS.rows.push(base);
   if (pi >= 0) {
-    const g = await guardRow("ACC_PAYMENTS", t.ACC_PAYMENTS.headers, "payment_id", pay.payment_id, pi + 2);
-    if ("row" in g) { prevPay.receipt_doc_id = docId; await batchUpdateValues([{ range: rowRange("ACC_PAYMENTS", t.ACC_PAYMENTS.headers, g.row), values: [toRow(t.ACC_PAYMENTS.headers, prevPay)] }]); }
+    if (await patchById("ACC_PAYMENTS", "payment_id", pay.payment_id, { receipt_doc_id: docId })) prevPay.receipt_doc_id = docId;
   }
   await writeAudit(actor, "account_receipt", "account_doc", docId, `${base.doc_no} ← ${src.doc_no} รับ ${amount} (${pay.method})`);
   return base;
@@ -392,13 +388,10 @@ export async function deleteFile(fileId: string, actor: string) {
   return { deleted: fileId };
 }
 
-/** ลบแถวตามค่าคีย์ (ตรวจแถวก่อนลบทุกแถว · ลบจากล่างขึ้นบน) */
-async function deleteRowsBy(t: Record<string, Tab>, tab: string, idCol: string, ids: string[]) {
-  const set = new Set(ids);
-  const idx = t[tab].rows.map((r, k) => (set.has(r[idCol]) ? k + 2 : 0)).filter(Boolean).sort((a, b) => b - a);
-  if (!idx.length) return;
-  const sid = (await listTabs()).find((m) => m.title === tab)!.sheetId;
-  for (const r of idx) { const g = await guardRow(tab, t[tab].headers, idCol, t[tab].rows[r - 2][idCol], r); if ("row" in g) await deleteRow(sid, g.row); }
+/** ลบทุกแถวที่คอลัมน์คีย์ตรงกับค่าที่ระบุ (ลบตามค่า ไม่ใช้เลขแถว) */
+async function deleteRowsBy(_t: Record<string, Tab>, tab: string, idCol: string, ids: string[]) {
+  const live = [...new Set(ids)].filter(Boolean);
+  if (live.length) await atomicWrite(live.map((v) => ({ deleteWhere: tab, col: idCol, value: v })));
 }
 
 /**
@@ -429,7 +422,7 @@ export async function deleteDoc(id: string, actor: string) {
   await deleteRowsBy(t, "ACC_FILES", "doc_id", gone);
   if (doc.doc_type === "receipt") {
     const pi = t.ACC_PAYMENTS.rows.findIndex((p) => p.receipt_doc_id === id);
-    if (pi >= 0) { const g = await guardRow("ACC_PAYMENTS", t.ACC_PAYMENTS.headers, "payment_id", t.ACC_PAYMENTS.rows[pi].payment_id, pi + 2); if ("row" in g) await batchUpdateValues([{ range: rowRange("ACC_PAYMENTS", t.ACC_PAYMENTS.headers, g.row), values: [toRow(t.ACC_PAYMENTS.headers, { ...t.ACC_PAYMENTS.rows[pi], receipt_doc_id: "" })] }]); }
+    if (pi >= 0) await patchById("ACC_PAYMENTS", "payment_id", t.ACC_PAYMENTS.rows[pi].payment_id, { receipt_doc_id: "" });
   }
   if (!DELETE_RESTRICTED) {
     // โหมดทดสอบ: ลบ Job ของใบนี้ และถ้าสายเอกสารไม่เหลือ Job แล้ว ล้างธง "เริ่มงานแล้ว" ที่ใบแรก เพื่อทดสอบเริ่มงานซ้ำได้ (Product/ยอดขายที่เพิ่มให้ลูกค้าจากใบนี้ถูกลบตามด้วย)
@@ -437,8 +430,7 @@ export async function deleteDoc(id: string, actor: string) {
     const rootId = doc.root_id || doc.doc_id, ri = t.ACC_DOCS.rows.findIndex((d) => d.doc_id === rootId);
     const left = t.PRODUCTION_JOBS.rows.some((j) => j.job_id && !goneSet.has(j.doc_id) && t.ACC_DOCS.rows.some((d) => d.doc_id === j.doc_id && (d.root_id || d.doc_id) === rootId));
     if (ri >= 0 && !goneSet.has(rootId) && !left && t.ACC_DOCS.rows[ri].work_started_at) {
-      const g = await guardRow("ACC_DOCS", t.ACC_DOCS.headers, "doc_id", rootId, ri + 2);
-      if ("row" in g) await batchUpdateValues([{ range: rowRange("ACC_DOCS", t.ACC_DOCS.headers, g.row), values: [toRow(t.ACC_DOCS.headers, { ...t.ACC_DOCS.rows[ri], work_started_at: "" })] }]);
+      await patchById("ACC_DOCS", "doc_id", rootId, { work_started_at: "" });
     }
   }
   await deleteRowsBy(t, "ACC_DOCS", "doc_id", gone);
@@ -465,9 +457,7 @@ export async function updateJob(id: string, patch: { status?: string; done_idx?:
   if (patch.done_idx !== undefined) { const idx = [...new Set(patch.done_idx.split(",").map((x) => x.trim()).filter((x) => /^\d+$/.test(x) && Number(x) < n))].sort((a, b) => Number(a) - Number(b)); rec.done_idx = idx.join(","); }
   if (patch.owner !== undefined) rec.owner = patch.owner.trim().slice(0, 100);
   if (patch.note !== undefined) rec.note = patch.note.trim().slice(0, 1000);
-  const g = await guardRow("PRODUCTION_JOBS", t.PRODUCTION_JOBS.headers, "job_id", id, i + 2, prev.updated_at);
-  if (!("row" in g)) throw new AccError(409, "Job นี้ถูกแก้ไขหรือลบโดยผู้อื่น กรุณาโหลดใหม่", "STALE");
-  await batchUpdateValues([{ range: rowRange("PRODUCTION_JOBS", t.PRODUCTION_JOBS.headers, g.row), values: [toRow(t.PRODUCTION_JOBS.headers, rec)] }]);
+  if (!(await casRow("PRODUCTION_JOBS", t.PRODUCTION_JOBS.headers, "job_id", id, prev.updated_at, toRow(t.PRODUCTION_JOBS.headers, rec)))) throw new AccError(409, "Job นี้ถูกแก้ไขหรือลบโดยผู้อื่น กรุณาโหลดใหม่", "STALE");
   await writeAudit(actor, "production_job_update", "production_job", id, `${prev.job_code}: ${prev.status} → ${rec.status}`);
   return { job: pick(JOB_COLUMNS, rec) };
 }
@@ -503,8 +493,7 @@ export async function saveCustomer(input: Record<string, unknown>, actor: string
   if (!t[PROFILE_TAB].headers.includes("developer_id")) throw new AccError(409, "บันทึกชื่อ/ผู้ติดต่อ/เบอร์แล้ว แต่ยังเก็บที่อยู่และเลขผู้เสียภาษีไม่ได้ — ให้ Super Admin กด เตรียม Google Sheet แล้วบันทึกอีกครั้ง", "SHEET_NOT_READY");
   const i = t[PROFILE_TAB].rows.findIndex((r) => r.developer_id === dev.developer_id);
   const rec: Rec = { developer_id: dev.developer_id, contact_name: v.rec.contact_name, phone: v.rec.phone, address: v.rec.address, tax_id: v.rec.tax_id, updated_by: actor, updated_at: new Date().toISOString() };
-  if (i >= 0) { const g = await guardRow(PROFILE_TAB, t[PROFILE_TAB].headers, "developer_id", dev.developer_id, i + 2); if ("row" in g) await batchUpdateValues([{ range: rowRange(PROFILE_TAB, t[PROFILE_TAB].headers, g.row), values: [toRow(t[PROFILE_TAB].headers, rec)] }]); else await appendRows(PROFILE_TAB, [toRow(t[PROFILE_TAB].headers, rec)]); }
-  else await appendRows(PROFILE_TAB, [toRow(t[PROFILE_TAB].headers, rec)]);
+  if (!(i >= 0 && (await updateById(PROFILE_TAB, t[PROFILE_TAB].headers, "developer_id", dev.developer_id, toRow(t[PROFILE_TAB].headers, rec))))) await appendRows(PROFILE_TAB, [toRow(t[PROFILE_TAB].headers, rec)]);
   await writeAudit(actor, id ? "account_customer_update" : "account_customer_create", "account_customer", dev.developer_id, `${dev.dev_code} ${dev.company_name}`);
   return { customer: { developer_id: dev.developer_id, code: dev.dev_code, name: dev.company_name || dev.project_main }, created: !id };
 }
@@ -524,8 +513,7 @@ const TYPE_KEY = "developer_products";
 async function writeTypes(t: Record<string, Tab>, next: string[]) {
   const i = t.APP_CONFIG.rows.findIndex((r) => r.config_key === TYPE_KEY);
   const row = { config_key: TYPE_KEY, config_value: next.join("|"), description: "ชนิด Product ที่ขายให้ Developer (คั่นด้วย |)", updated_at: new Date().toISOString() };
-  if (i >= 0) await batchUpdateValues([{ range: rowRange("APP_CONFIG", t.APP_CONFIG.headers, i + 2), values: [toRow(t.APP_CONFIG.headers, row)] }]);
-  else await appendRows("APP_CONFIG", [toRow(t.APP_CONFIG.headers, row)]);
+  if (!(i >= 0 && (await updateById("APP_CONFIG", t.APP_CONFIG.headers, "config_key", TYPE_KEY, toRow(t.APP_CONFIG.headers, { ...t.APP_CONFIG.rows[i], ...row }))))) await appendRows("APP_CONFIG", [toRow(t.APP_CONFIG.headers, row)]);
 }
 const usage = (t: Record<string, Tab>, name: string) => ({ developers: t.DEVELOPER_PRODUCTS.rows.filter((r) => r.product_id && r.product === name).length, docs: t.ACC_LINES.rows.filter((r) => r.line_id && r.product === name).length });
 export async function listProducts() {
@@ -546,13 +534,11 @@ export async function renameProduct(from: unknown, to: unknown, actor: string) {
   if (!types.includes(old)) throw new AccError(404, "ไม่พบ Product นี้ (อาจถูกเปลี่ยนชื่อหรือลบไปแล้ว) กรุณาโหลดใหม่", "NOT_FOUND");
   if (types.some((x) => x !== old && x.toLowerCase() === n.toLowerCase())) throw new AccError(409, `มี Product "${n}" อยู่แล้ว`, "DUPLICATE", { fields: { name: "ชื่อนี้มีอยู่แล้ว" } });
   if (n === old) return { products: types.map((x) => ({ name: x, ...usage(t, x) })), updated: 0 };
-  const updates: { range: string; values: string[][] }[] = [];
-  for (const [tab, col] of [["DEVELOPER_PRODUCTS", "product"], ["ACC_LINES", "product"], ["PRODUCTION_JOBS", "product"]] as const) {
-    const h = t[tab].headers, c = h.indexOf(col); if (c < 0) continue;
-    t[tab].rows.forEach((r, k) => { if (r[col] === old) updates.push({ range: `'${tab}'!${colLetter(c)}${k + 2}`, values: [[n]] }); });
-  }
+  // แก้ชื่อตามค่าเดิม (คำสั่งเดียวต่อตาราง ไม่ใช้เลขแถว) · นับจำนวนรายการที่ใช้อยู่จากข้อมูลที่อ่านไว้
+  const TABS_USING = ["DEVELOPER_PRODUCTS", "ACC_LINES", "PRODUCTION_JOBS"] as const;
+  const updates = { length: TABS_USING.reduce((k, tab) => k + (t[tab].headers.includes("product") ? t[tab].rows.filter((r) => r.product === old).length : 0), 0) };
   await writeTypes(t, types.map((x) => (x === old ? n : x)));
-  if (updates.length) await batchUpdateValues(updates);
+  for (const tab of TABS_USING) if (t[tab].headers.includes("product")) await patchById(tab, "product", old, { product: n });
   try { await renameProductInContent(old, n); } catch { /* ตั้งค่า/การ์ด Content ตามไม่ทัน — ไม่กระทบการเปลี่ยนชื่อ */ }
   await writeAudit(actor, "developer_product_type", "config", TYPE_KEY, `เปลี่ยนชื่อ ${old} → ${n} (แก้ ${updates.length} รายการที่ใช้อยู่)`);
   const t2 = await load();

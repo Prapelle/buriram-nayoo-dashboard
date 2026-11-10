@@ -6,7 +6,7 @@
 import { batchGet, batchUpdateValues, colLetter, toRow } from "./sheets";
 import { addDays, type Rec } from "./content";
 import { getD1 } from "./d1";
-import { readTabs } from "./sheets";
+import { patchById, readTabs } from "./sheets";
 
 const TAB = "FB_PAGE_POSTS";
 const norm = (s: string) => s.toLowerCase().replace(/https?:\/\/\S+/g, " ").replace(/[\s\p{P}\p{S}]+/gu, "");
@@ -68,14 +68,10 @@ export async function matchFacebookPosts(actor: string): Promise<{ matched: numb
   const taken = new Set(t.rows.map((c) => c.post_id).filter(Boolean));
   const picks = pickMatches(cards, posts, taken);
   if (!picks.length) return { matched: 0, checked: cards.length };
-  const now = new Date().toISOString(), ups: { range: string; values: (string | number)[][] }[] = [];
-  const lastCol = colLetter(t.headers.length - 1);
-  for (const p of picks) {
-    const i = t.rows.findIndex((r) => r.card_id === p.card_id); if (i < 0) continue;
-    ups.push({ range: `'CONTENT_CARDS'!A${i + 2}:${lastCol}${i + 2}`, values: [toRow(t.headers, { ...t.rows[i], post_id: p.post_id, updated_by: actor, updated_at: now })] });
-  }
-  await batchUpdateValues(ups);
-  return { matched: ups.length, checked: cards.length };
+  // ใส่ Post ID ตาม card_id เฉพาะช่องที่เกี่ยว (ไม่เขียนทั้งแถวจากข้อมูลที่อ่านไว้ — ไม่ทับการย้าย/แก้การ์ดของคนอื่น)
+  const now = new Date().toISOString(); let n = 0;
+  for (const p of picks) if (await patchById("CONTENT_CARDS", "card_id", p.card_id, { post_id: p.post_id, updated_by: actor, updated_at: now })) n++;
+  return { matched: n, checked: cards.length };
 }
 
 export type PostMetrics = { post_id: string; permalink: string; publish_time: string; scope: "lifetime" | "daily" | "none"; as_of: string; views: number; reach: number; reactions: number; comments: number; shares: number; link_clicks: number; total_clicks: number };

@@ -1,6 +1,6 @@
 import { writeAudit } from "./audit";
 import { LINE_COLUMNS, validateLine, type Saved } from "./line-oa";
-import { appendRows, batchUpdateValues, colLetter, readTabs, toRow } from "./sheets";
+import { appendRows, readTabs, toRow, updateById } from "./sheets";
 
 const TAB = "LINE_OA_MONTHLY";
 
@@ -39,8 +39,8 @@ export async function saveLine(input: Record<string, unknown>, actor: string) {
   if (seen === undefined) throw new LineError(409, `เดือน ${v.rec.report_month} มีข้อมูลอยู่แล้ว กรุณาเปิดแก้ไขเดือนเดิม`, "EXISTS");
   if (seen !== ex.updated_at) throw new LineError(409, "ข้อมูลเดือนนี้ถูกแก้ไขโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่ก่อนแก้ไข", "STALE");
   const rec: Saved = { ...v.rec, record_id: ex.record_id, created_by: ex.created_by, created_at: ex.created_at, updated_at: now };
-  const n = idx + 2;
-  await batchUpdateValues([{ range: `'${TAB}'!A${n}:${colLetter(t.headers.length - 1)}${n}`, values: [toRow(t.headers, rec)] }]);
+  const idCol = ex.record_id ? "record_id" : "report_month";
+  if (!(await updateById(TAB, t.headers, idCol, String(ex[idCol]), toRow(t.headers, rec)))) throw new LineError(409, "ข้อมูลเดือนนี้ถูกแก้ไขโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่ก่อนแก้ไข", "STALE");
   await writeAudit(actor, "line_oa_update", "line_oa_month", String(rec.report_month), `แก้ไขข้อมูล LINE OA เดือน ${rec.report_month}`);
   return { created: false, record: rec };
 }

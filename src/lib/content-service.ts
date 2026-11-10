@@ -9,15 +9,14 @@ import { addDays, validDate, CARD_COLUMNS, WAIT_COLUMNS, waitKindsOf, HISTORY_CO
 import { todayBkk } from "./developers";
 import { productTypesOf } from "./developers-service";
 import { normRole } from "./roles";
-import { dedupeCode, guardRow } from "./row-guard";
-import { appendRows, batchUpdateValues, casRow, colLetter, deleteRow, listTabs, readTabs, toRow } from "./sheets";
+import { dedupeCode } from "./row-guard";
+import { appendRows, atomicWrite, casRow, deleteWhere, patchById, readTabs, toRow, updateById } from "./sheets";
 
 export class ContentError extends Error {
   constructor(public status: number, message: string, public code: string, public extra: { fields?: Record<string, string> } = {}) { super(message); }
 }
 type Tab = { headers: string[]; rows: Rec[] };
 const TABS = ["CONTENT_CARDS", "CONTENT_MEMBERS", "CONTENT_HISTORY", "PRODUCT_SETTINGS", "CONTENT_WAITS", "PERF_HOLIDAYS", "APP_USERS", "DEVELOPERS", "APP_CONFIG"];
-const rowRange = (tab: string, headers: string[], row: number) => `'${tab}'!A${row}:${colLetter(headers.length - 1)}${row}`;
 const blank = (cols: string[]): Rec => Object.fromEntries(cols.map((c) => [c, ""]));
 const nameOf = (u: Rec) => (u.display_name || u.email.split("@")[0]).trim();
 
@@ -67,10 +66,14 @@ function checkMembers(t: Record<string, Tab>, input: { email: string }[]) {
   for (const m of input) if (!known.has(m.email)) throw new ContentError(422, `ไม่พบผู้ใช้ ${m.email} (หรือถูกปิดใช้งาน)`, "VALIDATION", { fields: { members: `ไม่พบผู้ใช้ ${m.email}` } });
 }
 async function replaceMembers(t: Record<string, Tab>, cardId: string, input: { email: string; duty: string; is_main: boolean }[], now: string) {
-  const sid = (await listTabs()).find((x) => x.title === "CONTENT_MEMBERS")?.sheetId;
-  const old = t.CONTENT_MEMBERS.rows.map((r, i) => ({ r, row: i + 2 })).filter((x) => x.r.card_id === cardId).reverse();
-  if (sid !== undefined) for (const o of old) await deleteRow(sid, o.row); // ลบจากล่างขึ้นบน เลขแถวไม่เลื่อน
-  if (input.length) await appendRows("CONTENT_MEMBERS", input.map((m) => toRow(MEMBER_COLUMNS, { ...blank(MEMBER_COLUMNS), member_id: crypto.randomUUID(), card_id: cardId, email: m.email, display_name: userName(t, m.email), duty: m.duty, is_main: m.is_main ? "TRUE" : "FALSE", created_at: now })));
+  // ลบของเดิม + ใส่ชุดใหม่ ตาม card_id ในชุดเดียว (ไม่ใช้เลขแถว — คนอื่นแก้การ์ดอื่นพร้อมกันไม่กระทบ)
+  await atomicWrite([{ deleteWhere: "CONTENT_MEMBERS", col: "card_id", value: cardId },
+    { insert: "CONTENT_MEMBERS", rows: input.map((m) => toRow(MEMBER_COLUMNS, { ...blank(MEMBER_COLUMNS), member_id: crypto.randomUUID(), card_id: cardId, email: m.email, display_name: userName(t, m.email), duty: m.duty, is_main: m.is_main ? "TRUE" : "FALSE", created_at: now })) }]);
+}
+/** แก้การ์ดเฉพาะเมื่อยังไม่มีใครแก้ก่อน (คำสั่งเดียวตาม card_id) — ไม่ผ่าน = มีคนแก้/ลบไปแล้ว */
+async function casCard(t: Record<string, Tab>, cur: Rec, rec: Rec) {
+  const H = t.CONTENT_CARDS.headers.length ? t.CONTENT_CARDS.headers : CARD_COLUMNS;
+  if (!(await casRow("CONTENT_CARDS", H, "card_id", cur.card_id, cur.updated_at, toRow(H, rec)))) throw new ContentError(409, "การ์ดนี้ถูกแก้ไขหรือลบโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่", "STALE");
 }
 
 async function logMove(cardId: string, from: string, to: string, actor: string, at: string, note = "") {
@@ -108,12 +111,10 @@ export async function saveCard(input: Record<string, unknown>, actor: string, id
   const cur = t.CONTENT_CARDS.rows[i];
   if (String(input.updated_at_seen ?? "") !== cur.updated_at) throw new ContentError(409, "การ์ดนี้ถูกแก้ไขโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่", "STALE");
   if (!c.sales_tag && cur.sales_tag === "TRUE" && STAGES.indexOf(cur.stage as never) >= 7) throw new ContentError(409, "การ์ดอยู่ในช่วงรายงานลูกค้า เอาแท็กงานขายออกไม่ได้ — ย้ายกลับมาช่วงผลิตก่อน", "IN_REPORT");
-  const g = await guardRow("CONTENT_CARDS", t.CONTENT_CARDS.headers, "card_id", id, i + 2, cur.updated_at);
-  if ("error" in g) throw new ContentError(409, g.error === "gone" ? "ไม่พบการ์ด (อาจถูกลบ)" : "การ์ดนี้ถูกแก้ไขโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่", g.error === "gone" ? "NOT_FOUND" : "STALE");
   const rec: Rec = { ...cur, ...fields, updated_by: actor, updated_at: now };
   // ถ้าเปลี่ยนระยะติดตามผลหลังเผยแพร่แล้ว คำนวณวันครบกำหนดใหม่
   if (rec.published_at && rec.sales_tag === "TRUE" && Number(rec.follow_days) >= 1 && rec.report_due_date && rec.stage !== "ส่งให้ลูกค้าแล้ว") rec.report_due_date = addDays(rec.published_at, Number(rec.follow_days));
-  await batchUpdateValues([{ range: rowRange("CONTENT_CARDS", t.CONTENT_CARDS.headers, g.row), values: [toRow(t.CONTENT_CARDS.headers, rec)] }]);
+  await casCard(t, cur, rec);
   await replaceMembers(t, id, c.members, now);
   await writeAudit(actor, "content_update", "content_card", id, `${cur.card_code} ${rec.title}`);
   return { card_id: id, card_code: cur.card_code };
@@ -148,14 +149,11 @@ export async function moveCard(id: string, to: string, actor: string, updatedAtS
   const plan = planMove(cur, to, todayBkk());
   if (!plan.ok) throw new ContentError(plan.status, plan.message, plan.code);
   if (plan.noop) return { stage: cur.stage };
-  const g = await guardRow("CONTENT_CARDS", t.CONTENT_CARDS.headers, "card_id", id, i + 2, cur.updated_at);
-  if ("error" in g) throw new ContentError(409, g.error === "gone" ? "ไม่พบการ์ด (อาจถูกลบ)" : "การ์ดนี้ถูกแก้ไขโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่", g.error === "gone" ? "NOT_FOUND" : "STALE");
   const now = new Date().toISOString(), final = plan.steps[plan.steps.length - 1];
   const rec: Rec = { ...cur, ...plan.patch, stage: final, stage_at: now, updated_by: actor, updated_at: now };
-  await batchUpdateValues([{ range: rowRange("CONTENT_CARDS", t.CONTENT_CARDS.headers, g.row), values: [toRow(t.CONTENT_CARDS.headers, rec)] }]);
+  await casCard(t, cur, rec);
   if (final === "ส่งให้ลูกค้าแล้ว") { // ส่งรายงานแล้ว = ไม่ต้องรอลูกค้าต่อ: ปิดที่ค้างอยู่ (กันป้ายเตือนค้างบนงานที่เสร็จแล้ว)
-    const open = t.CONTENT_WAITS.rows.map((w, k) => ({ w, k })).filter((x) => x.w.card_id === id && !x.w.ended_at);
-    if (open.length) await batchUpdateValues(open.map((x) => ({ range: rowRange("CONTENT_WAITS", t.CONTENT_WAITS.headers, x.k + 2), values: [toRow(t.CONTENT_WAITS.headers, { ...x.w, ended_at: now, ended_by: actor })] })));
+    for (const w of t.CONTENT_WAITS.rows.filter((x) => x.card_id === id && !x.ended_at)) await patchById("CONTENT_WAITS", "wait_id", w.wait_id, { ended_at: now, ended_by: actor });
   }
   let prev = cur.stage;
   for (const s of plan.steps) { await logMove(id, prev, s, actor, now, s !== to ? "เลื่อนอัตโนมัติ (งานขาย)" : ""); prev = s; }
@@ -181,10 +179,10 @@ export async function startWait(id: string, kindRaw: unknown, actor: string) {
 }
 export async function endWait(id: string, actor: string) {
   const t = await load(), c = await waitGuard(t, id, actor);
-  const open = t.CONTENT_WAITS.rows.map((w, i) => ({ w, i })).filter((x) => x.w.card_id === id && !x.w.ended_at); // ปกติมีแถวเดียว · กดพร้อมกันอาจได้สองแถว → ปิดทั้งหมด
+  const open = t.CONTENT_WAITS.rows.filter((x) => x.card_id === id && !x.ended_at); // ปกติมีแถวเดียว · กดพร้อมกันอาจได้สองแถว → ปิดทั้งหมด
   if (!open.length) throw new ContentError(409, "การ์ดนี้ไม่ได้รอลูกค้าอยู่", "NOT_WAITING");
-  const w = open[0].w, now = new Date().toISOString();
-  await batchUpdateValues(open.map((x) => ({ range: rowRange("CONTENT_WAITS", t.CONTENT_WAITS.headers, x.i + 2), values: [toRow(t.CONTENT_WAITS.headers, { ...x.w, ended_at: now, ended_by: actor })] })));
+  const w = open[0], now = new Date().toISOString();
+  for (const x of open) await patchById("CONTENT_WAITS", "wait_id", x.wait_id, { ended_at: now, ended_by: actor });
   const days = workdaysBetween(dayOf(w.started_at), dayOf(now), holidaysOf(t));
   await writeAudit(actor, "content_wait_end", "content_card", id, `${c.card_code} ลูกค้าตอบ: ${w.kind} (${days} วันทำการ)`);
   return { ok: true, days };
@@ -194,14 +192,8 @@ export async function deleteCard(id: string, actor: string) {
   const t = await load(), i = t.CONTENT_CARDS.rows.findIndex((r) => r.card_id === id);
   if (i < 0) throw new ContentError(404, "ไม่พบการ์ด (อาจถูกลบแล้ว)", "NOT_FOUND");
   const cur = t.CONTENT_CARDS.rows[i];
-  const g = await guardRow("CONTENT_CARDS", t.CONTENT_CARDS.headers, "card_id", id, i + 2);
-  if ("error" in g) throw new ContentError(404, "ไม่พบการ์ด (อาจถูกลบแล้ว)", "NOT_FOUND");
-  const tabs = await listTabs(), sid = (n: string) => tabs.find((x) => x.title === n)!.sheetId;
-  await replaceMembers(t, id, [], new Date().toISOString());
-  for (const w of t.CONTENT_WAITS.rows.map((r, k) => ({ r, row: k + 2 })).filter((x) => x.r.card_id === id).reverse()) await deleteRow(sid("CONTENT_WAITS"), w.row);
-  const hist = t.CONTENT_HISTORY.rows.map((r, k) => ({ r, row: k + 2 })).filter((x) => x.r.card_id === id).reverse();
-  for (const h of hist) await deleteRow(sid("CONTENT_HISTORY"), h.row);
-  await deleteRow(sid("CONTENT_CARDS"), g.row);
+  await atomicWrite([{ deleteWhere: "CONTENT_MEMBERS", col: "card_id", value: id }, { deleteWhere: "CONTENT_WAITS", col: "card_id", value: id },
+    { deleteWhere: "CONTENT_HISTORY", col: "card_id", value: id }, { deleteWhere: "CONTENT_CARDS", col: "card_id", value: id }]);
   await writeAudit(actor, "content_delete", "content_card", id, `${cur.card_code} ${cur.title}`);
 }
 
@@ -217,8 +209,7 @@ export async function saveProductSetting(product: string, countRaw: unknown, day
   if (Object.keys(fields).length) throw new ContentError(422, "ข้อมูลไม่ถูกต้อง", "VALIDATION", { fields });
   const rec: Rec = { product, content_count: String(count), report_days: String(days), updated_by: actor, updated_at: new Date().toISOString() };
   const i = t.PRODUCT_SETTINGS.rows.findIndex((r) => r.product === product);
-  if (i >= 0) await batchUpdateValues([{ range: rowRange("PRODUCT_SETTINGS", t.PRODUCT_SETTINGS.headers, i + 2), values: [toRow(t.PRODUCT_SETTINGS.headers, rec)] }]);
-  else await appendRows("PRODUCT_SETTINGS", [toRow(SETTING_COLUMNS, rec)]);
+  if (!(i >= 0 && (await updateById("PRODUCT_SETTINGS", t.PRODUCT_SETTINGS.headers, "product", product, toRow(t.PRODUCT_SETTINGS.headers, rec))))) await appendRows("PRODUCT_SETTINGS", [toRow(SETTING_COLUMNS, rec)]);
   await writeAudit(actor, "content_product_setting", "config", product, `${product}: โพสต์ ${count} · ติดตามผล ${days} วัน`);
   return { product, content_count: count, report_days: days };
 }
@@ -226,10 +217,8 @@ export async function saveProductSetting(product: string, countRaw: unknown, day
 /** เปลี่ยนชื่อ Product → ตามไปแก้ตั้งค่า + การ์ด (best-effort เรียกจากที่เปลี่ยนชื่อ) */
 export async function renameProductInContent(from: string, to: string) {
   if (!(await getD1())) return;
-  const t = await load(), updates: { range: string; values: (string | number)[][] }[] = [];
-  t.PRODUCT_SETTINGS.rows.forEach((r, i) => { if (r.product === from) updates.push({ range: rowRange("PRODUCT_SETTINGS", t.PRODUCT_SETTINGS.headers, i + 2), values: [toRow(t.PRODUCT_SETTINGS.headers, { ...r, product: to })] }); });
-  t.CONTENT_CARDS.rows.forEach((r, i) => { if (r.product === from) updates.push({ range: rowRange("CONTENT_CARDS", t.CONTENT_CARDS.headers, i + 2), values: [toRow(t.CONTENT_CARDS.headers, { ...r, product: to })] }); });
-  if (updates.length) await batchUpdateValues(updates);
+  await patchById("PRODUCT_SETTINGS", "product", from, { product: to });
+  await patchById("CONTENT_CARDS", "product", from, { product: to });
 }
 
 /** เปิด Job แล้วสร้างการ์ดตามจำนวนโพสต์ของ Product (งานขาย) — ซ้ำ job เดิมไม่สร้างเพิ่ม · ไม่มี D1 / ไม่ตั้งจำนวน = ข้าม */
@@ -284,8 +273,7 @@ export async function markReports(ids: string[], stage: string, link: string, ac
   for (const id of new Set(ids)) {
     try {
       if (l) { // ใส่ลิงก์ก่อนย้าย
-        const t = await load(), i = t.CONTENT_CARDS.rows.findIndex((r) => r.card_id === id);
-        if (i >= 0) await batchUpdateValues([{ range: rowRange("CONTENT_CARDS", t.CONTENT_CARDS.headers, i + 2), values: [toRow(t.CONTENT_CARDS.headers, { ...t.CONTENT_CARDS.rows[i], report_link: l, updated_by: actor, updated_at: new Date().toISOString() })] }]);
+        await patchById("CONTENT_CARDS", "card_id", id, { report_link: l, updated_by: actor, updated_at: new Date().toISOString() });
       }
       await moveCard(id, stage, actor); done.push(id);
     } catch (e) { skipped.push({ card_id: id, reason: e instanceof Error ? e.message : "ไม่สำเร็จ" }); }

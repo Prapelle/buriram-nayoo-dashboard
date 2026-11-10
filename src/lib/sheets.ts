@@ -133,3 +133,45 @@ export async function atomicWrite(ops: AtomicOp[]) {
     for (const r of hits.sort((a, b) => b - a)) await deleteRow(sid, r);
   }
 }
+
+/**
+ * เขียน/ลบ "ตาม id" (10/11/2026) — ไม่พึ่งเลขแถวที่อ่านไว้ก่อนหน้า จึงไม่แก้/ลบผิดแถวเมื่อหลายคนใช้พร้อมกัน
+ * D1: คำสั่งเดียวต่อแถว · Google Sheets (สำรอง/เทสต์): หาแถวจาก id ณ ตอนเขียน
+ */
+async function sheetRowsOf(tab: string, col: string, value: string) {
+  const t = await readTab(tab);
+  return { t, hits: t.rows.map((r, i) => (r[col] === value ? i + 2 : 0)).filter(Boolean) };
+}
+/** แก้ทั้งแถวตาม id · คืน false ถ้าไม่พบแถว (ถูกลบไปแล้ว) */
+export async function updateById(tab: string, headers: string[], idCol: string, id: string, values: (string | number)[]): Promise<boolean> {
+  const { db, tabs, state } = await route();
+  assertWritable(state, tab);
+  if (tabs.has(tab)) return (await D.updateById(db!, tab, idCol, id, values)) > 0;
+  const { hits } = await sheetRowsOf(tab, idCol, id);
+  if (!hits[0]) return false;
+  await G.batchUpdateValues([{ range: `'${tab}'!A${hits[0]}:${colLetter(headers.length - 1)}${hits[0]}`, values: [values] }]);
+  return true;
+}
+/** แก้บางช่องของทุกแถวที่ idCol = id · คืน false ถ้าไม่พบแถว */
+export async function patchById(tab: string, idCol: string, id: string, patch: Record<string, string | number>): Promise<boolean> {
+  const { db, tabs, state } = await route();
+  assertWritable(state, tab);
+  if (tabs.has(tab)) return (await D.patchById(db!, tab, idCol, id, patch)) > 0;
+  const { t, hits } = await sheetRowsOf(tab, idCol, id);
+  if (!hits[0]) return false;
+  const data = hits.flatMap((row) => Object.entries(patch).map(([c, v]) => { const k = t.headers.indexOf(c); if (k < 0) throw new Error(`แท็บ ${tab} ไม่มีคอลัมน์ ${c}`); return { range: `'${tab}'!${colLetter(k)}${row}`, values: [[v]] }; }));
+  await G.batchUpdateValues(data);
+  return true;
+}
+/** ลบทุกแถวที่คอลัมน์ col = value · คืนจำนวนแถวที่ลบ */
+export async function deleteWhere(tab: string, col: string, value: string): Promise<number> {
+  const { db, tabs, state } = await route();
+  assertWritable(state, tab);
+  if (tabs.has(tab)) return D.deleteWhere(db!, tab, col, value);
+  const { hits } = await sheetRowsOf(tab, col, value);
+  if (!hits.length) return 0;
+  const sid = (await G.listTabs()).find((m) => m.title === tab)?.sheetId;
+  if (sid === undefined) return 0;
+  for (const r of hits.sort((a, b) => b - a)) await G.deleteRow(sid, r);
+  return hits.length;
+}

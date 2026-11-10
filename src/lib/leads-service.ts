@@ -1,13 +1,13 @@
 import { normRole } from "./roles";
 import { canonChannel } from "./dashboard";
-import { dedupeCode, guardRow } from "./row-guard";
+import { casWrite, dedupeCode } from "./row-guard";
 import { writeAudit } from "./audit";
 import { checkStaff, followupRow, leadStatusChanges, mergeStaff, staffUserNames } from "./perf";
 import { logFollowup } from "./perf-log";
 import { logLeadStatus } from "./perf-service";
 import { CALL_DEFAULT, CALL_STATUS, isSellerLead, normCall, SELL_DEFAULT, SELL_STATUS } from "./lead-options";
 import { areaLabel, AREA_SUGGEST, contactableFor, findDuplicates, LEAD_COLUMNS, leadStatusOf, nextLeadCode, normalizeEmail, normalizeLine, normalizePhone, pipelineOf, resolveNeedStatus, stampStatus, statusFieldOf, todayBkk, validateLead, type DupMatch, type Lead } from "./leads";
-import { appendRows, batchUpdateValues, colLetter, deleteRow, listTabs, readTab, readTabs, toRow } from "./sheets";
+import { appendRows, deleteWhere, readTab, readTabs, toRow, updateById } from "./sheets";
 import { readColumns } from "./tabdata";
 import { diffProps, PROP_COLUMNS, validateProps, type LeadProperty } from "./lead-properties";
 import type { Role } from "./roles";
@@ -33,16 +33,13 @@ type PropDiff = ReturnType<typeof diffProps>;
 /** เขียนทรัพย์ของ Lead หลังบันทึก Lead แล้ว: แก้ → ลบ (จากล่างขึ้นบน ยืนยันแถวก่อนลบ) → เพิ่ม */
 async function applyProps(leadId: string, d: PropDiff, actor: string, now: string) {
   if (!d.add.length && !d.update.length && !d.remove.length) return;
-  const t = await readTab("LEAD_PROPERTIES"); const H = t.headers; const last = colLetter(H.length - 1);
-  const idxOf = (id: string) => t.rows.findIndex((r) => r.property_id === id);
-  const upd = d.update.map((u) => { const i = idxOf(u.property_id!); if (i < 0) throw new LeadError(409, "ทรัพย์บางรายการถูกแก้ไข/ลบโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่", "STALE"); return { range: `'LEAD_PROPERTIES'!A${i + 2}:${last}${i + 2}`, values: [toRow(H, { ...t.rows[i], url: u.url, status: u.status, updated_by: actor, updated_at: now })] }; });
-  if (upd.length) await batchUpdateValues(upd);
-  if (d.remove.length) {
-    const sheet = (await listTabs()).find((x) => x.title === "LEAD_PROPERTIES");
-    if (!sheet) throw new LeadError(409, "ไม่พบแท็บ LEAD_PROPERTIES กรุณากด เตรียม Google Sheet", "SHEET_NOT_READY");
-    const rows = d.remove.map((r) => ({ id: r.property_id, row: idxOf(r.property_id) + 2 })).filter((x) => x.row >= 2).sort((a, b) => b.row - a.row);
-    for (const r of rows) { const g = await guardRow("LEAD_PROPERTIES", H, "property_id", r.id, r.row); if ("row" in g) await deleteRow(sheet.sheetId, g.row); }
+  const t = await readTab("LEAD_PROPERTIES"); const H = t.headers;
+  // แก้/ลบตาม property_id (ไม่ใช้เลขแถว)
+  for (const u of d.update) {
+    const cur = t.rows.find((r) => r.property_id === u.property_id);
+    if (!cur || !(await updateById("LEAD_PROPERTIES", H, "property_id", u.property_id!, toRow(H, { ...cur, url: u.url, status: u.status, updated_by: actor, updated_at: now })))) throw new LeadError(409, "ทรัพย์บางรายการถูกแก้ไข/ลบโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่", "STALE");
   }
+  for (const r of d.remove) if (r.property_id) await deleteWhere("LEAD_PROPERTIES", "property_id", r.property_id);
   if (d.add.length) await appendRows("LEAD_PROPERTIES", d.add.map((a) => toRow(H, { property_id: crypto.randomUUID(), lead_id: leadId, url: a.url, status: a.status, created_by: actor, created_at: now, updated_by: actor, updated_at: now })));
 }
 const propSummary = (d: PropDiff | null) => d ? [d.add.length ? `ทรัพย์ +${d.add.length}` : "", d.update.length ? `แก้ทรัพย์ ${d.update.length}` : "", d.remove.length ? `ลบทรัพย์ ${d.remove.length}` : ""].filter(Boolean).join(" · ") : "";
@@ -84,11 +81,11 @@ export async function saveLead(input: Record<string, unknown>, actor: string, ro
   const today = todayBkk();
   const leadId = typeof input.lead_id === "string" && input.lead_id ? input.lead_id : "";
 
-  let prev: Lead | null = null; let rowNo = 0;
+  let prev: Lead | null = null;
   if (leadId) {
     const i = rows.findIndex((r) => r.lead_id === leadId);
     if (i < 0) throw new LeadError(404, "ไม่พบ Lead นี้ (อาจถูกลบออกจาก Sheet)", "NOT_FOUND");
-    prev = pick(rows[i]); rowNo = i + 2;
+    prev = pick(rows[i]);
     if (input.updated_at_seen !== prev.updated_at) throw new LeadError(409, "Lead นี้ถูกแก้ไขโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่ก่อนแก้ไข", "STALE");
   }
 
@@ -146,8 +143,7 @@ export async function saveLead(input: Record<string, unknown>, actor: string, ro
     return { created: true, lead: rec };
   }
   const rec: Lead = { ...v.rec, ...stamps, lead_id: prev.lead_id, lead_code: prev.lead_code, created_by: prev.created_by, created_at: prev.created_at, updated_by: actor, updated_at: now };
-  rowNo = await safeRow(tab.headers, prev.lead_id, rowNo, prev.updated_at);
-  await batchUpdateValues([{ range: `'LEADS'!A${rowNo}:${colLetter(tab.headers.length - 1)}${rowNo}`, values: [toRow(tab.headers, rec)] }]);
+  await writeLead(tab.headers, prev.lead_id, prev.updated_at, rec);
   if (pd) await applyProps(rec.lead_id, pd, actor, now);
   const moved = leadStatusChanges(prev, rec, STATUS_DEFAULTS, logFieldOf(rec));
   await logLeadStatus(moved, rec, actor, now);
@@ -180,23 +176,22 @@ export async function deleteLead(leadId: string, updatedAtSeen: string, actor: s
     const cfg = t.APP_CONFIG, idx = cfg.rows.findIndex((r) => r.config_key === key);
     const now = new Date().toISOString();
     if (idx < 0) await appendRows("APP_CONFIG", [toRow(cfg.headers, { config_key: key, config_value: String(num), description: "เลขรหัส Lead สูงสุดที่เคยออกแล้วแต่ถูกลบ (กันใช้รหัสซ้ำ)", updated_at: now })]);
-    else if (num > (Number(cfg.rows[idx].config_value) || 0)) await batchUpdateValues([{ range: `'APP_CONFIG'!A${idx + 2}:${colLetter(cfg.headers.length - 1)}${idx + 2}`, values: [toRow(cfg.headers, { ...cfg.rows[idx], config_value: String(num), updated_at: now })] }]);
+    else if (num > (Number(cfg.rows[idx].config_value) || 0)) await updateById("APP_CONFIG", cfg.headers, "config_key", key, toRow(cfg.headers, { ...cfg.rows[idx], config_value: String(num), updated_at: now }));
   }
-  const tab = (await listTabs()).find((x) => x.title === "LEADS");
-  if (!tab) throw new LeadError(409, "ไม่พบแท็บ LEADS", "SHEET_NOT_READY");
-  await deleteRow(tab.sheetId, await safeRow(t.LEADS.headers, leadId, i + 2, row.updated_at));
+  // จองแถว (ต้องยังไม่มีใครแก้) แล้วลบตาม lead_id
+  await writeLead(t.LEADS.headers, leadId, row.updated_at, { ...row, updated_at: new Date().toISOString() });
+  await deleteWhere("LEADS", "lead_id", leadId);
   const props = await loadProps(); const mine = props.rows.filter((p) => p.lead_id === leadId);
   if (mine.length) await applyProps(leadId, { add: [], update: [], remove: mine, unknown: [] }, actor, new Date().toISOString()); // ทรัพย์ของ Lead ที่ลบ
   await writeAudit(actor, "lead_delete", "lead", leadId, `ลบ ${row.lead_code} (${row.source_channel}, ${row.status})`);
   return { deleted: true, lead_code: row.lead_code };
 }
 
-/** ยืนยันแถวก่อนเขียน/ลบ (ใช้พร้อมกันหลายคน): แถวเลื่อน → ใช้แถวใหม่ · ถูกลบ → 404 · มีคนแก้ก่อน → 409 */
-async function safeRow(headers: string[], id: string, row: number, updatedAt: string) {
-  const g = await guardRow("LEADS", headers, "lead_id", id, row, updatedAt);
-  if ("row" in g) return g.row;
-  if (g.error === "gone") throw new LeadError(404, "ไม่พบ Lead นี้แล้ว (อาจถูกผู้อื่นลบไป) กรุณาโหลดใหม่", "NOT_FOUND");
-  throw new LeadError(409, "Lead นี้ถูกแก้ไขโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่ก่อนแก้ไข", "STALE");
+/** เขียน Lead ตาม lead_id เฉพาะเมื่อยังไม่มีใครแก้ก่อน (ใช้พร้อมกันหลายคน): ถูกลบ → 404 · มีคนแก้ก่อน → 409 */
+async function writeLead(headers: string[], id: string, updatedAt: string, rec: Record<string, string>) {
+  const r = await casWrite("LEADS", headers, "lead_id", id, updatedAt, toRow(headers, rec));
+  if (r === "gone") throw new LeadError(404, "ไม่พบ Lead นี้แล้ว (อาจถูกผู้อื่นลบไป) กรุณาโหลดใหม่", "NOT_FOUND");
+  if (r === "stale") throw new LeadError(409, "Lead นี้ถูกแก้ไขโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่ก่อนแก้ไข", "STALE");
 }
 
 export type StatusField = "sell_status" | "call_status";
@@ -211,7 +206,7 @@ export async function changeLeadStatus(leadId: string, field: StatusField, value
   if (!tab.headers.includes(field)) throw new LeadError(409, "แท็บ LEADS ยังไม่พร้อม กรุณากด เตรียม Google Sheet", "SHEET_NOT_READY");
   const i = tab.rows.findIndex((r) => r.lead_id === leadId);
   if (i < 0) throw new LeadError(404, "ไม่พบ Lead นี้ (อาจถูกลบออกจาก Sheet)", "NOT_FOUND");
-  const prev = pick(tab.rows[i]); const rowNo = i + 2;
+  const prev = pick(tab.rows[i]);
   if (field === "sell_status" && statusFieldOf(prev.need) !== "sell_status") throw new LeadError(409, "Lead นี้ไม่ใช่ Need = ขาย จึงไม่มี Sell Status", "NOT_SELL");
   if (field === "call_status" && !prev.need) throw new LeadError(409, "Lead นี้ยังไม่ระบุ Need กรุณาไปที่หน้า Leads เพื่อเลือก Need ก่อน", "NO_NEED");
   if (updatedAtSeen !== prev.updated_at) throw new LeadError(409, "Lead นี้ถูกแก้ไขโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่ก่อนแก้ไข", "STALE");
@@ -229,8 +224,7 @@ export async function changeLeadStatus(leadId: string, field: StatusField, value
   if (field === "call_status") rec.contactable = contactableFor(value, prev.contactable);
   rec.status = pipelineOf(rec);
   Object.assign(rec, stampStatus(prev, rec, todayBkk()), { updated_by: actor, updated_at: new Date().toISOString() });
-  const at = await safeRow(tab.headers, leadId, rowNo, prev.updated_at);
-  await batchUpdateValues([{ range: `'LEADS'!A${at}:${colLetter(tab.headers.length - 1)}${at}`, values: [toRow(tab.headers, rec)] }]);
+  await writeLead(tab.headers, leadId, prev.updated_at, rec);
   await logLeadStatus(leadStatusChanges(prev, rec, STATUS_DEFAULTS, logFieldOf(rec)), rec, actor, rec.updated_at);
   await logFollowup(followupRow("lead", { id: rec.lead_id, code: rec.lead_code, staff: rec.staff ?? "" }, prev.next_follow_up_at, actor, rec.updated_at));
   if (field === "sell_status") await writeAudit(actor, "lead_status_change", "lead", rec.lead_id, `${rec.lead_code}: สถานะ ${before} → ${value}`);
