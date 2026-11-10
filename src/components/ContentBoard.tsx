@@ -3,6 +3,7 @@ import { useAutoRefresh } from "@/lib/use-auto-refresh";
 import { Skeleton } from "@/components/Skeleton";
 import { Notice, type Msg } from "@/components/Toast";
 import { BoardScroller, BoardTabs } from "@/components/Board";
+import { ContentCalendar } from "@/components/ContentCalendar";
 import { btn } from "@/components/PageHeader";
 import { thDate, thDateTime } from "@/lib/thdate";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -36,6 +37,13 @@ export function ContentBoard({ canDelete }: { canDelete: boolean }) {
   const [tab, setTab] = useState(""); const [dragId, setDragId] = useState(""); const [over, setOver] = useState("");
   const [busy, setBusy] = useState<Set<string>>(new Set());
   const [edit, setEdit] = useState<Card | "new" | null>(null);
+  // มุมมอง บอร์ด / ปฏิทิน (10/11/2026) · จำใน URL (?view=calendar) ให้บุ๊กมาร์ก/รีเฟรชแล้วอยู่หน้าเดิม
+  const [view, setView] = useState<"board" | "calendar">("board");
+  useEffect(() => { if (new URLSearchParams(window.location.search).get("view") === "calendar") setView("calendar"); }, []);
+  const pickView = (v: "board" | "calendar") => {
+    setView(v);
+    try { const u = new URL(window.location.href); if (v === "calendar") u.searchParams.set("view", "calendar"); else u.searchParams.delete("view"); window.history.replaceState(null, "", u); } catch { /* */ }
+  };
   const [matching, setMatching] = useState(false);
   async function matchFb() {
     setMatching(true); setMsg(null);
@@ -65,6 +73,16 @@ export function ContentBoard({ canDelete }: { canDelete: boolean }) {
       setMsg({ type: "ok", text: r.auto ? `${c.card_code}: เผยแพร่แล้ว → ${r.stage}` : `${c.card_code}: ${c.stage} → ${r.stage}` });
     } catch (e) { setMsg({ type: "error", text: e instanceof Error ? e.message : "ย้ายไม่สำเร็จ" }); }
     finally { setBusy((s) => { const n = new Set(s); n.delete(id); return n; }); await load(true); }
+  }
+
+  async function reschedule(c: Card, day: string) {
+    if (busy.has(c.card_id)) return;
+    setBusy((s) => new Set(s).add(c.card_id)); setMsg(null);
+    try {
+      const r = await api("/api/content", send("PATCH", { card_id: c.card_id, planned_day: day, updated_at_seen: c.updated_at }));
+      setMsg({ type: "ok", text: `${c.card_code}: เลื่อนวันลงเป็น ${dmy(r.planned_eff || day)}${r.planned_date !== day ? ` (ตั้งวันลง ${dmy(r.planned_date)} + วันที่รอลูกค้า)` : ""}` });
+    } catch (e) { setMsg({ type: "error", text: e instanceof Error ? e.message : "เลื่อนวันไม่สำเร็จ" }); }
+    finally { setBusy((s) => { const n = new Set(s); n.delete(c.card_id); return n; }); await load(true); }
   }
 
   const chip = (c: Card) => {
@@ -100,6 +118,9 @@ export function ContentBoard({ canDelete }: { canDelete: boolean }) {
     <div className="space-y-3">
       <Notice msg={msg} onClose={() => setMsg(null)} />
       <div className="flex flex-wrap items-end gap-3">
+        <div role="group" aria-label="มุมมอง" className="flex h-9 overflow-hidden rounded-lg border border-slate-300 text-sm">
+          {(["board", "calendar"] as const).map((v) => <button key={v} type="button" aria-pressed={view === v} onClick={() => pickView(v)} className={`px-3 ${view === v ? "bg-brand-600 font-semibold text-white" : "bg-white text-slate-700 hover:bg-slate-50"}`}>{v === "board" ? "บอร์ด" : "ปฏิทิน"}</button>)}
+        </div>
         <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">ค้นหา</span><input value={q} onChange={(e) => setQ(e.target.value)} placeholder="ชื่อ / รหัส / ลูกค้า" className="h-9 w-48 rounded-lg border border-slate-300 bg-white px-2.5 text-sm" /></label>
         <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">ผู้รับผิดชอบ</span><select value={who} onChange={(e) => setWho(e.target.value)} className="h-9 max-w-40 rounded-lg border border-slate-300 bg-white px-2.5 text-sm"><option value="">ทั้งหมด</option>{b?.users.map((u) => <option key={u.email} value={u.email}>{u.name}</option>)}</select></label>
         <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">ลูกค้า</span><select value={cust} onChange={(e) => setCust(e.target.value)} className="h-9 max-w-44 rounded-lg border border-slate-300 bg-white px-2.5 text-sm"><option value="">ทั้งหมด</option>{b?.customers.map((u) => <option key={u.developer_id} value={u.developer_id}>{u.name}</option>)}</select></label>
@@ -109,7 +130,9 @@ export function ContentBoard({ canDelete }: { canDelete: boolean }) {
       </div>
 
       {state === "loading" && <Skeleton kind="board" />}
-      {state === "ok" && b && (
+      {state === "ok" && b && view === "calendar" && (
+        <ContentCalendar cards={shown} today={b.today} stageCls={HEAD} busy={busy} onOpen={(c) => setEdit(c)} onReschedule={(c, d) => void reschedule(c, d)} />)}
+      {state === "ok" && b && view === "board" && (
         <>
           <BoardTabs tabs={STAGES.map((k) => ({ key: k, label: k, count: cols[k]?.length ?? 0, cls: HEAD[k] }))} active={active} onPick={setTab} />
           <BoardScroller>

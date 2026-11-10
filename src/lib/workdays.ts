@@ -24,6 +24,15 @@ export function addWorkdays(iso: string, n: number, holidays: ReadonlySet<string
   return d;
 }
 
+/** หาวันลงที่ต้องตั้ง เพื่อให้ "วันลงจริง" (วันลง + วันทำการที่รอลูกค้า) ตรงกับวันเป้าหมาย — ใช้ตอนลากการ์ดในปฏิทิน
+ * เป้าหมายเป็นวันหยุด/อาทิตย์และต้องเลื่อน → ได้วันทำการก่อนหน้าที่ใกล้ที่สุด */
+export function plannedForTarget(target: string, waited: number, holidays: ReadonlySet<string>): string {
+  if (!DAY.test(target) || waited <= 0) return target;
+  let p = target;
+  for (let i = 0; addWorkdays(p, waited, holidays) > target && i < CAP; i++) p = step(p, -1);
+  return p;
+}
+
 export type WaitRow = { card_id: string; kind: string; started_day: string; ended_day: string }; // วันที่ตามเวลาไทย · ended_day ว่าง = ยังรออยู่
 /** รวมวันทำการที่รอลูกค้าของการ์ดหนึ่งใบ แยกช่วงผลิต (เริ่มรอก่อนเผยแพร่) กับช่วงรายงาน (เริ่มรอตั้งแต่วันเผยแพร่) */
 export function waitSummary(card: { published_at?: string; planned_date?: string; report_due_date?: string }, waits: WaitRow[], today: string, holidays: ReadonlySet<string>) {

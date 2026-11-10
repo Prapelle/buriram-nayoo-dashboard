@@ -189,4 +189,30 @@ await t("สร้างการ์ดพร้อมกัน 3 ใบ → ร
   const codes = (await CS.getBoard()).cards.filter((c: { title: string }) => c.title.startsWith("พร้อมกัน")).map((c: { card_code: string }) => c.card_code);
   assert.equal(new Set(codes).size, 3, codes.join()); void rs;
 });
+await t("ปฏิทิน: ลากการ์ดไปวันอื่น → ตั้งวันลง · รอลูกค้ามาแล้ว N วันทำการ → ตั้งวันลงย้อนให้ วันลงจริง ตรงวันที่วาง · เผยแพร่แล้ว/ข้อมูลเก่า/วันผิด → ปฏิเสธ (10/11/2026)", async () => {
+  const W = await import("../src/lib/workdays");
+  const none = new Set<string>();
+  assert.equal(W.plannedForTarget("2026-11-20", 0, none), "2026-11-20");
+  assert.equal(W.addWorkdays(W.plannedForTarget("2026-11-20", 3, none), 3, none), "2026-11-20"); // ศ. 20 พ.ย. ย้อน 3 วันทำการ
+  assert.equal(W.plannedForTarget("2026-11-20", 3, none), "2026-11-17");
+  assert.ok(W.addWorkdays(W.plannedForTarget("2026-11-22", 2, none), 2, none) <= "2026-11-22"); // อาทิตย์ → วันทำการก่อนหน้า
+  const card = async (input: Record<string, unknown>) => { const r = await CS.saveCard(input, ADMIN); return (await CS.getBoard()).cards.find((x: { card_id: string }) => x.card_id === r.card_id)!; };
+  const c = await card({ title: "ปฏิทิน 1", content_type: "Knowledge", planned_date: "2026-12-01" });
+  await fails(CS.rescheduleCard(c.card_id, "2026-12-xx", ADMIN, c.updated_at), "VALIDATION");
+  await fails(CS.rescheduleCard(c.card_id, "2026-12-05", ADMIN, "เก่า"), "STALE");
+  const r = await CS.rescheduleCard(c.card_id, "2026-12-05", ADMIN, c.updated_at);
+  assert.deepEqual(r, { planned_date: "2026-12-05", planned_eff: "2026-12-05" });
+  const now = (await CS.getBoard()).cards.find((x: { card_id: string }) => x.card_id === c.card_id)!;
+  assert.equal(now.planned_date, "2026-12-05"); assert.equal(now.wait.planned_eff, "2026-12-05");
+  await fails(CS.rescheduleCard(c.card_id, "2026-12-09", ADMIN, c.updated_at), "STALE"); // ใช้ updated_at เดิมซ้ำ
+  // ไม่มีวันลง (ช่อง ยังไม่กำหนดวัน) → ลากมาตั้งวันได้
+  const n = await card({ title: "ปฏิทิน 2", content_type: "Knowledge" });
+  assert.equal((await CS.rescheduleCard(n.card_id, "2026-12-10", ADMIN, n.updated_at)).planned_date, "2026-12-10");
+  // เผยแพร่แล้ว → เลื่อนไม่ได้
+  const p = await card({ title: "ปฏิทิน 3", content_type: "Knowledge", planned_date: today });
+  await CS.moveCard(p.card_id, "PUBLISHED", ADMIN, p.updated_at);
+  const pub = (await CS.getBoard()).cards.find((x: { card_id: string }) => x.card_id === p.card_id)!;
+  await fails(CS.rescheduleCard(p.card_id, "2026-12-20", ADMIN, pub.updated_at), "PUBLISHED");
+  await fails(CS.rescheduleCard("nope", "2026-12-20", ADMIN, ""), "NOT_FOUND");
+});
 console.log("content: ผ่านทั้งหมด");

@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/guard";
 import { contentFail } from "@/lib/content-http";
-import { deleteCard, getBoard, moveCard, saveCard } from "@/lib/content-service";
+import { deleteCard, getBoard, moveCard, rescheduleCard, saveCard } from "@/lib/content-service";
 
 export const dynamic = "force-dynamic";
 
 const body = async (req: Request) => ((await req.json().catch(() => ({}))) ?? {}) as Record<string, unknown>;
 
-// บอร์ด Content: ดู / สร้าง-แก้ / ย้ายสถานะ = Super Admin, Admin, AE, Production · ลบ = Super Admin, AE
+// บอร์ด Content: ดู / สร้าง-แก้ / ย้ายสถานะ / เลื่อนวันลง (ปฏิทิน) = Super Admin, Admin, AE, Production · ลบ = Super Admin, AE
 export async function GET() {
   const g = await requireRole(["admin", "ae", "production"]);
   if (!g.ok) return g.res;
@@ -21,7 +21,11 @@ export async function POST(req: Request) {
 export async function PATCH(req: Request) {
   const g = await requireRole(["admin", "ae", "production"]);
   if (!g.ok) return g.res;
-  try { const b = await body(req); return NextResponse.json(await moveCard(String(b.card_id ?? ""), String(b.stage ?? ""), g.email, b.updated_at_seen === undefined ? undefined : String(b.updated_at_seen))); } catch (e) { return contentFail("/api/content PATCH", e); }
+  try {
+    const b = await body(req);
+    if (b.planned_day !== undefined) return NextResponse.json(await rescheduleCard(String(b.card_id ?? ""), String(b.planned_day), g.email, String(b.updated_at_seen ?? ""))); // ลากในปฏิทิน
+    return NextResponse.json(await moveCard(String(b.card_id ?? ""), String(b.stage ?? ""), g.email, b.updated_at_seen === undefined ? undefined : String(b.updated_at_seen)));
+  } catch (e) { return contentFail("/api/content PATCH", e); }
 }
 export async function DELETE(req: Request) {
   const g = await requireRole(["ae"]);

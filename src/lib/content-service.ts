@@ -4,13 +4,13 @@
  */
 import { writeAudit } from "./audit";
 import { getD1 } from "./d1";
-import { workdaysBetween, waitSummary, type WaitRow } from "./workdays";
-import { addDays, CARD_COLUMNS, WAIT_COLUMNS, waitKindsOf, HISTORY_COLUMNS, isStage, isTrue, MEMBER_COLUMNS, nextCardCode, planMove, reportDue, SETTING_COLUMNS, S_FIRST, validateCard, STAGES, type Rec } from "./content";
+import { plannedForTarget, workdaysBetween, waitSummary, type WaitRow } from "./workdays";
+import { addDays, validDate, CARD_COLUMNS, WAIT_COLUMNS, waitKindsOf, HISTORY_COLUMNS, isStage, isTrue, MEMBER_COLUMNS, nextCardCode, planMove, reportDue, SETTING_COLUMNS, S_FIRST, validateCard, STAGES, type Rec } from "./content";
 import { todayBkk } from "./developers";
 import { productTypesOf } from "./developers-service";
 import { normRole } from "./roles";
 import { dedupeCode, guardRow } from "./row-guard";
-import { appendRows, batchUpdateValues, colLetter, deleteRow, listTabs, readTabs, toRow } from "./sheets";
+import { appendRows, batchUpdateValues, casRow, colLetter, deleteRow, listTabs, readTabs, toRow } from "./sheets";
 
 export class ContentError extends Error {
   constructor(public status: number, message: string, public code: string, public extra: { fields?: Record<string, string> } = {}) { super(message); }
@@ -117,6 +117,26 @@ export async function saveCard(input: Record<string, unknown>, actor: string, id
   await replaceMembers(t, id, c.members, now);
   await writeAudit(actor, "content_update", "content_card", id, `${cur.card_code} ${rec.title}`);
   return { card_id: id, card_code: cur.card_code };
+}
+
+/**
+ * เลื่อนวันลงจากปฏิทิน (10/11/2026): ลากการ์ดไปวันที่ต้องการ → ตั้งวันลงให้ "วันลงจริง" ตรงวันนั้น
+ * (หักวันที่รอลูกค้าในช่วงผลิตออกให้) · การ์ดที่เผยแพร่แล้วเลื่อนไม่ได้ · แก้จากข้อมูลเก่า → STALE
+ */
+export async function rescheduleCard(id: string, day: string, actor: string, updatedAtSeen: string) {
+  if (!validDate(day)) throw new ContentError(422, "วันที่ไม่ถูกต้อง", "VALIDATION", { fields: { planned_date: "วันที่ไม่ถูกต้อง" } });
+  const t = await load();
+  const c = t.CONTENT_CARDS.rows.find((r) => r.card_id === id);
+  if (!c) throw new ContentError(404, "ไม่พบการ์ด", "NOT_FOUND");
+  if (c.published_at) throw new ContentError(409, "การ์ดนี้เผยแพร่แล้ว เลื่อนวันลงไม่ได้", "PUBLISHED");
+  if (updatedAtSeen !== c.updated_at) throw new ContentError(409, "การ์ดนี้ถูกแก้ไขโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่", "STALE");
+  const hol = holidaysOf(t), w = waitSummary(c, waitsOf(t, id), todayBkk(), hol);
+  const planned = plannedForTarget(day, w.prod, hol), now = new Date().toISOString();
+  const rec: Rec = { ...c, planned_date: planned, updated_by: actor, updated_at: now };
+  const H = t.CONTENT_CARDS.headers.length ? t.CONTENT_CARDS.headers : CARD_COLUMNS;
+  if (!(await casRow("CONTENT_CARDS", H, "card_id", id, c.updated_at, toRow(H, rec)))) throw new ContentError(409, "การ์ดนี้ถูกแก้ไขโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่", "STALE");
+  await writeAudit(actor, "content_reschedule", "content_card", id, `${c.card_code}: วันลง ${c.planned_date || "(ไม่มี)"} → ${planned}${planned !== day ? ` (วันลงจริง ${day} หลังรวมวันรอลูกค้า ${w.prod} วันทำการ)` : ""}`);
+  return { planned_date: planned, planned_eff: w.prod > 0 ? waitSummary(rec, waitsOf(t, id), todayBkk(), hol).plannedEff : planned };
 }
 
 export async function moveCard(id: string, to: string, actor: string, updatedAtSeen?: string) {
