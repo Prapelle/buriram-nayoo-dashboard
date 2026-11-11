@@ -19,7 +19,7 @@ const HEAD: Record<string, string> = {
 const HINT: Record<string, string> = { มีแผนเข้าพบ: "สิ้นเดือนกลับไป เข้าร่วมแล้ว (นับเป็นไม่ให้เข้าพบ)", เข้าพบแล้ว: "สิ้นเดือนกลับไป เข้าร่วมแล้ว", "กำลังใช้ Product": "ระบบย้ายให้ตามวัน Product", ใกล้หมดสัญญา: "เหลือ ≤ 30 วันก่อนหมดอายุ" };
 const dmy = (s?: string) => (s && /^\d{4}-\d{2}-\d{2}/.test(s) ? thDate(s) : "");
 
-export function DevBoard({ kind = "developer" }: { kind?: DevKind }) {
+export function DevBoard({ kind = "developer", readOnly = false }: { kind?: DevKind; readOnly?: boolean }) {
   const L = KIND_LABEL[kind], page = kind === "home_builder" ? "/work/home-builders" : "/work/developers";
   const [all, setAll] = useState<Dev[]>([]); const [products, setProducts] = useState<DevProduct[]>([]); const [staff, setStaff] = useState<string[]>([]); const [today, setToday] = useState("");
   const [state, setState] = useState<"loading" | "ok" | "error">("loading");
@@ -82,7 +82,7 @@ export function DevBoard({ kind = "developer" }: { kind?: DevKind }) {
             return (
               <div key={k} data-col={k}
                 onDragOver={auto ? undefined : (e) => { if (dragId) { e.preventDefault(); setOver(k); } }} onDragLeave={() => setOver((o) => (o === k ? "" : o))}
-                onDrop={auto ? undefined : (e) => { e.preventDefault(); setOver(""); const id = e.dataTransfer.getData("text/plain") || dragId; setDragId(""); if (id) move(id, k); }}
+                onDrop={auto ? undefined : (e) => { e.preventDefault(); setOver(""); const id = e.dataTransfer.getData("text/plain") || dragId; setDragId(""); if (id && !readOnly) move(id, k); }}
                 className={`${(tab || DEV_STATUS[0]) === k ? "flex" : "hidden"} max-h-[75vh] w-full shrink-0 flex-col rounded-lg border bg-slate-50 md:flex md:w-60 ${over === k ? "border-brand-600 ring-2 ring-slate-300" : "border-slate-200"}`}>
                 <div className={`rounded-t-lg px-3 py-2 ${HEAD[k]}`}>
                   <div className="flex items-center justify-between text-sm font-semibold"><span>{k}{auto && " 🔒"}</span><span className="rounded-full bg-white/70 px-2 text-xs">{cols[k].length}</span></div>
@@ -94,15 +94,15 @@ export function DevBoard({ kind = "developer" }: { kind?: DevKind }) {
                     const lock = locked(d), b = busy.has(d.developer_id), act = (activeOf.get(d.developer_id) ?? []).sort((x, y) => x.end_date.localeCompare(y.end_date));
                     const overdue = d.next_follow_up_at && d.next_follow_up_at < today;
                     return (
-                      <li key={d.developer_id} draggable={!b && !lock} onClick={(e) => { if (!(e.target as HTMLElement).closest("a, select, button, input")) setViewId(d.developer_id); }}
+                      <li key={d.developer_id} draggable={!b && !lock && !readOnly} onClick={(e) => { if (!(e.target as HTMLElement).closest("a, select, button, input")) setViewId(d.developer_id); }}
                         onDragStart={(e) => { e.dataTransfer.setData("text/plain", d.developer_id); e.dataTransfer.effectAllowed = "move"; setDragId(d.developer_id); }}
                         onDragEnd={() => { setDragId(""); setOver(""); }}
-                        className={`rounded-md border border-slate-200 bg-white p-2.5 text-sm shadow-sm ${b ? "opacity-50" : lock ? "" : "cursor-grab active:cursor-grabbing"} ${dragId === d.developer_id ? "opacity-40" : ""}`}>
+                        className={`rounded-md border border-slate-200 bg-white p-2.5 text-sm shadow-sm ${b ? "opacity-50" : lock || readOnly ? "" : "cursor-grab active:cursor-grabbing"} ${dragId === d.developer_id ? "opacity-40" : ""}`}>
                         <div className="flex items-start justify-between gap-2"><button type="button" onClick={() => setViewId(d.developer_id)} className="text-left font-medium leading-snug hover:underline" aria-label={`ดู ${d.dev_code} ${d.company_name || d.project_main}`}>{d.company_name || d.project_main}</button>{d.tier && <span className="rounded bg-slate-800 px-1.5 text-[11px] font-semibold text-white">{d.tier}</span>}</div>
                         {d.company_name && d.project_main && <div className="text-xs text-slate-500">{d.project_main}</div>}
                         {act.map((p) => <div key={p.product_id} className="mt-1 text-[11px]"><span className="rounded bg-green-100 px-1">{p.product}</span> {productState(p, today) === "future" ? `เริ่ม ${dmy(p.start_date)}` : `หมด ${dmy(p.end_date)}`}</div>)}
                         <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-slate-500"><span className="font-mono">{d.dev_code}</span>{d.staff && <span>{d.staff}</span>}{d.next_follow_up_at && <span className={overdue ? "font-semibold text-red-600" : ""}>ติดต่อ {dmy(d.next_follow_up_at)}</span>}</div>
-                        {lock ? <p className="mt-2 text-[11px] text-slate-500">Status ตามวันของ Product</p> : (
+                        {lock ? <p className="mt-2 text-[11px] text-slate-500">Status ตามวันของ Product</p> : readOnly ? null : (
                           <select aria-label={`เปลี่ยน Status ${d.company_name || d.project_main}`} value={d.status || DEV_DEFAULT} disabled={b} onChange={(e) => move(d.developer_id, e.target.value)} className="mt-2 w-full rounded border border-slate-300 bg-white px-1.5 py-1 text-xs">
                             {DEV_STATUS.filter((s) => !AUTO_STATUS.includes(s)).map((s) => <option key={s}>{s}</option>)}
                           </select>)}
@@ -117,7 +117,7 @@ export function DevBoard({ kind = "developer" }: { kind?: DevKind }) {
       <p className="text-xs text-slate-500">• ลากการ์ดเพื่อเปลี่ยน Status (มือถือใช้เมนูบนการ์ด) · 🔒 = ระบบย้ายให้เองตามวันของ Product · ปิดการขาย = Win ของเดือนนั้น · ย้ายไป เข้าพบแล้ว → ติดต่อล่าสุด = วันนี้</p>
       {(() => { const v = viewId ? all.find((x) => x.developer_id === viewId) : undefined; return v ? (
         <RecordModal label={`${v.dev_code} ${v.company_name || v.project_main}`} kicker={<><span className="font-mono">{v.dev_code}</span> · {v.status || DEV_DEFAULT}{v.tier && ` · Tier ${v.tier}`}</>} title={v.company_name || v.project_main} onClose={() => setViewId("")}
-          actions={[{ href: `${page}?edit=${encodeURIComponent(v.developer_id)}`, text: "แก้ไข", primary: true }, { href: `${page}?view=${encodeURIComponent(v.developer_id)}`, text: "Product / บันทึกการติดต่อ" }]}>
+          actions={[...(readOnly ? [] : [{ href: `${page}?edit=${encodeURIComponent(v.developer_id)}`, text: "แก้ไข", primary: true }]), { href: `${page}?view=${encodeURIComponent(v.developer_id)}`, text: "Product / บันทึกการติดต่อ" }]}>
           <DevDetails dev={v} products={products.filter((p) => p.developer_id === v.developer_id)} today={today} homeBuilder={kind === "home_builder"} />
         </RecordModal>) : null; })()}
       {askEl}

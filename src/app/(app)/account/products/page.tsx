@@ -1,3 +1,4 @@
+import { canEditSales } from "@/lib/roles";
 import { requirePage } from "@/lib/page-guard";
 import { ProductsManager } from "@/components/ProductsManager";
 
@@ -9,7 +10,7 @@ export default async function ProductsPage() {
         <h1 className="text-[26px] font-bold tracking-tight">Product</h1>
         <p className="text-sm text-slate-500">รายการ Product ชุดเดียวกับที่ใช้ในใบเสนอราคา และหน้า Developer / Home Builder · เพิ่ม แก้ไขชื่อ (Admin และ AE) หรือลบ (Admin)</p>
       </div>
-      <ProductsManager canDelete={role === "super_admin" || role === "admin"} />
+      <ProductsManager canDelete={role === "super_admin" || role === "admin"} readOnly={!canEditSales(role)} />
     </section>
   );
 }

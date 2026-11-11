@@ -12,7 +12,7 @@ const btnDanger = "inline-flex h-8 items-center gap-2 rounded-lg border border-r
 async function api(url: string, init?: RequestInit) { const r = await fetch(url, { cache: "no-store", ...init }); const j = await r.json().catch(() => ({})); if (!r.ok) throw Object.assign(new Error(j.error ?? "ผิดพลาด"), { fields: j.fields as Record<string, string> | undefined, code: j.code as string | undefined, matches: j.matches as { dev_code: string; company_name: string }[] | undefined }); return j; }
 
 /** รายชื่อลูกค้า: ค้นหา · เพิ่ม · แก้ไข · ลบ (Super Admin) — ผู้ติดต่อ เบอร์ ที่อยู่ เลขผู้เสียภาษี แสดงบนเอกสารอัตโนมัติ */
-export function CustomersManager({ isSuper }: { isSuper: boolean }) {
+export function CustomersManager({ isSuper, readOnly = false }: { isSuper: boolean; readOnly?: boolean }) {
   const [rows, setRows] = useState<Row[] | null>(null); const [q, setQ] = useState(""); const [msg, setMsg] = useState<Msg>(null);
   const [f, setF] = useState<typeof blank | null>(null); const [errs, setErrs] = useState<Record<string, string>>({}); const [busy, setBusy] = useState(false);
   const load = useCallback(async () => { try { setRows((await api("/api/account/customers")).customers); } catch (e) { setMsg({ type: "error", text: e instanceof Error ? e.message : "โหลดไม่สำเร็จ" }); setRows([]); } }, []);
@@ -46,11 +46,11 @@ export function CustomersManager({ isSuper }: { isSuper: boolean }) {
       <Notice msg={msg} onClose={() => setMsg(null)} />
       <div className="flex flex-wrap items-center gap-2">
         <input value={q} onChange={(e2) => setQ(e2.target.value)} placeholder="ค้นหา ชื่อ / รหัส / เบอร์ / เลขผู้เสียภาษี / ที่อยู่" className="h-10 w-80 max-w-full rounded-lg border border-slate-300 px-3 text-sm" aria-label="ค้นหาลูกค้า" />
-        <button type="button" onClick={() => { setErrs({}); setF({ ...blank }); }} className={btn.primary}>＋ เพิ่มลูกค้า</button>
+        {!readOnly && <button type="button" onClick={() => { setErrs({}); setF({ ...blank }); }} className={btn.primary}>＋ เพิ่มลูกค้า</button>}
         <span className="ml-auto text-sm text-slate-600">{shown.length} / {rows?.length ?? 0} ราย</span>
       </div>
 
-      {f && (
+      {f && !readOnly && (
         <div className="space-y-3 rounded-xl border border-brand-300 bg-white p-4">
           <h2 className="font-semibold">{f.developer_id ? "แก้ไขลูกค้า" : "เพิ่มลูกค้า"}</h2>
           <div className="grid gap-2 sm:grid-cols-3">
@@ -78,7 +78,7 @@ export function CustomersManager({ isSuper }: { isSuper: boolean }) {
                 <td className="max-w-64 text-xs text-slate-700">{c.address || <span className="text-slate-400">—</span>}</td>
                 <td className="tabular-nums">{c.tax_id || <span className="text-slate-400">—</span>}</td>
                 <td className="text-right tabular-nums">{c.docs}</td>
-                <td className="whitespace-nowrap p-2 text-right"><button type="button" disabled={busy} onClick={() => { setErrs({}); setF({ developer_id: c.developer_id, updated_at_seen: c.updated_at, kind: c.kind, company_name: c.name, contact_name: c.contact_name, phone: c.phone, address: c.address, tax_id: c.tax_id }); window.scrollTo({ top: 0, behavior: "smooth" }); }} className={`${btn.secondary} !h-8 !px-3`}>✎ แก้ไข</button>{isSuper && <button type="button" disabled={busy} onClick={() => remove(c)} className={`${btnDanger} ml-1`}>🗑 ลบ</button>}</td>
+                <td className="whitespace-nowrap p-2 text-right">{!readOnly && <button type="button" disabled={busy} onClick={() => { setErrs({}); setF({ developer_id: c.developer_id, updated_at_seen: c.updated_at, kind: c.kind, company_name: c.name, contact_name: c.contact_name, phone: c.phone, address: c.address, tax_id: c.tax_id }); window.scrollTo({ top: 0, behavior: "smooth" }); }} className={`${btn.secondary} !h-8 !px-3`}>✎ แก้ไข</button>}{isSuper && <button type="button" disabled={busy} onClick={() => remove(c)} className={`${btnDanger} ml-1`}>🗑 ลบ</button>}</td>
               </tr>))}
           </tbody>
         </table>

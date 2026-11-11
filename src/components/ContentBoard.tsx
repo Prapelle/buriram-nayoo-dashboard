@@ -29,7 +29,7 @@ async function api(url: string, init?: RequestInit) {
 }
 const send = (method: string, body: unknown): RequestInit => ({ method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
-export function ContentBoard({ canDelete }: { canDelete: boolean }) {
+export function ContentBoard({ canDelete, readOnly = false }: { canDelete: boolean; readOnly?: boolean }) {
   const [state, setState] = useState<"loading" | "ok" | "error">("loading");
   const [b, setB] = useState<Board | null>(null);
   const [msg, setMsg] = useState<Msg>(null);
@@ -126,13 +126,13 @@ export function ContentBoard({ canDelete }: { canDelete: boolean }) {
         <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">ผู้รับผิดชอบ</span><select value={who} onChange={(e) => setWho(e.target.value)} className="h-9 max-w-40 rounded-lg border border-slate-300 bg-white px-2.5 text-sm"><option value="">ทั้งหมด</option>{b?.users.map((u) => <option key={u.email} value={u.email}>{u.name}</option>)}</select></label>
         <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">ลูกค้า</span><select value={cust} onChange={(e) => setCust(e.target.value)} className="h-9 max-w-44 rounded-lg border border-slate-300 bg-white px-2.5 text-sm"><option value="">ทั้งหมด</option>{b?.customers.map((u) => <option key={u.developer_id} value={u.developer_id}>{u.name}</option>)}</select></label>
         <label className="flex h-9 items-center gap-1.5 text-sm"><input type="checkbox" checked={salesOnly} onChange={(e) => setSalesOnly(e.target.checked)} />เฉพาะงานขาย</label>
-        <button type="button" disabled={matching} onClick={matchFb} className={`${btn.secondary} ml-auto`} title="จับคู่การ์ดที่ยังไม่มี Post ID กับโพสต์ Facebook ที่นำเข้าแล้ว (ตามวันที่ + ข้อความ)">{matching ? "กำลังจับคู่…" : "🔗 จับคู่โพสต์ Facebook"}</button>
-        <button type="button" onClick={() => setEdit("new")} className={btn.primary}>＋ เพิ่ม Content</button>
+        {!readOnly && <><button type="button" disabled={matching} onClick={matchFb} className={`${btn.secondary} ml-auto`} title="จับคู่การ์ดที่ยังไม่มี Post ID กับโพสต์ Facebook ที่นำเข้าแล้ว (ตามวันที่ + ข้อความ)">{matching ? "กำลังจับคู่…" : "🔗 จับคู่โพสต์ Facebook"}</button>
+        <button type="button" onClick={() => setEdit("new")} className={btn.primary}>＋ เพิ่ม Content</button></>}
       </div>
 
       {state === "loading" && <Skeleton kind="board" />}
       {state === "ok" && b && view === "calendar" && (
-        <ContentCalendar cards={shown} today={b.today} stageCls={HEAD} busy={busy} onOpen={(c) => setViewId(c.card_id)} onReschedule={(c, d) => void reschedule(c, d)} />)}
+        <ContentCalendar cards={shown} today={b.today} stageCls={HEAD} busy={busy} readOnly={readOnly} onOpen={(c) => setViewId(c.card_id)} onReschedule={(c, d) => void reschedule(c, d)} />)}
       {state === "ok" && b && view === "board" && (
         <>
           <BoardTabs tabs={STAGES.map((k) => ({ key: k, label: k, count: cols[k]?.length ?? 0, cls: HEAD[k] }))} active={active} onPick={setTab} />
@@ -140,7 +140,7 @@ export function ContentBoard({ canDelete }: { canDelete: boolean }) {
             {STAGES.map((k, idx) => (
               <div key={k} data-col={k}
                 onDragOver={(e) => { if (dragId) { e.preventDefault(); setOver(k); } }} onDragLeave={() => setOver((o) => (o === k ? "" : o))}
-                onDrop={(e) => { e.preventDefault(); setOver(""); const id = e.dataTransfer.getData("text/plain") || dragId; setDragId(""); if (id) void move(id, k); }}
+                onDrop={(e) => { e.preventDefault(); setOver(""); const id = e.dataTransfer.getData("text/plain") || dragId; setDragId(""); if (id && !readOnly) void move(id, k); }}
                 className={`${active === k ? "flex" : "hidden"} max-h-[75vh] w-full shrink-0 flex-col rounded-lg border bg-slate-50 md:flex md:w-64 ${idx === PROD_STAGES.length ? "md:ml-3" : ""} ${over === k ? "border-brand-600 ring-2 ring-slate-300" : "border-slate-200"}`}>
                 <div className={`flex items-center justify-between rounded-t-lg px-3 py-2 text-sm font-semibold ${HEAD[k]}`}>
                   <span>{k}</span><span className="rounded-full bg-white/70 px-2 text-xs">{cols[k]?.length ?? 0}</span>
@@ -149,27 +149,27 @@ export function ContentBoard({ canDelete }: { canDelete: boolean }) {
                 <ul className="flex-1 space-y-2 overflow-y-auto p-2">
                   {(cols[k] ?? []).length === 0 && <li className="py-6 text-center text-xs text-slate-400">ยังไม่มีการ์ด<span className="hidden md:inline"> · ลากมาวางได้</span></li>}
                   {(cols[k] ?? []).map((c) => (
-                    <li key={c.card_id} draggable={!busy.has(c.card_id)}
+                    <li key={c.card_id} draggable={!readOnly && !busy.has(c.card_id)}
                       onDragStart={(e) => { e.dataTransfer.setData("text/plain", c.card_id); e.dataTransfer.effectAllowed = "move"; setDragId(c.card_id); }} onDragEnd={() => { setDragId(""); setOver(""); }}
-                      className={`rounded-md bg-white p-2.5 text-sm shadow-sm ${c.sales_tag === "TRUE" ? "border-2 border-red-500" : "border border-slate-200"} ${busy.has(c.card_id) ? "opacity-50" : "cursor-grab active:cursor-grabbing"} ${dragId === c.card_id ? "opacity-40" : ""}`}>
+                      className={`rounded-md bg-white p-2.5 text-sm shadow-sm ${c.sales_tag === "TRUE" ? "border-2 border-red-500" : "border border-slate-200"} ${busy.has(c.card_id) ? "opacity-50" : readOnly ? "" : "cursor-grab active:cursor-grabbing"} ${dragId === c.card_id ? "opacity-40" : ""}`}>
                       <button type="button" onClick={() => setViewId(c.card_id)} className="block w-full text-left" aria-label={`ดูการ์ด ${c.card_code} ${c.title}`}>{chip(c)}</button>
-                      <select aria-label={`ย้ายสถานะ ${c.card_code}`} value={c.stage} disabled={busy.has(c.card_id)} onChange={(e) => void move(c.card_id, e.target.value)} className="mt-2 w-full rounded border border-slate-300 bg-white px-1.5 py-1 text-xs">
+                      {!readOnly && <select aria-label={`ย้ายสถานะ ${c.card_code}`} value={c.stage} disabled={busy.has(c.card_id)} onChange={(e) => void move(c.card_id, e.target.value)} className="mt-2 w-full rounded border border-slate-300 bg-white px-1.5 py-1 text-xs">
                         {STAGES.map((s) => <option key={s}>{s}</option>)}
-                      </select>
+                      </select>}
                     </li>))}
                 </ul>
               </div>))}
           </BoardScroller>
           <p className="text-xs text-slate-500">• 7 คอลัมน์แรก = ช่วงผลิต · 4 คอลัมน์หลัง = ช่วงรายงานลูกค้า (เฉพาะ Content ที่ติดแท็กงานขาย) · งานขายที่เผยแพร่แล้วจะเลื่อนไป "รอครบเพื่อทำรายงาน" อัตโนมัติ พร้อมวันครบกำหนดจากระยะติดตามผล · ลากบนมือถือไม่สะดวก ใช้เมนูสถานะบนการ์ดแทน</p>
         </>)}
-      {!edit && viewId && b && (() => { const vc = b.cards.find((x) => x.card_id === viewId); return vc ? <CardView card={vc} onClose={() => setViewId("")} onEdit={() => { setViewId(""); setEdit(vc); }} /> : null; })()}
-      {edit && b && <CardDialog board={b} card={edit === "new" ? null : edit} canDelete={canDelete} onClose={() => setEdit(null)} onDone={(t) => { setEdit(null); setMsg({ type: "ok", text: t }); void load(true); }} />}
+      {!edit && viewId && b && (() => { const vc = b.cards.find((x) => x.card_id === viewId); return vc ? <CardView card={vc} onClose={() => setViewId("")} onEdit={readOnly ? undefined : () => { setViewId(""); setEdit(vc); }} /> : null; })()}
+      {edit && b && !readOnly && <CardDialog board={b} card={edit === "new" ? null : edit} canDelete={canDelete} onClose={() => setEdit(null)} onDone={(t) => { setEdit(null); setMsg({ type: "ok", text: t }); void load(true); }} />}
     </div>
   );
 }
 
 /** ดูข้อมูลการ์ด (อ่านอย่างเดียว) — กด แก้ไข เพื่อเปิดฟอร์มเดิม */
-function CardView({ card, onClose, onEdit }: { card: Card; onClose: () => void; onEdit: () => void }) {
+function CardView({ card, onClose, onEdit }: { card: Card; onClose: () => void; onEdit?: () => void }) {
   const [hist, setHist] = useState<Hist[] | null>(null);
   const [mx, setMx] = useState<Metrics | null | undefined>(undefined);
   useEffect(() => { api(`/api/content/history?id=${card.card_id}`).then((j) => setHist(j.history)).catch(() => setHist([])); }, [card.card_id]);
@@ -230,7 +230,7 @@ function CardView({ card, onClose, onEdit }: { card: Card; onClose: () => void; 
         <details className="text-xs text-slate-600"><summary className="cursor-pointer">ประวัติสถานะ{hist ? ` (${hist.length})` : ""}</summary>
           <ul className="mt-1 space-y-0.5">{(hist ?? []).map((h, i) => <li key={i}>{thDateTime(h.at)} · {h.actor_name} · {h.from_stage || "สร้าง"} → {h.to_stage}{h.note && ` · ${h.note}`}</li>)}</ul></details>
         <div className="flex items-center gap-2 border-t border-slate-200 pt-3">
-          <button type="button" onClick={onEdit} className={btn.primary} autoFocus>แก้ไข</button>
+          {onEdit && <button type="button" onClick={onEdit} className={btn.primary} autoFocus>แก้ไข</button>}
           <button type="button" onClick={onClose} className={btn.secondary}>ปิด</button>
         </div>
       </div>

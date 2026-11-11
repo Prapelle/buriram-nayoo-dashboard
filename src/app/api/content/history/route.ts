@@ -6,7 +6,7 @@ import { contentFail } from "@/lib/content-http";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  const g = await requireRole(["admin", "ae", "production"]);
+  const g = await requireRole(["admin", "ae", "marketing", "production", "observer"]);
   if (!g.ok) return g.res;
   try { return NextResponse.json(await getHistory(new URL(req.url).searchParams.get("id") ?? "")); } catch (e) { return contentFail("/api/content/history GET", e); }
 }

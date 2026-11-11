@@ -37,7 +37,7 @@ const isClosedValue = (field: string, v: string) => (field === "call_status" ? C
 type SortKey = "lead_code" | "received_at" | "customer_name" | "source_channel" | "need" | "status" | "call_status" | "staff" | "next_follow_up_at";
 type Conflict = { field: string; value: string };
 
-export function LeadsManager({ canDelete = true }: { canDelete?: boolean }) {
+export function LeadsManager({ canDelete = true, readOnly = false }: { canDelete?: boolean; readOnly?: boolean }) {
   const [data, setData] = useState<{ state: "loading" | "ok" | "error"; rows: Lead[]; staff: string[]; staffUsers: string[]; areas: string[]; properties: Record<string, LeadProperty[]>; propsReady: boolean; error?: string }>({ state: "loading", rows: [], staff: [], staffUsers: [], areas: [], properties: {}, propsReady: false });
   const [props, setProps] = useState<{ property_id?: string; url: string; status: string }[]>([]);
   const mobile = useIsMobile();
@@ -77,7 +77,7 @@ export function LeadsManager({ canDelete = true }: { canDelete?: boolean }) {
     setUrlOpened(true);
     const sp = new URLSearchParams(window.location.search), id = sp.get("edit") || sp.get("view");
     const r = id ? data.rows.find((x) => x.lead_id === id) : undefined;
-    if (r) { if (sp.get("edit")) openForm(r); else setViewing(r); window.scrollTo({ top: 0 }); }
+    if (r) { if (sp.get("edit") && !readOnly) openForm(r); else setViewing(r); window.scrollTo({ top: 0 }); }
   }, [data, urlOpened]); // eslint-disable-line react-hooks/exhaustive-deps
   const fu = useMemo(() => followUps(data.rows, todayBkk()), [data.rows]);
   const shown = useMemo(() => {
@@ -212,12 +212,12 @@ export function LeadsManager({ canDelete = true }: { canDelete?: boolean }) {
       {viewing && !form && (
         <section className="space-y-3 rounded-lg border border-slate-300 bg-white p-5">
           <div className="flex items-center justify-between"><h2 className="font-semibold">{viewing.lead_code} · {viewing.customer_name}</h2>
-            <span className="flex gap-4 text-sm"><button onClick={() => openForm(viewing)} className="underline">แก้ไข</button><button onClick={() => setViewing(null)} className="underline">ปิด</button></span></div>
+            <span className="flex gap-4 text-sm">{!readOnly && <button onClick={() => openForm(viewing)} className="underline">แก้ไข</button>}<button onClick={() => setViewing(null)} className="underline">ปิด</button></span></div>
           <LeadDetails lead={viewing} properties={data.properties[viewing.lead_id] ?? []} />
         </section>
       )}
 
-      {form && (
+      {form && !readOnly && (
         <section className="space-y-4 rounded-lg border border-slate-300 bg-white p-5">
           <div className="flex items-center justify-between"><h2 className="font-semibold">{editing ? `แก้ไข ${editing.lead_code}` : "เพิ่ม Lead ใหม่"}</h2>
             <button onClick={closeForm} className="text-sm underline">ปิด</button></div>
@@ -340,7 +340,7 @@ export function LeadsManager({ canDelete = true }: { canDelete?: boolean }) {
         {fsel("callStatus", "Call Status", pair(CALL_STATUS))}{fsel("staff", "Staff", pair(data.staff))}
         {fsel("area", "พื้นที่", pair(data.areas))}
         {Object.values(f).some(Boolean) && <button onClick={() => { setF(EMPTY_F); setPage(1); }} className="py-1.5 text-sm underline">ล้าง</button>}
-        <button onClick={() => openForm(null)} className="ml-auto hidden rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700 md:block">+ เพิ่ม Lead</button>
+        {!readOnly && <button onClick={() => openForm(null)} className="ml-auto hidden rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700 md:block">+ เพิ่ม Lead</button>}
       </div>
 
       {data.state === "loading" && <Skeleton kind={"rows"} />}
@@ -369,7 +369,7 @@ export function LeadsManager({ canDelete = true }: { canDelete?: boolean }) {
                   {r.phone && <a href={telHref(r.phone)} className="inline-flex h-11 flex-1 items-center justify-center rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white">โทร {r.phone}</a>}
                   {r.line_id && <a href={lineHref(r.line_id)} target="_blank" rel="noreferrer" className="inline-flex h-11 flex-1 items-center justify-center rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-800">LINE</a>}
                   <button onClick={() => { setViewing(r); setForm(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="inline-flex h-11 items-center rounded-lg border border-slate-300 px-3 text-sm">ดู</button>
-                  <button onClick={() => openForm(r)} className="inline-flex h-11 items-center rounded-lg border border-slate-300 px-3 text-sm">แก้ไข</button>
+                  {!readOnly && <button onClick={() => openForm(r)} className="inline-flex h-11 items-center rounded-lg border border-slate-300 px-3 text-sm">แก้ไข</button>}
                 </div>
               </li>);
           })}</ul>}
@@ -397,7 +397,7 @@ export function LeadsManager({ canDelete = true }: { canDelete?: boolean }) {
                     <td><select aria-label={`Call Status ${r.lead_code}`} value={normCall(r.call_status) || CALL_DEFAULT} disabled={busy || !r.need} onChange={(e) => quick(r, "call_status", e.target.value)} className={`rounded px-1.5 py-1 text-xs ${CALL_COLOR[normCall(r.call_status) || CALL_DEFAULT]}`}>{CALL_STATUS.map((s) => <option key={s}>{s}</option>)}</select></td>
                     <td className="max-w-32 truncate">{r.staff}</td>
                     <td className={`whitespace-nowrap ${overdue ? "font-semibold text-red-600" : ""}`}>{dmy(r.next_follow_up_at) || <span className="text-slate-300">ว่าง</span>}{overdue && " (เลยกำหนด)"}</td>
-                    <td className="whitespace-nowrap p-2 text-right"><button onClick={() => { setViewing(r); setForm(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="underline">ดู</button> · <button onClick={() => openForm(r)} className="underline">แก้ไข</button></td>
+                    <td className="whitespace-nowrap p-2 text-right"><button onClick={() => { setViewing(r); setForm(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="underline">ดู</button>{!readOnly && <> · <button onClick={() => openForm(r)} className="underline">แก้ไข</button></>}</td>
                   </tr>);
               })}</tbody>
             </table>
@@ -407,7 +407,7 @@ export function LeadsManager({ canDelete = true }: { canDelete?: boolean }) {
           <p className="text-xs text-slate-500">• สถานะแสดงตามความต้องการ: ซื้อ / เช่า / สร้าง ใช้ Buy Status · ขาย ใช้ Sell Status · Dashboard นับ Qualified / Won / Lost จากสถานะเหล่านี้ · กดหัวคอลัมน์เพื่อเรียง</p>
         </div>
       )}
-      {!form && <button onClick={() => openForm(null)} aria-label="เพิ่ม Lead (มือถือ)" className="fixed bottom-20 right-4 z-30 flex h-13 items-center gap-1 rounded-full bg-brand-600 px-5 text-sm font-semibold text-white shadow-lg shadow-brand-600/30 md:hidden">+ เพิ่ม Lead</button>}
+      {!form && !readOnly && <button onClick={() => openForm(null)} aria-label="เพิ่ม Lead (มือถือ)" className="fixed bottom-20 right-4 z-30 flex h-13 items-center gap-1 rounded-full bg-brand-600 px-5 text-sm font-semibold text-white shadow-lg shadow-brand-600/30 md:hidden">+ เพิ่ม Lead</button>}
       {askEl}
     </div>
   );

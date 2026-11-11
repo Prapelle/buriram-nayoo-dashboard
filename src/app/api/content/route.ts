@@ -9,7 +9,7 @@ const body = async (req: Request) => ((await req.json().catch(() => ({}))) ?? {}
 
 // บอร์ด Content: ดู / สร้าง-แก้ / ย้ายสถานะ / เลื่อนวันลง (ปฏิทิน) = Super Admin, Admin, AE, Production · ลบ = Super Admin, AE
 export async function GET() {
-  const g = await requireRole(["admin", "ae", "production"]);
+  const g = await requireRole(["admin", "ae", "marketing", "production", "observer"]);
   if (!g.ok) return g.res;
   try { return NextResponse.json(await getBoard()); } catch (e) { return contentFail("/api/content GET", e); }
 }

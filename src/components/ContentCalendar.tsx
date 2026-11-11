@@ -22,8 +22,8 @@ const dayLabel = (d: string) => new Intl.DateTimeFormat("th-TH", { weekday: "sho
 export const calDayOf = (c: CalCard) => (c.published_at ? bkkDay(c.published_at) : c.wait.planned_eff || c.planned_date || "");
 const reportDayOf = (c: CalCard) => (!c.report_sent_at && !DONE_REPORT.has(c.stage) ? c.wait.report_due_eff || c.report_due_date || "" : "");
 
-export function ContentCalendar<C extends CalCard>({ cards, today, stageCls, busy, onOpen, onReschedule }: {
-  cards: C[]; today: string; stageCls: Record<string, string>; busy: Set<string>;
+export function ContentCalendar<C extends CalCard>({ cards, today, stageCls, busy, readOnly = false, onOpen, onReschedule }: {
+  cards: C[]; today: string; stageCls: Record<string, string>; busy: Set<string>; readOnly?: boolean;
   onOpen: (c: C) => void; onReschedule: (c: C, day: string) => void;
 }) {
   const [ym, setYm] = useState(() => ({ y: Number(today.slice(0, 4)), m: Number(today.slice(5, 7)) - 1 }));
@@ -48,14 +48,14 @@ export function ContentCalendar<C extends CalCard>({ cards, today, stageCls, bus
   const shift = (n: number) => setYm(({ y, m }) => { const d = new Date(Date.UTC(y, m + n, 1)); return { y: d.getUTCFullYear(), m: d.getUTCMonth() }; });
   const inMonth = (d: string) => d.startsWith(`${ym.y}-${pad(ym.m + 1)}-`);
   const byId = (id: string) => cards.find((c) => c.card_id === id);
-  const drop = (day: string) => { const c = byId(dragId); setDragId(""); setOver(""); if (c && !c.published_at && calDayOf(c) !== day) onReschedule(c, day); };
+  const drop = (day: string) => { const c = byId(dragId); setDragId(""); setOver(""); if (c && !readOnly && !c.published_at && calDayOf(c) !== day) onReschedule(c, day); };
 
   const item = (c: C, compact: boolean) => {
-    const movable = !c.published_at && !busy.has(c.card_id);
+    const movable = !readOnly && !c.published_at && !busy.has(c.card_id);
     return (
       <button key={c.card_id} type="button" onClick={() => onOpen(c)} draggable={movable}
         onDragStart={(e) => { e.dataTransfer.setData("text/plain", c.card_id); e.dataTransfer.effectAllowed = "move"; setDragId(c.card_id); }} onDragEnd={() => { setDragId(""); setOver(""); }}
-        title={`${c.card_code} ${c.title} · ${c.stage}${c.published_at ? " · เผยแพร่แล้ว" : " · ลากเพื่อเลื่อนวันลง"}`}
+        title={`${c.card_code} ${c.title} · ${c.stage}${c.published_at ? " · เผยแพร่แล้ว" : movable ? " · ลากเพื่อเลื่อนวันลง" : ""}`}
         className={`flex w-full items-center gap-1.5 rounded bg-white px-1.5 py-1 text-left text-xs shadow-sm ${c.sales_tag === "TRUE" ? "border-2 border-red-500" : "border border-slate-200"} ${movable ? "cursor-grab active:cursor-grabbing" : ""} ${busy.has(c.card_id) || dragId === c.card_id ? "opacity-40" : ""}`}>
         <span aria-hidden className={`h-2.5 w-2.5 shrink-0 rounded-full ${stageCls[c.stage] ?? "bg-slate-200"}`} />
         <span className={`min-w-0 flex-1 ${compact ? "truncate" : ""}`}>{c.published_at && "✓ "}{c.title}</span>
@@ -74,12 +74,12 @@ export function ContentCalendar<C extends CalCard>({ cards, today, stageCls, bus
         <h2 className="min-w-40 text-center text-lg font-semibold">{monthLabel(ym.y, ym.m)}</h2>
         <button type="button" onClick={() => shift(1)} className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm hover:bg-slate-50" aria-label="เดือนถัดไป">›</button>
         <button type="button" onClick={() => setYm({ y: Number(today.slice(0, 4)), m: Number(today.slice(5, 7)) - 1 })} className="h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm hover:bg-slate-50">วันนี้</button>
-        <span className="ml-auto hidden text-xs text-slate-500 md:inline">ลากการ์ดไปวันอื่นเพื่อเลื่อนวันลง · ✓ = เผยแพร่แล้ว (เลื่อนไม่ได้) · 📄 = ครบกำหนดรายงาน</span>
+        <span className="ml-auto hidden text-xs text-slate-500 md:inline">{readOnly ? "" : "ลากการ์ดไปวันอื่นเพื่อเลื่อนวันลง · "}✓ = เผยแพร่แล้ว (เลื่อนไม่ได้) · 📄 = ครบกำหนดรายงาน</span>
       </div>
 
       {unscheduled.length > 0 && (
         <details className="rounded-lg border border-dashed border-slate-300 bg-slate-50 p-2" open={unscheduled.length <= 6}>
-          <summary className="cursor-pointer text-sm font-medium text-slate-700">ยังไม่กำหนดวันลง ({unscheduled.length}) <span className="hidden font-normal text-slate-500 md:inline">— ลากไปวางในปฏิทินเพื่อตั้งวันลง</span></summary>
+          <summary className="cursor-pointer text-sm font-medium text-slate-700">ยังไม่กำหนดวันลง ({unscheduled.length}) {!readOnly && <span className="hidden font-normal text-slate-500 md:inline">— ลากไปวางในปฏิทินเพื่อตั้งวันลง</span>}</summary>
           <div className="mt-2 grid gap-1.5 sm:grid-cols-2 lg:grid-cols-4">{unscheduled.map((c) => item(c, true))}</div>
         </details>)}
 
@@ -119,7 +119,7 @@ export function ContentCalendar<C extends CalCard>({ cards, today, stageCls, bus
               <div className="space-y-1">{(posts.get(d) ?? []).map((c) => item(c, false))}{(reports.get(d) ?? []).map(reportTag)}</div>
             </div>));
         })()}
-        <p className="text-xs text-slate-500">เลื่อนวันลงบนมือถือ: กดการ์ด → แก้ "วันลง (กำหนดเผยแพร่)"</p>
+        {!readOnly && <p className="text-xs text-slate-500">เลื่อนวันลงบนมือถือ: กดการ์ด → แก้ "วันลง (กำหนดเผยแพร่)"</p>}
       </div>
     </div>
   );

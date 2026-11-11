@@ -1,3 +1,4 @@
+import { canEditSales } from "@/lib/roles";
 import { requirePage } from "@/lib/page-guard";
 import { DevBoard } from "@/components/DevBoard";
 
@@ -9,7 +10,7 @@ export default async function SaleHomeBuilderPage() {
         <h1 className="text-[26px] font-bold tracking-tight">Sale home builder</h1>
         <p className="text-sm text-slate-500">ติดตามการขายโฆษณาให้ Home Builder ตาม Status · การ์ดมาจากหน้า Home Builder · เข้าถึงได้เฉพาะ Super Admin, Admin และ AE</p>
       </div>
-      <DevBoard kind="home_builder" />
+      <DevBoard kind="home_builder" readOnly={!canEditSales(role)} />
     </section>
   );
 }

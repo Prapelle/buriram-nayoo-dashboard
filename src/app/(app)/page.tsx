@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { auth, signOut } from "@/auth";
 import { requirePage } from "@/lib/page-guard";
-import { ROLE_LABEL, SYSTEMS } from "@/lib/roles";
+import { ROLE_LABEL, systemHref, SYSTEMS } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +40,7 @@ export default async function SystemPicker() {
             </>
           );
           return ok
-            ? <Link key={x.id} href={x.href} prefetch={false} className="flex items-start gap-4 rounded-xl border border-slate-200 bg-white p-5 transition-colors hover:border-brand-600 hover:bg-brand-50/40">{body}</Link>
+            ? <Link key={x.id} href={systemHref(role, x)} prefetch={false} className="flex items-start gap-4 rounded-xl border border-slate-200 bg-white p-5 transition-colors hover:border-brand-600 hover:bg-brand-50/40">{body}</Link>
             : <div key={x.id} aria-disabled="true" className="flex items-start gap-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-5 opacity-70">{body}</div>;
         })}
       </div>

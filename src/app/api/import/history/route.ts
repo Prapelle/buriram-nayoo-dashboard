@@ -7,7 +7,7 @@ import { deleteBatchData, HttpError, listBatches } from "@/lib/import/service";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const g = await requireRole(["admin"]);
+  const g = await requireRole(["admin", "ae", "marketing", "production", "observer"]);
   if (!g.ok) return g.res;
   try {
     return NextResponse.json({ batches: await listBatches() });

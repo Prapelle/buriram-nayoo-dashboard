@@ -37,7 +37,7 @@ export async function saveUser(input: SaveUserInput, actor: string) {
   const email = norm(input.email), name = String(input.display_name ?? "").trim(), role = (normRole(input.role) ?? String(input.role ?? "")) as Role, active = input.active !== false;
   const fields: Record<string, string> = {};
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 200) fields.email = "อีเมลไม่ถูกต้อง";
-  if (!ROLES.includes(role)) fields.role = "กรุณาเลือก Role (Super Admin / Admin / AE / Marketing / Production)";
+  if (!ROLES.includes(role)) fields.role = "กรุณาเลือก Role (Super Admin / Admin / AE / Marketing / Production / Observer)";
   if (name.length > 100) fields.display_name = "ชื่อยาวเกิน 100 ตัวอักษร";
   if (Object.keys(fields).length) throw new UserError(422, "ข้อมูลไม่ถูกต้อง", "VALIDATION", fields);
 

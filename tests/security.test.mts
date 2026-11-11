@@ -12,24 +12,26 @@ let pass = 0; const ok = (m: string) => { pass++; console.log("  ✓", m); };
 
 console.log("1) ทุก API Route ต้องตรวจ Session และ Role");
 const routes = files.map(norm).filter((f) => /\/api\/.*route\.ts$/.test(f));
+// ดูได้ทุก Role (11/11/2026) — แก้ไขตามสิทธิ์เดิม · การเงิน (account / account/[id] / account/files / sales/history) ยังเป็น Admin+AE
+const VIEW = ["admin", "ae", "marketing", "production", "observer"];
 const EXPECT: Record<string, string[] | "public" | Record<string, string[]>> = {
   "src/app/api/auth/[...nextauth]/route.ts": "public", // Auth.js จัดการเอง (login/callback)
   "src/app/api/init/route.ts": ["super_admin"], "src/app/api/admin/d1/route.ts": ["super_admin"], "src/app/api/health/route.ts": ["super_admin"], "src/app/api/users/route.ts": ["super_admin"], // ตั้งค่าระบบ: Super Admin เท่านั้น
-  "src/app/api/website/route.ts": { GET: ["admin", "marketing", "production"], POST: ["admin"] }, // Marketing ดูอย่างเดียว
-  "src/app/api/import/plan/route.ts": ["admin"], "src/app/api/import/commit/route.ts": ["admin"], "src/app/api/import/history/route.ts": { GET: ["admin"], POST: ["super_admin"] }, // POST = ลบข้อมูลรายงานที่นำเข้า (5/11/2026)
-  "src/app/api/line-oa/route.ts": { GET: ["admin", "marketing", "production"], POST: ["admin"] },
-  "src/app/api/leads/route.ts": { GET: ["admin", "ae"], POST: ["admin", "ae"], PATCH: ["admin", "ae"], DELETE: ["ae"] }, // Admin เพิ่ม/แก้ได้ ลบไม่ได้
+  "src/app/api/website/route.ts": { GET: VIEW, POST: ["admin"] }, // ทุก Role ดูได้ (11/11/2026)
+  "src/app/api/import/plan/route.ts": ["admin"], "src/app/api/import/commit/route.ts": ["admin"], "src/app/api/import/history/route.ts": { GET: VIEW, POST: ["super_admin"] }, // POST = ลบข้อมูลรายงานที่นำเข้า (5/11/2026)
+  "src/app/api/line-oa/route.ts": { GET: VIEW, POST: ["admin"] },
+  "src/app/api/leads/route.ts": { GET: VIEW, POST: ["admin", "ae"], PATCH: ["admin", "ae"], DELETE: ["ae"] }, // Admin เพิ่ม/แก้ได้ ลบไม่ได้
   "src/app/api/badges/route.ts": ["admin", "ae"], // จำนวน Lead ที่ต้องติดตาม (ตัวเลขบนเมนู)
-  "src/app/api/developers/route.ts": { GET: ["admin", "ae"], POST: ["admin", "ae"], PATCH: ["admin", "ae"], DELETE: ["ae"] },
+  "src/app/api/developers/route.ts": { GET: VIEW, POST: ["admin", "ae"], PATCH: ["admin", "ae"], DELETE: ["ae"] },
   "src/app/api/sales/plan/route.ts": ["admin"], "src/app/api/sales/commit/route.ts": ["admin"], "src/app/api/sales/history/route.ts": ["admin", "ae"],
   "src/app/api/export/sales-transactions/route.ts": ["admin"],
   "src/app/api/export/[dataset]/route.ts": ["admin"], // สิทธิ์รายชุดข้อมูลบังคับใน service (ตรวจในข้อ 3)
   // ระบบบัญชี + Production (5/11/2026): AE ออก/แก้เอกสารได้ แต่ยืนยันชำระเงิน / เริ่มงาน / แนบไฟล์ / แก้ Job = Admin ขึ้นไป
   "src/app/api/account/route.ts": { GET: ["admin", "ae"], POST: ["admin", "ae"] }, "src/app/api/account/[id]/route.ts": { GET: ["admin", "ae"], DELETE: ["super_admin"] }, "src/app/api/account/pay/route.ts": ["admin"],
-  "src/app/api/account/files/route.ts": { GET: ["admin", "ae"], POST: ["admin"], DELETE: ["super_admin"] }, "src/app/api/account/customers/route.ts": { GET: ["admin", "ae"], POST: ["admin", "ae"], DELETE: ["super_admin"] }, "src/app/api/account/products/route.ts": { GET: ["admin", "ae"], POST: ["admin", "ae"], PATCH: ["admin", "ae"], DELETE: ["admin"] }, "src/app/api/production/route.ts": { GET: ["admin", "ae", "production"], PATCH: ["admin"] },
-  "src/app/api/content/route.ts": { GET: ["admin", "ae", "production"], POST: ["admin", "ae", "production"], PATCH: ["admin", "ae", "production"], DELETE: ["ae"] }, "src/app/api/content/wait/route.ts": { POST: ["admin", "ae", "production"], DELETE: ["admin", "ae", "production"] }, "src/app/api/content/history/route.ts": ["admin", "ae", "production"], "src/app/api/content/match/route.ts": ["admin", "ae", "production"], "src/app/api/content/report/route.ts": { GET: ["admin", "ae", "production"], POST: ["admin", "ae", "production"] }, "src/app/api/content/metrics/route.ts": ["admin", "ae", "production"], "src/app/api/content/products/route.ts": { GET: ["admin", "ae"], PUT: ["admin", "ae"] },
-  "src/app/api/targets/route.ts": { GET: ["admin", "marketing", "ae", "production"], POST: ["admin"] },
-  "src/app/api/perf/report/route.ts": ["admin", "ae", "production"], // Admin เห็นทุกคน · AE/Production เห็นของตัวเอง (กรองฝั่ง Server)
+  "src/app/api/account/files/route.ts": { GET: ["admin", "ae"], POST: ["admin"], DELETE: ["super_admin"] }, "src/app/api/account/customers/route.ts": { GET: VIEW, POST: ["admin", "ae"], DELETE: ["super_admin"] }, "src/app/api/account/products/route.ts": { GET: VIEW, POST: ["admin", "ae"], PATCH: ["admin", "ae"], DELETE: ["admin"] }, "src/app/api/production/route.ts": { GET: VIEW, PATCH: ["admin"] },
+  "src/app/api/content/route.ts": { GET: VIEW, POST: ["admin", "ae", "production"], PATCH: ["admin", "ae", "production"], DELETE: ["ae"] }, "src/app/api/content/wait/route.ts": { POST: ["admin", "ae", "production"], DELETE: ["admin", "ae", "production"] }, "src/app/api/content/history/route.ts": VIEW, "src/app/api/content/match/route.ts": ["admin", "ae", "production"], "src/app/api/content/report/route.ts": { GET: VIEW, POST: ["admin", "ae", "production"] }, "src/app/api/content/metrics/route.ts": VIEW, "src/app/api/content/products/route.ts": { GET: VIEW, PUT: ["admin", "ae"] },
+  "src/app/api/targets/route.ts": { GET: VIEW, POST: ["admin"] },
+  "src/app/api/perf/report/route.ts": VIEW, // Admin เห็นทุกคน · Role อื่นเห็นของตัวเอง (กรองฝั่ง Server)
   "src/app/api/perf/settings/route.ts": ["super_admin"], // ประสิทธิภาพรายคน: ตำแหน่ง / เป้า / วันหยุด (5/11/2026)
 };
 assert.deepEqual(routes.filter((r) => !(r in EXPECT)), [], "พบ API Route ใหม่ที่ยังไม่ได้กำหนดสิทธิ์ในเทสต์นี้ — ต้องตรวจสอบก่อน");
@@ -57,39 +59,40 @@ for (const f of pageFiles) {
 }
 const pg = read("src/lib/page-guard.ts"); assert.ok(pg.includes('redirect("/login")') && pg.includes('redirect("/")') && pg.includes("canAccess(role, path)"));
 const can = (r: string, p: string) => canAccess(normRole(r)!, p);
-for (const p of ["/work/leads", "/work/buyer-leads", "/work/seller-leads", "/lead-report", "/work/developers", "/work/sale-developer", "/work/home-builders", "/work/sale-home-builder", "/account/revenue"]) assert.ok(can("ae", p), `AE ต้องเข้า ${p} ได้`);
-for (const p of ["/dashboard", "/dashboard/facebook-ads", "/dashboard/performance", "/dashboard/import", "/dashboard/export", "/settings", "/settings/metrics", "/settings/targets", "/account/revenue/import"]) assert.ok(!can("ae", p), `AE ต้องเข้า ${p} ไม่ได้`);
-for (const p of ["/dashboard", "/dashboard/facebook-ads", "/dashboard/facebook-page", "/dashboard/google-ads", "/dashboard/line-oa", "/dashboard/website", "/dashboard/performance", "/lead-report", "/settings/metrics"]) assert.ok(can("marketing", p), `Marketing ต้องเข้า ${p} ได้`);
-for (const p of ["/work/leads", "/work/buyer-leads", "/work/developers", "/account/revenue", "/dashboard/import", "/dashboard/export", "/settings", "/settings/targets", "/settings/import-guide"]) assert.ok(!can("marketing", p), `Marketing ต้องเข้า ${p} ไม่ได้`);
-for (const p of ["/dashboard", "/work/leads", "/work/developers", "/account/revenue", "/account/revenue/import", "/dashboard/import", "/dashboard/export", "/settings/targets", "/settings/metrics", "/dashboard/facebook-ads"]) assert.ok(can("admin", p), `Admin ต้องเข้า ${p} ได้`);
-for (const r of ["admin", "ae", "marketing", "production"] as const) assert.ok(!can(r, "/settings/performance"), `${r} ต้องเข้า /settings/performance ไม่ได้ (Super Admin เท่านั้น)`);
-assert.ok(can("super_admin", "/settings/performance"));
-// คู่มือการใช้งาน: ล่างสุดของเมนูแต่ละระบบ · ไม่มีใน Dashboard · สิทธิ์ตามระบบ
-for (const [sys, role] of [["work", "ae"], ["account", "ae"], ["production", "production"], ["production", "ae"]] as const) {
+// ทุก Role เปิดดูได้ทุกหน้า (11/11/2026) ยกเว้น: Super Admin = ตั้งค่าระบบ / ตั้งเป้ารายคน · Admin ขึ้นไป = ส่งออก / นำเข้า Revenue · การเงิน = Super Admin, Admin, AE
+const SUPER_ONLY = ["/settings", "/settings/performance"], ADMIN_UP = ["/dashboard/export", "/account/revenue/import"], FIN_PAGES = ["/account", "/account/new", "/account/abc", "/account/summary", "/account/revenue"];
+const ROLES_ = ["super_admin", "admin", "ae", "marketing", "production", "observer"] as const;
+const allPages = [...new Set([...NAV.flatMap((x) => [x, ...(x.children ?? [])]).map((n) => n.href), "/", "/production", "/production/reports", "/account/abc", "/account/new", "/account/revenue/import", "/work/leads", "/dashboard/import"])];
+for (const r of ROLES_) for (const p of allPages) {
+  const want = SUPER_ONLY.includes(p) ? r === "super_admin" : ADMIN_UP.includes(p) ? r === "super_admin" || r === "admin" : FIN_PAGES.includes(p) ? ["super_admin", "admin", "ae"].includes(r) : true;
+  assert.equal(can(r, p), want, `${r} ${want ? "ต้องเข้า" : "ต้องเข้าไม่ได้"} ${p}`);
+}
+assert.ok(!can("admin", "/settings"), "Admin ต้องเข้าตั้งค่าระบบไม่ได้");
+// คู่มือการใช้งาน: ล่างสุดของเมนูแต่ละระบบ · ไม่มีใน Dashboard
+for (const [sys, role] of [["work", "ae"], ["account", "ae"], ["production", "production"], ["production", "observer"], ["work", "observer"]] as const) {
   const items = navOfSystem(navFor(role), sys), last = items[items.length - 1];
   assert.equal(last.href, `/${sys}/manual`, `${sys}/${role}: คู่มือต้องอยู่ล่างสุดของเมนู`); assert.equal(last.label, "คู่มือการใช้งาน");
 }
 assert.ok(!navOfSystem(navFor("super_admin"), "dashboard").some((n) => n.href.endsWith("/manual")), "Dashboard ต้องไม่มีคู่มือการใช้งาน");
-for (const p of ["/work/manual", "/account/manual"]) { for (const r of ["super_admin", "admin", "ae"]) assert.ok(can(r, p), `${r} ต้องเข้า ${p} ได้`); for (const r of ["marketing", "production"]) assert.ok(!can(r, p), `${r} ต้องเข้า ${p} ไม่ได้`); }
-for (const r of ["super_admin", "admin", "ae", "production"]) assert.ok(can(r, "/production/manual"));
-assert.ok(!can("marketing", "/production/manual"));
-// หน้าประสิทธิภาพรายคน: ห้ามใช้ /performance (next.config redirect ไป /dashboard/performance) — ต้องไม่ชนกับ redirect เดิมทุกตัว
-for (const r of ["super_admin", "admin", "ae", "production"] as const) assert.ok(can(r, "/staff-performance"), `${r} ต้องเข้า /staff-performance ได้`);
-assert.ok(!can("marketing", "/staff-performance"));
+// หน้าประสิทธิภาพรายคน: ห้ามใช้ /performance (next.config redirect ไป /dashboard/performance)
 { const cfg = (await import("node:fs")).readFileSync("next.config.ts", "utf8"); const legacy = /const DASH = \[([^\]]*)\]/.exec(cfg)![1]; assert.ok(!legacy.includes('"staff-performance"'), "ชื่อหน้าชนกับ redirect เดิม"); }
-assert.ok(!can("admin", "/settings"), "Admin ต้องเข้าตั้งค่าระบบไม่ได้");
 for (const n of NAV.flatMap((x) => ("children" in x && x.children ? x.children : [x]) as { href: string }[])) assert.ok(can("super_admin", n.href), `Super Admin ต้องเข้า ${n.href} ได้`);
-assert.equal(normRole("sales"), "ae"); assert.equal(normRole("Admin"), "admin"); assert.equal(normRole("x"), null); assert.equal(homeFor("marketing"), "/"); assert.equal(homeFor("ae"), "/");
-for (const r of ["super_admin", "admin", "ae", "marketing"] as const) assert.ok(can(r, "/"), `${r} ต้องเข้าหน้าเลือกระบบได้`);
-assert.deepEqual(systemsFor("marketing").map((x) => x.id), ["dashboard"]); assert.deepEqual(systemsFor("ae").map((x) => x.id), ["work", "account", "production"]); assert.deepEqual(systemsFor("admin").map((x) => x.id), ["dashboard", "work", "account", "production"]);
-for (const p of ["/account", "/account/new", "/account/abc", "/production"]) { assert.ok(can("ae", p) && can("admin", p), `AE/Admin ต้องเข้า ${p} ได้`); assert.ok(!can("marketing", p), `Marketing ต้องเข้า ${p} ไม่ได้`); }
+assert.equal(normRole("sales"), "ae"); assert.equal(normRole("Admin"), "admin"); assert.equal(normRole("x"), null); assert.equal(normRole("Observer"), "observer"); assert.equal(normRole("Production"), "production"); assert.equal(homeFor("marketing"), "/"); assert.equal(homeFor("ae"), "/");
+for (const r of ROLES_) assert.deepEqual(systemsFor(r).map((x) => x.id), ["dashboard", "work", "account", "production"], `${r}: ต้องเห็นทุกระบบ`);
+// หน้าแรกของระบบบัญชี: Role ที่ไม่เห็นการเงินไปหน้ารายชื่อลูกค้า
+for (const r of ["marketing", "production", "observer"] as const) assert.equal(systemsFor(r).find((x) => x.id === "account")!.href, "/account/customers");
+for (const r of ["super_admin", "admin", "ae"] as const) assert.equal(systemsFor(r).find((x) => x.id === "account")!.href, "/account");
+for (const r of ["marketing", "production", "observer"] as const) { const a = navOfSystem(navFor(r), "account").flatMap((n) => n.children ?? [n]).map((n) => n.href); assert.ok(!a.some((h) => FIN_PAGES.includes(h)), `${r}: เมนูบัญชีต้องไม่มีหน้าการเงิน`); }
 assert.equal(systemOf("/account/abc"), "account"); assert.equal(systemOf("/production"), "production");
 assert.equal(systemOf("/dashboard"), "dashboard"); assert.equal(systemOf("/account/revenue/import"), "account"); assert.equal(systemOf("/lead-report"), null); assert.equal(systemOf("/settings"), null);
-assert.deepEqual(systemsFor("production").map((x) => x.id), ["dashboard", "production"]);
-for (const p of ["/dashboard", "/dashboard/facebook-ads", "/dashboard/performance", "/dashboard/line-oa", "/settings/metrics", "/lead-report", "/production"]) assert.ok(can("production", p), `Production ต้องเข้า ${p} ได้`);
-for (const p of ["/work/leads", "/work/developers", "/account", "/account/revenue", "/dashboard/import", "/dashboard/export", "/settings", "/settings/targets"]) assert.ok(!can("production", p), `Production ต้องเข้า ${p} ไม่ได้`);
-assert.equal(normRole("Production"), "production");
-const hrefs = (sys: "dashboard" | "work", r: "super_admin" | "ae" | "marketing") => navOfSystem(navFor(r), sys).flatMap((n) => n.children ?? [n]).map((n) => n.href);
+// ไม่เห็นการเงิน: Marketing / Production / Observer
+{ const { isMktViewer, seesFinance, canEditSales, canEditContent, canEditMarketing } = await import("../src/lib/roles");
+  for (const r of ROLES_) { assert.equal(isMktViewer(r), !seesFinance(r)); assert.equal(seesFinance(r), ["super_admin", "admin", "ae"].includes(r)); }
+  assert.ok(!canEditSales("observer") && !canEditContent("observer") && !canEditMarketing("observer"), "Observer ต้องแก้อะไรไม่ได้");
+  assert.ok(!canEditSales("marketing") && !canEditSales("production") && canEditContent("production") && !canEditContent("marketing")); }
+// ราคา Product ของ Developer = การเงิน → ตัดออกสำหรับ Role ที่ไม่เห็นการเงิน
+{ const dev = read("src/app/api/developers/route.ts"); assert.ok(/isMktViewer\(g\.role\)[^\n]*price_thb: ""/.test(dev), "developers GET ต้องตัด price_thb"); }
+const hrefs = (sys: "dashboard" | "work", r: "super_admin" | "ae" | "marketing" | "observer") => navOfSystem(navFor(r), sys).flatMap((n) => n.children ?? [n]).map((n) => n.href);
 const sd = hrefs("dashboard", "super_admin"), sw = hrefs("work", "super_admin");
 assert.ok(sd.every((h) => !h.startsWith("/work")) && sw.every((h) => !h.startsWith("/dashboard")), "เมนูแต่ละระบบต้องไม่มีหน้าของอีกระบบ");
 for (const h of ["/lead-report", "/settings"]) assert.ok(sd.includes(h) && sw.includes(h), `${h} ต้องอยู่ทั้งสองระบบ`);
@@ -158,10 +161,10 @@ for (const v of ["สมชาย", "+66 81 234 5678", "-500.25", "0812345678", 
 assert.equal(csvSafe(5), 5); ok("ข้อความที่ขึ้นต้นด้วย = @ + - (ที่ไม่ใช่ตัวเลข/เบอร์โทร) ถูกป้องกันก่อนเปิดใน Excel; ตัวเลข วันที่ ชื่อไทย เบอร์โทร ไม่ถูกแก้");
 {
   const { navFor } = await import("../src/lib/roles");
-  const kids = (r: "super_admin" | "admin" | "marketing" | "ae") => navFor(r).find((n) => n.label === "ตั้งค่า");
+  const kids = (r: "super_admin" | "admin" | "marketing" | "ae" | "observer") => navFor(r).find((n) => n.label === "ตั้งค่า");
   assert.deepEqual(kids("super_admin")!.children!.map((c) => c.href), ["/settings", "/settings/targets", "/settings/import-guide", "/settings/metrics", "/settings/performance"]); assert.equal(kids("super_admin")!.href, "/settings");
   assert.deepEqual(kids("admin")!.children!.map((c) => c.href), ["/settings/targets", "/settings/import-guide", "/settings/metrics"]);
-  assert.deepEqual(kids("marketing")!.children!.map((c) => c.href), ["/settings/metrics"]); assert.equal(kids("ae"), undefined);
-  ok("เมนู ตั้งค่า: Super Admin เห็นทั้งหมด · Admin ไม่เห็น ตั้งค่าระบบ · Marketing เห็นเฉพาะคำอธิบายตัวเลข · AE ไม่เห็นเมนูตั้งค่า");
+  for (const r of ["marketing", "ae", "observer"] as const) assert.deepEqual(kids(r)!.children!.map((c) => c.href), ["/settings/targets", "/settings/import-guide", "/settings/metrics"], r);
+  ok("เมนู ตั้งค่า: Super Admin เห็นทั้งหมด · Role อื่นเห็น เป้าหมาย / คู่มือนำเข้า / คำอธิบายตัวเลข (ไม่เห็น ตั้งค่าระบบ / ตั้งเป้ารายคน)");
 }
 console.log(`\nผ่านทั้งหมด ${pass} รายการ`);

@@ -13,7 +13,7 @@ function fail(e: unknown) {
 
 // รายชื่อลูกค้า: ดู / เพิ่ม / แก้ไข = Super Admin, Admin, AE · ลบ = Super Admin เท่านั้น
 export async function GET() {
-  const g = await requireRole(["admin", "ae"]);
+  const g = await requireRole(["admin", "ae", "marketing", "production", "observer"]);
   if (!g.ok) return g.res;
   try { return NextResponse.json(await listCustomers()); } catch (e) { return fail(e); }
 }

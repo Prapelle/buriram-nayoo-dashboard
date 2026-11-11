@@ -426,19 +426,30 @@ try {
   assert.equal(await mk.page.getByRole("heading", { name: "ติดตามลูกค้า (ฝ่ายขาย)" }).count(), 0); assert.equal(await mk.page.getByText("แก้ไขเป้า").count(), 0); // ดูอย่างเดียว
   await mk.page.goto(BASE + "/lead-report"); await mk.page.getByRole("heading", { name: "ผลงานรายพนักงาน" }).waitFor();
   assert.ok(!(await mk.page.locator("main").innerText()).includes("ผู้ซื้อ ก")); // ตัวเลขรวมเท่านั้น ไม่มีชื่อลูกค้า
-  for (const pth of ["/work/developers", "/work/sale-developer", "/work/home-builders", "/work/sale-home-builder", "/dashboard/import", "/dashboard/export", "/settings/targets", "/settings/import-guide"]) { await mk.page.goto(BASE + pth); await mk.page.waitForURL(BASE + "/"); }
+  // ทุก Role เปิดดูได้ทุกหน้า (11/11/2026): Marketing เห็นแบบอ่านอย่างเดียว · ส่งออก / การเงิน / ตั้งค่าระบบ ถูกพาออก
+  for (const pth of ["/dashboard/export", "/account", "/account/revenue", "/settings"]) { await mk.page.goto(BASE + pth); await mk.page.waitForURL(BASE + "/"); }
+  await mk.page.goto(BASE + "/work/developers"); await mk.page.getByRole("heading", { name: "Developer", level: 1 }).waitFor(); await mk.page.getByText("กำลังโหลด").first().waitFor({ state: "detached" }).catch(() => {});
+  assert.equal(await mk.page.getByRole("button", { name: /\+ เพิ่ม/ }).count(), 0); assert.equal(await mk.page.getByText(/นำเข้ารายชื่อ .* จากไฟล์/).count(), 0);
+  await mk.page.goto(BASE + "/dashboard/import"); await mk.page.getByText("ดูประวัติการนำเข้าได้อย่างเดียว").waitFor(); assert.equal(await mk.page.locator('input[type="file"]').count(), 0);
+  await mk.page.goto(BASE + "/settings/targets"); await mk.page.getByRole("heading", { name: "เป้าหมายรายเดือน" }).waitFor(); assert.equal(await mk.page.getByRole("button", { name: /^บันทึก/ }).count(), 0);
   await mk.page.goto(BASE + "/home"); await mk.page.waitForURL(BASE + "/"); await mk.page.getByRole("heading", { name: "เลือกระบบ" }).waitFor(); // หน้าเลือกระบบ (4/11/2026)
-  for (const pth of ["/work/buyer-leads", "/work/seller-leads"]) { await mk.page.goto(BASE + pth); await mk.page.waitForURL(BASE + "/"); } // Marketing ไม่มีสิทธิ์ข้อมูลลูกค้า → กลับหน้าแรก
-  const mksys = await mk.page.getByRole("navigation", { name: "ระบบ" }); assert.equal(await mksys.getByRole("link").count(), 1); assert.equal(await mksys.getByRole("link", { name: "Dashboard" }).count(), 1); // Marketing: ไม่มีปุ่ม ติดตามงาน
+  await mk.page.goto(BASE + "/work/buyer-leads"); await mk.page.getByRole("button", { name: /^ดู Lead/ }).first().waitFor(); // ดูข้อมูลลูกค้าได้ (11/11/2026)
+  assert.equal(await mk.page.locator('select[aria-label^="เปลี่ยน"]').count(), 0, "Marketing ต้องเปลี่ยนสถานะบนบอร์ดไม่ได้");
+  assert.equal(await mk.page.locator('li[draggable="true"]').count(), 0, "การ์ดต้องลากไม่ได้");
+  await mk.page.getByRole("button", { name: /^ดู Lead/ }).first().click(); const mkdlg = mk.page.getByRole("dialog"); await mkdlg.waitFor();
+  assert.equal(await mkdlg.getByRole("link", { name: "แก้ไข" }).count(), 0); assert.equal(await mkdlg.getByRole("link", { name: "เปิดในหน้า Leads" }).count(), 1); await mk.page.keyboard.press("Escape");
+  const mksys = await mk.page.getByRole("navigation", { name: "ระบบ" }); assert.equal(await mksys.getByRole("link").count(), 4); // ทุก Role เห็นทุกระบบ
+  assert.equal(await mksys.getByRole("link", { name: "บัญชี" }).getAttribute("href"), "/account/customers"); // ไม่เห็นการเงิน → บัญชีเปิดที่รายชื่อลูกค้า
   await mk.page.goto(BASE + "/lead-report"); await mk.page.getByRole("heading", { name: "ผลงานรายพนักงาน" }).waitFor();
-  const mknav = await mk.page.getByRole("navigation", { name: "เมนูหลัก" }).innerText();
-  assert.ok(mknav.includes("คำอธิบายตัวเลข") && mknav.includes("รายงาน") && !mknav.includes("นำเข้า CSV") && !mknav.includes("ส่งออก") && !mknav.includes("เป้าหมายรายเดือน") && !mknav.includes("คู่มือนำเข้าข้อมูล"));
+  await mk.page.goto(BASE + "/dashboard/facebook-ads"); await mk.page.getByRole("heading", { name: "Facebook Ads", level: 1 }).waitFor();
+  const mknav = await mk.page.getByRole("navigation", { name: "เมนูหลัก" }).innerText(); // เมนูข้างของระบบ Dashboard
+  assert.ok(mknav.includes("คำอธิบายตัวเลข") && mknav.includes("รายงาน") && mknav.includes("นำเข้า CSV") && !mknav.includes("ส่งออก") && mknav.includes("เป้าหมายรายเดือน") && mknav.includes("คู่มือนำเข้าข้อมูล") && !mknav.includes("ตั้งค่าระบบ"));
   await mk.page.goto(BASE + "/dashboard/website"); await mk.page.getByRole("heading", { name: "Website", level: 1 }).waitFor(); assert.equal(await mk.page.getByText("นำเข้าไฟล์ GA4 / Search Console").count(), 0);
   await mk.page.goto(BASE + "/dashboard/line-oa"); await mk.page.getByRole("heading", { name: "ข้อมูลที่บันทึกแล้ว" }).waitFor(); assert.equal(await mk.page.getByRole("button", { name: /^บันทึก/ }).count(), 0);
   const pr = await fetch(BASE + "/api/leads", { method: "PATCH", headers: { cookie: `authjs.session-token=${await cookie("marketing@example.com")}`, "sec-fetch-site": "same-origin", "content-type": "application/json" }, body: JSON.stringify({ lead_id: "B1", field: "call_status", value: "จอง" }) });
   assert.equal(pr.status, 403);
   assert.deepEqual(mk.errors, []);
-  ok("Marketing (ดูอย่างเดียว): หน้าแรก = Facebook Ads · ภาพรวมมี Checklist 9 รายการ ไม่มีปุ่มแก้เป้า · รายงาน Lead ไม่มีชื่อลูกค้า · LINE OA / Website ไม่มีฟอร์มบันทึก/นำเข้า · นำเข้า / ส่งออก / เป้าหมาย / คู่มือนำเข้า / Project / Leads ถูกพาออก · เมนูไม่มีรายการเหล่านั้น");
+  ok("Marketing (ดูอย่างเดียว): เปิดได้ทุกหน้า (ส่งออก / การเงิน / ตั้งค่าระบบ ถูกพาออก) · บอร์ดลูกค้าลาก/เปลี่ยนสถานะไม่ได้ หน้าต่างดูข้อมูลไม่มีปุ่มแก้ไข · Developer ไม่มีปุ่มเพิ่ม/นำเข้า · นำเข้า CSV เหลือแต่ประวัติ · เป้าหมายไม่มีปุ่มบันทึก · LINE OA / Website ไม่มีฟอร์ม · ภาพรวมไม่มีปุ่มแก้เป้า · รายงาน Lead ไม่มีชื่อลูกค้า");
   await m.page.goto(BASE + "/dashboard/import"); await m.page.getByText("ประวัติการนำเข้า", { exact: true }).click(); await m.page.getByRole("cell", { name: "Campaigns_2026_09_01-2026_09_30_.csv" }).waitFor();
   await m.page.locator('input[type="file"]').first().setInputFiles([`${FX}/website/gsc_Devices.csv`, `${FX}/Devices_2026_09_01-2026_09_30_.csv`]);
   await m.page.getByRole("heading", { name: "ไฟล์เว็บไซต์ (GA4 / Search Console)" }).waitFor();

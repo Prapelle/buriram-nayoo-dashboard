@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { migratingResponse } from "@/lib/http-errors";
 import { requireRole } from "@/lib/guard";
 import { parseKind } from "@/lib/developers";
+import { isMktViewer } from "@/lib/roles";
 import { addProductType, changeDevStatus, recordContact, deleteDeveloper, deleteProduct, DevError, importDevelopers, listDevelopers, saveDeveloper, saveProduct } from "@/lib/developers-service";
 
 export const dynamic = "force-dynamic";
@@ -12,11 +13,15 @@ function fail(e: unknown) {
   { { const mg = migratingResponse(e); if (mg) return mg; } logError("/api/developers", e); return NextResponse.json({ error: e instanceof Error ? e.message : "unknown error" }, { status: 500 }); }
 }
 
-// Developer (มีเบอร์/Line ผู้ติดต่อ) — เฉพาะ Admin และ AE
+// Developer: ดูได้ทุก Role (11/11/2026) · เพิ่ม/แก้ = Admin, AE
 export async function GET(req: Request) {
-  const g = await requireRole(["admin", "ae"]);
+  const g = await requireRole(["admin", "ae", "marketing", "production", "observer"]);
   if (!g.ok) return g.res;
-  try { return NextResponse.json(await listDevelopers(parseKind(new URL(req.url).searchParams.get("kind")))); } catch (e) { return fail(e); }
+  try {
+    const d = await listDevelopers(parseKind(new URL(req.url).searchParams.get("kind")));
+    // ราคา Product = ข้อมูลการเงิน — ไม่ส่งให้ Role ที่ไม่เห็นการเงิน (11/11/2026)
+    return NextResponse.json(isMktViewer(g.role) ? { ...d, products: d.products.map((p) => ({ ...p, price_thb: "" })) } : d);
+  } catch (e) { return fail(e); }
 }
 
 /** action: save (ค่าเริ่มต้น) · product · product_type · contact (บันทึกการติดต่อ) · import_plan · import_commit */

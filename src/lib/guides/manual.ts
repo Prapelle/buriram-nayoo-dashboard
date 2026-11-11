@@ -36,7 +36,7 @@ const PERF_ADMIN: ManualSection = {
 
 export const MANUALS: Record<Manual["system"], Manual> = {
   work: {
-    system: "work", title: "คู่มือ: ระบบติดตามงาน", who: "Super Admin, Admin, AE",
+    system: "work", title: "คู่มือ: ระบบติดตามงาน", who: "แก้ไข: Super Admin, Admin, AE · ดูได้ทุก Role",
     intro: "ระบบติดตามงานใช้บันทึกและติดตามลูกค้าทั้งสองฝั่ง: Lead (คนต้องการซื้อ / ขาย) และโครงการ (Developer / Home Builder) ทุกบอร์ดเปลี่ยนสถานะด้วยการลากการ์ด (มือถือใช้เมนูบนการ์ด)",
     sections: [
       {
@@ -178,7 +178,7 @@ export const MANUALS: Record<Manual["system"], Manual> = {
   },
 
   production: {
-    system: "production", title: "คู่มือ: ระบบ Production", who: "Super Admin, Admin, AE, Production",
+    system: "production", title: "คู่มือ: ระบบ Production", who: "แก้ไข: Super Admin, Admin, AE, Production · ดูได้ทุก Role",
     intro: "Production ทำงานบนบอร์ด Content บอร์ดเดียว: ช่วงผลิต 7 คอลัมน์ (ทุก Content) ต่อด้วยช่วงรายงานลูกค้า 4 คอลัมน์ (เฉพาะ Content ที่ติดแท็กงานขาย)",
     sections: [
       {

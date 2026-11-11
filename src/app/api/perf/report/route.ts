@@ -16,7 +16,7 @@ function fail(e: unknown) {
 
 // รายงานประสิทธิภาพรายคน: Admin ขึ้นไปเห็นทุกคน · AE / Production เห็นเฉพาะของตัวเอง (กรองฝั่ง Server) · Marketing ไม่เกี่ยว
 export async function GET(req: Request) {
-  const g = await requireRole(["admin", "ae", "production"]);
+  const g = await requireRole(["admin", "ae", "marketing", "production", "observer"]);
   if (!g.ok) return g.res;
   try { return NextResponse.json(await getPerfReport(new URL(req.url).searchParams.get("month") ?? undefined, { email: g.email, role: g.role })); } catch (e) { return fail(e); }
 }

@@ -30,7 +30,7 @@ const TEMPLATE = [["ชื่อบริษัท", "โครงการห�
   ["บริษัท ตัวอย่าง จำกัด", "หมู่บ้านตัวอย่าง", "", "", "คุณสมชาย", "0812345678", "@example", "A", "https://...", "พี่เอ", "เข้าร่วมแล้ว", "2026-10-01", "2026-11-05", "", ""]];
 
 /** หน้า Developer และ Home Builder ใช้ร่วมกัน (1/11/2026) · Home Builder ไม่มีช่องโครงการ */
-export function DevelopersManager({ kind = "developer", canDelete = true }: { kind?: DevKind; canDelete?: boolean }) {
+export function DevelopersManager({ kind = "developer", canDelete = true, readOnly = false }: { kind?: DevKind; canDelete?: boolean; readOnly?: boolean }) {
   const L = KIND_LABEL[kind], hb = kind === "home_builder";
   const template = hb ? TEMPLATE.map((r) => r.filter((_, i) => i < 1 || i > 3)) : TEMPLATE;
   const [data, setData] = useState<Data | null>(null);
@@ -69,7 +69,7 @@ export function DevelopersManager({ kind = "developer", canDelete = true }: { ki
     if (editOpened || !data) return;
     const id = new URLSearchParams(window.location.search).get("edit"); setEditOpened(true);
     const d = id ? data.devs.find((x: Dev) => x.developer_id === id) : undefined;
-    if (d) { openForm(d); window.scrollTo({ top: 0 }); }
+    if (d) { if (readOnly) setViewId(d.developer_id); else openForm(d); window.scrollTo({ top: 0 }); }
   }, [data, editOpened]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function call(method: string, body: object) {
@@ -176,7 +176,7 @@ export function DevelopersManager({ kind = "developer", canDelete = true }: { ki
     <div className="space-y-5">
       <Notice msg={msg} onClose={() => setMsg(null)} />
 
-      {form && (
+      {form && !readOnly && (
         <section className="space-y-4 rounded-lg border border-slate-300 bg-white p-5">
           <div className="flex items-center justify-between"><h2 className="font-semibold">{editing ? `แก้ไข ${editing.dev_code}` : `เพิ่ม ${L} ใหม่`}</h2><button onClick={() => { setForm(null); setEditing(null); }} className="text-sm underline">ปิด</button></div>
           <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
@@ -207,13 +207,13 @@ export function DevelopersManager({ kind = "developer", canDelete = true }: { ki
       {viewing && !form && (
         <section className="space-y-4 rounded-lg border border-slate-300 bg-white p-5">
           <div className="flex items-center justify-between"><h2 className="font-semibold">{viewing.dev_code} · {viewing.company_name || viewing.project_main}</h2>
-            <span className="flex flex-wrap items-center gap-4 text-sm"><button onClick={() => logContact(viewing)} disabled={busy} className="h-9 rounded-lg border border-slate-300 bg-white px-3 font-medium hover:bg-slate-50">บันทึกการติดต่อ</button><button onClick={() => openForm(viewing)} className="underline">แก้ไข</button><button onClick={() => setViewId("")} className="underline">ปิด</button></span></div>
+            <span className="flex flex-wrap items-center gap-4 text-sm">{!readOnly && <><button onClick={() => logContact(viewing)} disabled={busy} className="h-9 rounded-lg border border-slate-300 bg-white px-3 font-medium hover:bg-slate-50">บันทึกการติดต่อ</button><button onClick={() => openForm(viewing)} className="underline">แก้ไข</button></>}<button onClick={() => setViewId("")} className="underline">ปิด</button></span></div>
           <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
             {DEV_EDITABLE.filter((k) => !["remark", "notes"].includes(k)).map((k) => <div key={k}><dt className="text-xs text-slate-500">{LABEL[k]}</dt><dd className="break-words">{k === "nayoo_url" && viewing[k] ? <a href={viewing[k]} target="_blank" rel="noopener noreferrer" className="underline">{viewing[k]}</a> : k.endsWith("_at") ? dmy(viewing[k]) || "—" : viewing[k] || <span className="text-slate-300">—</span>}</dd></div>)}
           </dl>
           {[["Remark", viewing.remark], ["Note", viewing.notes]].map(([k, v]) => <div key={k} className="text-sm"><div className="text-xs text-slate-500">{k}</div><p className="whitespace-pre-wrap">{v || <span className="text-slate-300">—</span>}</p></div>)}
           <div className="space-y-2">
-            <div className="flex items-center justify-between"><h3 className="text-sm font-semibold">Product ที่ใช้อยู่</h3>{!prod && <button onClick={() => { setProd(emptyProd()); setProdErr({}); }} className="rounded-lg bg-brand-600 px-3 py-1 text-xs text-white">+ เพิ่ม Product</button>}</div>
+            <div className="flex items-center justify-between"><h3 className="text-sm font-semibold">Product ที่ใช้อยู่</h3>{!prod && !readOnly && <button onClick={() => { setProd(emptyProd()); setProdErr({}); }} className="rounded-lg bg-brand-600 px-3 py-1 text-xs text-white">+ เพิ่ม Product</button>}</div>
             {(() => {
               const ps = prodsOf.get(viewing.developer_id) ?? [];
               const cur = ps.filter((p) => productState(p, data.today) !== "expired").sort((a, b) => a.end_date.localeCompare(b.end_date)), old = ps.filter((p) => productState(p, data.today) === "expired").sort((a, b) => b.end_date.localeCompare(a.end_date));
@@ -222,7 +222,7 @@ export function DevelopersManager({ kind = "developer", canDelete = true }: { ki
                   <span className="rounded bg-brand-50 px-1.5 text-xs text-brand-800">{categoryOf(p)}</span><b>{p.product}</b><span>{dmy(p.start_date)} – {dmy(p.end_date)}</span>{p.price_thb && <span className="tabular-nums">{thb(Number(p.price_thb))}</span>}
                   {!past && <span className={`rounded px-1.5 text-xs ${productState(p, data.today) === "future" ? "bg-slate-100" : "bg-green-100"}`}>{productState(p, data.today) === "future" ? "ยังไม่เริ่ม" : `เหลือ ${Math.round((Date.parse(p.end_date) - Date.parse(data.today)) / 864e5)} วัน`}</span>}
                   {p.notes && <span className="text-xs text-slate-500">{p.notes}</span>}
-                  <span className="ml-auto flex gap-3 text-xs"><button onClick={() => { setProd({ ...p }); setProdErr({}); }} className="underline">แก้ไข</button>{canDelete && <button onClick={() => delProd(p)} className="text-red-700 underline">ลบ</button>}</span>
+                  {!readOnly && <span className="ml-auto flex gap-3 text-xs"><button onClick={() => { setProd({ ...p }); setProdErr({}); }} className="underline">แก้ไข</button>{canDelete && <button onClick={() => delProd(p)} className="text-red-700 underline">ลบ</button>}</span>}
                 </li>);
               return <>
                 {cur.length ? <ul>{cur.map((p) => line(p))}</ul> : <p className="text-sm text-slate-500">ยังไม่มี Product ที่ใช้อยู่</p>}
@@ -230,7 +230,7 @@ export function DevelopersManager({ kind = "developer", canDelete = true }: { ki
                 {old.length ? <ul className="text-slate-600">{old.map((p) => line(p, true))}</ul> : <p className="text-sm text-slate-500">—</p>}
               </>;
             })()}
-            {prod && (
+            {prod && !readOnly && (
               <div className="space-y-2 rounded-md bg-slate-50 p-3">
                 <div className="grid gap-2 sm:grid-cols-6">
                   <label className="text-sm"><span className="mb-1 block text-xs text-slate-600">ประเภท *</span><select aria-label="ประเภท" value={prod.category || "Product"} onChange={(e) => setProd({ ...prod, category: e.target.value })} className={inp("category", prodErr)}>{PRODUCT_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select></label>
@@ -262,7 +262,7 @@ export function DevelopersManager({ kind = "developer", canDelete = true }: { ki
         <label className="text-sm"><span className="mb-1 block text-xs text-slate-500">ค้นหา</span><input value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} placeholder={hb ? "บริษัท / ผู้ติดต่อ / เบอร์ / Line" : "บริษัท / โครงการ / ผู้ติดต่อ / เบอร์ / Line"} className="w-64 h-9 rounded-lg border border-slate-300 bg-white px-2.5 text-sm" /></label>
         {fsel("status", "Status", DEV_STATUS)}{fsel("tier", "Tier", TIERS)}{fsel("staff", "Staff", data.staff)}{fsel("product", "Product ที่ใช้อยู่", data.productTypes)}
         {Object.values(f).some(Boolean) && <button onClick={() => setF({ q: "", status: "", tier: "", staff: "", product: "" })} className="py-1.5 text-sm underline">ล้าง</button>}
-        <button onClick={() => openForm(null)} className="ml-auto rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">+ เพิ่ม {L}</button>
+        {!readOnly && <button onClick={() => openForm(null)} className="ml-auto rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700">+ เพิ่ม {L}</button>}
       </div>
 
       {data.devs.length === 0 ? <p className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">ยังไม่มี {L} — กด &quot;+ เพิ่ม {L}&quot; หรือนำเข้ารายชื่อจากไฟล์ด้านล่าง</p> : (
@@ -279,7 +279,7 @@ export function DevelopersManager({ kind = "developer", canDelete = true }: { ki
                 {d.phone && <a href={telHref(d.phone)} className="inline-flex h-11 flex-1 items-center justify-center rounded-lg bg-brand-600 px-3 text-sm font-semibold text-white">โทร {d.phone}</a>}
                 {d.line_id && <a href={lineHref(d.line_id)} target="_blank" rel="noreferrer" className="inline-flex h-11 flex-1 items-center justify-center rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-800">LINE</a>}
                 <button onClick={() => { setViewId(d.developer_id); setForm(null); setProd(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="inline-flex h-11 items-center rounded-lg border border-slate-300 px-3 text-sm">ดู</button>
-                <button onClick={() => openForm(d)} className="inline-flex h-11 items-center rounded-lg border border-slate-300 px-3 text-sm">แก้ไข</button>
+                {!readOnly && <button onClick={() => openForm(d)} className="inline-flex h-11 items-center rounded-lg border border-slate-300 px-3 text-sm">แก้ไข</button>}
               </div>
             </li>);
         })}</ul>}
@@ -296,7 +296,7 @@ export function DevelopersManager({ kind = "developer", canDelete = true }: { ki
                   <td><span className={`rounded px-1.5 py-0.5 text-xs ${ST_COLOR[d.status || DEV_DEFAULT] ?? "bg-slate-100"}`}>{d.status || DEV_DEFAULT}</span></td>
                   <td className="text-xs">{act.length ? act.map((p) => <div key={p.product_id}>{p.product} <span className="text-slate-500">ถึง {dmy(p.end_date)}</span></div>) : <span className="text-slate-300">—</span>}</td>
                   <td>{d.staff}</td><td className={over ? "font-semibold text-red-600" : ""}>{dmy(d.next_follow_up_at)}</td>
-                  <td className="whitespace-nowrap pr-2 text-right"><button onClick={() => { setViewId(d.developer_id); setForm(null); setProd(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="underline">ดู</button> · <button onClick={() => openForm(d)} className="underline">แก้ไข</button></td>
+                  <td className="whitespace-nowrap pr-2 text-right"><button onClick={() => { setViewId(d.developer_id); setForm(null); setProd(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="underline">ดู</button>{!readOnly && <> · <button onClick={() => openForm(d)} className="underline">แก้ไข</button></>}</td>
                 </tr>);
             })}</tbody>
           </table>
@@ -339,6 +339,7 @@ export function DevelopersManager({ kind = "developer", canDelete = true }: { ki
         <p className="text-xs text-slate-600">นับจากประวัติ: เดือนที่ย้ายไป เข้าพบแล้ว แต่ไม่ได้ปิดการขายในเดือนนั้น (เดือนละ 1 ครั้ง · นับสะสม · นับเฉพาะเดือนที่จบแล้ว) · ปิดการขายแล้วเอาออก และเริ่มนับใหม่หลังจากนั้น</p>
       </section>
 
+      {!readOnly && (
       <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
         <h2 className="font-semibold">นำเข้ารายชื่อ {L} จากไฟล์</h2>
         <p className="text-sm text-slate-600">ไฟล์ .csv หรือ .xlsx ที่แถวแรกเป็นหัวคอลัมน์ตามฟอร์ม (ชื่อบริษัท, {hb ? "" : "โครงการหลัก, "}ชื่อผู้ติดต่อ, เบอร์, Line, Tier, Staff, Status ...) · รายการที่ซ้ำกับที่มีอยู่จะถูกข้าม · ระบบยังไม่เขียนข้อมูลจนกว่าจะกดยืนยัน</p>
@@ -353,7 +354,7 @@ export function DevelopersManager({ kind = "developer", canDelete = true }: { ki
             {!imp.plan.committed && imp.plan.counts.insert > 0 && <button onClick={commitImport} disabled={busy} className="rounded-lg bg-brand-600 px-4 py-1.5 text-white disabled:opacity-40">ยืนยันนำเข้า {imp.plan.counts.insert} รายการ</button>}
           </div>
         )}
-      </section>
+      </section>)}
       {askEl}
     </div>
   );

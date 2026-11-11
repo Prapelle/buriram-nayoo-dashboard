@@ -8,7 +8,7 @@ export const maxDuration = 60;
 
 // รายงานลูกค้า: ดู / บันทึกว่าทำรายงานเสร็จ-ส่งแล้ว = Super Admin, Admin, AE, Production
 export async function GET(req: Request) {
-  const g = await requireRole(["admin", "ae", "production"]);
+  const g = await requireRole(["admin", "ae", "marketing", "production", "observer"]);
   if (!g.ok) return g.res;
   const u = new URL(req.url).searchParams;
   try { return NextResponse.json(await getReport(u.get("customer") ?? "", u.get("from") ?? "", u.get("to") ?? "", u.get("sent") === "1")); } catch (e) { return contentFail("/api/content/report GET", e); }

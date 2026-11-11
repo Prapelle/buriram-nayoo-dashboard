@@ -13,7 +13,7 @@ function fail(e: unknown) {
 
 // ข้อมูลลูกค้า (PII) — เฉพาะ Admin และ AE
 export async function GET() {
-  const g = await requireRole(["admin", "ae"]);
+  const g = await requireRole(["admin", "ae", "marketing", "production", "observer"]);
   if (!g.ok) return g.res;
   try { return NextResponse.json(await listLeads()); } catch (e) { return fail(e); }
 }

@@ -45,7 +45,7 @@ async function call(path, { as, method = "GET", body, headers = {} } = {}) {
 const locPath = (l) => { try { const u = new URL(l, "http://x"); return u.pathname + u.search; } catch { return String(l); } };
 const redirectedTo = (r, to) => ([302, 303, 307, 308].includes(r.status) && (locPath(r.location) === to || locPath(r.location).startsWith(to + "?"))) || (r.status === 200 && (r.text.includes(`NEXT_REDIRECT;replace;${to};`) || r.text.includes(`NEXT_REDIRECT;push;${to};`) || new RegExp(`http-equiv="refresh" content="[^"]*url=${to.replace(/[?]/g, "\\?")}["&]`).test(r.text)));
 const file = (name) => readFileSync(`${FIX}/${name}`, "utf8");
-const ADMIN = "admin@example.com", IMP = "importer@example.com", MKT = "marketing@example.com", SALES = "sales@example.com", OFF = "inactive@example.com", PRD = "production@example.com"; // ADMIN = Super Admin (INITIAL_ADMIN_EMAIL) · IMP = Admin · SALES = role "sales" เดิม (= AE)
+const ADMIN = "admin@example.com", IMP = "importer@example.com", MKT = "marketing@example.com", SALES = "sales@example.com", OFF = "inactive@example.com", PRD = "production@example.com", OBS = "observer@example.com"; // ADMIN = Super Admin (INITIAL_ADMIN_EMAIL) · IMP = Admin · SALES = role "sales" เดิม (= AE)
 
 async function waitUp() {
   for (let i = 0; i < 120; i++) { try { const r = await fetch(`${BASE}/login`); if (r.status < 500) return; } catch { /* starting */ } await new Promise((r) => setTimeout(r, 500)); }
@@ -65,10 +65,10 @@ try {
   r = await call("/api/init", { as: ADMIN, method: "POST" }); assert.equal(r.status, 200, r.text); assert.ok(r.json.createdTabs.length > 20);
   ok("Login", `Admin คนแรก (INITIAL_ADMIN_EMAIL) เตรียม Google Sheet ได้ — สร้าง ${r.json.createdTabs.length} แท็บ`);
   // เพิ่มสมาชิกผ่านหน้า ตั้งค่า (API /api/users) แทนการแก้ Sheet ด้วยมือ
-  for (const [email, role, active] of [[MKT, "marketing", true], [SALES, "sales", true], [OFF, "ae", false], [IMP, "admin", true], [PRD, "production", true]]) {
+  for (const [email, role, active] of [[MKT, "marketing", true], [SALES, "sales", true], [OFF, "ae", false], [IMP, "admin", true], [PRD, "production", true], [OBS, "observer", true]]) {
     r = await call("/api/users", { as: ADMIN, method: "POST", body: { email: email.toUpperCase(), display_name: email === SALES ? "พี่เอ" : role, role, active } }); // ช่อง Staff ของ Lead ต้องเป็นชื่อผู้ใช้ (5/11/2026) assert.equal(r.status, 200, r.text);
   }
-  r = await call("/api/users", { as: ADMIN }); assert.equal(r.json.users.length, 6); assert.equal(r.json.users.find((u) => u.email === SALES).role, "ae"); assert.ok(r.json.users.every((u) => u.email === u.email.toLowerCase()));
+  r = await call("/api/users", { as: ADMIN }); assert.equal(r.json.users.length, 7); assert.equal(r.json.users.find((u) => u.email === OBS).role, "observer"); assert.equal(r.json.users.find((u) => u.email === SALES).role, "ae"); assert.ok(r.json.users.every((u) => u.email === u.email.toLowerCase()));
   assert.equal((await call("/api/users", { as: ADMIN, method: "POST", body: { email: MKT, role: "sales" } })).json.code, "DUPLICATE_EMAIL");
   assert.equal((await call("/api/users", { as: MKT })).status, 403); assert.equal((await call("/api/users", { as: MKT, method: "POST", body: { email: "x@y.com", role: "admin" } })).status, 403);
   const meRow = r.json.users.find((u) => u.email === ADMIN);
@@ -78,7 +78,7 @@ try {
   r = await call("/settings", { as: IMP }); assert.ok(redirectedTo(r, "/"), `/settings as IMP → ${r.status}`);
   ok("Login", "Admin (ใหม่) เข้าตั้งค่าระบบ / จัดการผู้ใช้ / เตรียม Sheet ไม่ได้ (403 / ถูกพาออก) · Role \"sales\" เดิมแสดงเป็น AE");
   ok("Login", "หน้า ตั้งค่า → เพิ่มสมาชิก 3 คน (อีเมลเก็บเป็นตัวเล็ก) · อีเมลซ้ำ 409 · Marketing จัดการผู้ใช้ไม่ได้ (403) · Admin ลด Role ตัวเองไม่ได้");
-  assert.equal((await call("/api/leads", { as: MKT })).status, 403); assert.equal((await call("/api/import/plan", { as: SALES, method: "POST", body: {} })).status, 403);
+  assert.equal((await call("/api/leads", { as: MKT })).status, 200); assert.equal((await call("/api/leads", { as: MKT, method: "POST", body: {} })).status, 403); assert.equal((await call("/api/import/plan", { as: SALES, method: "POST", body: {} })).status, 403);
   assert.equal((await call("/api/init", { as: MKT, method: "POST" })).status, 403);
   assert.equal((await call("/api/leads", { as: OFF })).status, 401); assert.equal((await call("/api/leads", { as: "stranger@example.com" })).status, 401);
   let ul = (await call("/api/users", { as: ADMIN })).json.users; let mrow = ul.find((u) => u.email === MKT);
@@ -88,31 +88,52 @@ try {
   r = await call("/api/users", { as: ADMIN, method: "POST", body: { ...mrow, active: true, updated_at_seen: mrow.updated_at } }); assert.equal(r.status, 200);
   assert.equal((await call("/api/targets", { as: MKT })).status, 200);
   ok("Login", "ระงับสมาชิกจากหน้า ตั้งค่า → เข้าไม่ได้ (401 — ในเทสต์ตรวจ Role ทุกคำขอ ใช้งานจริงมีผลภายใน 5 นาที) · เปิดใช้งานใหม่ → กลับมาใช้ได้");
-  ok("Login", "Marketing เข้า Leads ไม่ได้ (403) · Sales นำเข้าไม่ได้ (403) · Marketing เตรียม Sheet ไม่ได้ · ผู้ใช้ปิดใช้งาน/ไม่อยู่ในรายชื่อ → 401");
+  ok("Login", "Marketing อ่าน Leads ได้ แต่เพิ่มไม่ได้ (403) · Sales นำเข้าไม่ได้ (403) · Marketing เตรียม Sheet ไม่ได้ · ผู้ใช้ปิดใช้งาน/ไม่อยู่ในรายชื่อ → 401");
   r = await call("/home", { as: ADMIN }); assert.ok(redirectedTo(r, "/"), `/home as ADMIN → ${r.status} ${r.location}`);
   r = await call("/home", { as: SALES }); assert.ok(redirectedTo(r, "/")); r = await call("/home", { as: MKT }); assert.ok(redirectedTo(r, "/"));
-  r = await call("/", { as: MKT }); assert.equal(r.status, 200); assert.ok(r.html.includes("เลือกระบบ") && r.html.includes('href="/dashboard/facebook-ads"') && !r.html.includes('href="/work/leads"') && r.html.includes("ไม่มีสิทธิ์"));
-  r = await call("/", { as: SALES }); assert.ok(r.html.includes('href="/work/leads"') && !r.html.includes('href="/dashboard/facebook-ads"'));
+  r = await call("/", { as: MKT }); assert.equal(r.status, 200); assert.ok(r.html.includes("เลือกระบบ") && r.html.includes('href="/dashboard/facebook-ads"') && r.html.includes('href="/work/leads"') && r.html.includes('href="/account/customers"') && !r.html.includes('href="/account"') && !r.html.includes("ไม่มีสิทธิ์"));
+  r = await call("/", { as: SALES }); assert.ok(r.html.includes('href="/work/leads"') && r.html.includes('href="/dashboard/facebook-ads"') && r.html.includes('href="/account"'));
   r = await call("/leads?follow=today", { as: SALES }); assert.ok(redirectedTo(r, "/work/leads?follow=today"), `old /leads → ${r.location}`); r = await call("/performance", { as: MKT }); assert.ok(redirectedTo(r, "/dashboard/performance"));
-  ok("Login", "หลังล็อกอิน → หน้าเลือกระบบ (Dashboard / ติดตามงาน / บัญชี / Production) แสดงเฉพาะระบบที่มีสิทธิ์ · ลิงก์เดิม (/leads, /performance) พาไปหน้าใหม่พร้อม query เดิม");
+  ok("Login", "หลังล็อกอิน → หน้าเลือกระบบ (Dashboard / ติดตามงาน / บัญชี / Production) ทุก Role เห็นทุกระบบ (บัญชีของ Role ที่ไม่เห็นการเงินเปิดที่รายชื่อลูกค้า) · ลิงก์เดิม (/leads, /performance) พาไปหน้าใหม่พร้อม query เดิม");
   r = await call("/home"); assert.ok(redirectedTo(r, "/login")); // ยังไม่เข้าสู่ระบบ
-  r = await call("/work/leads", { as: MKT }); assert.ok(redirectedTo(r, "/"), `/leads as MKT → ${r.status}`); assert.ok(!r.html.includes("เพิ่ม Lead"));
-  r = await call("/dashboard/performance", { as: SALES }); assert.ok(redirectedTo(r, "/"), `/performance as SALES → ${r.status}`); assert.ok(!r.html.includes("Google Ads Spend"));
-  for (const p of ["/dashboard/import", "/settings", "/dashboard/facebook-ads"]) { r = await call(p, { as: SALES }); assert.ok(redirectedTo(r, "/"), `${p} as SALES → ${r.status}`); }
-  r = await call("/dashboard/performance", { as: MKT }); assert.equal(r.status, 200); assert.ok(!r.html.includes('href="/work/leads"'));
-  r = await call("/dashboard", { as: SALES }); assert.ok(redirectedTo(r, "/"), `/dashboard as AE → ${r.status}`);
-  r = await call("/work/leads", { as: SALES }); assert.equal(r.status, 200); assert.ok(!r.html.includes('href="/dashboard/performance"') && !r.html.includes('href="/dashboard/import"') && !r.html.includes('href="/dashboard/facebook-ads"'));
-  for (const p of ["/dashboard/import", "/dashboard/export", "/work/leads", "/work/developers", "/settings/targets"]) { r = await call(p, { as: MKT }); assert.ok(redirectedTo(r, "/"), `${p} as MKT → ${r.status}`); }
+  // ทุก Role เปิดดูได้ทุกหน้า (11/11/2026) ยกเว้นหน้าเฉพาะ Super Admin / ส่งออก (Admin+) / การเงิน (Super Admin, Admin, AE) · แก้ไขตามสิทธิ์เดิม
+  r = await call("/work/leads", { as: MKT }); assert.equal(r.status, 200, `/work/leads as MKT`); assert.ok(!r.html.includes("+ เพิ่ม Lead"), "Marketing ต้องไม่เห็นปุ่มเพิ่ม Lead");
+  r = await call("/dashboard/performance", { as: SALES }); assert.equal(r.status, 200, `/dashboard/performance as SALES`);
+  for (const p of ["/dashboard/import", "/dashboard/facebook-ads"]) { r = await call(p, { as: SALES }); assert.equal(r.status, 200, `${p} as SALES`); }
+  for (const p of ["/settings", "/dashboard/export", "/settings/performance"]) { r = await call(p, { as: SALES }); assert.ok(redirectedTo(r, "/"), `${p} as SALES → ${r.status}`); }
+  r = await call("/dashboard/import", { as: SALES }); assert.ok(r.html.includes("ดูประวัติการนำเข้าได้อย่างเดียว") && !r.html.includes("ลากไฟล์มาวางที่นี่"), "AE: หน้านำเข้า = ดูประวัติอย่างเดียว");
+  r = await call("/dashboard/performance", { as: MKT }); assert.equal(r.status, 200); assert.ok(!r.html.includes('href="/work/developers"'), "เมนูข้างของ Dashboard ต้องไม่มีหน้าของติดตามงาน");
+  r = await call("/dashboard", { as: SALES }); assert.equal(r.status, 200, `/dashboard as AE`);
+  r = await call("/work/leads", { as: SALES }); assert.equal(r.status, 200); assert.ok(!r.html.includes('href="/dashboard/performance"') && !r.html.includes('href="/dashboard/import"'));
+  for (const p of ["/dashboard/export", "/settings", "/account", "/account/revenue", "/account/summary", "/account/revenue/import"]) { r = await call(p, { as: MKT }); assert.ok(redirectedTo(r, "/"), `${p} as MKT → ${r.status}`); }
+  for (const p of ["/dashboard/import", "/work/leads", "/work/developers", "/work/buyer-leads", "/settings/targets", "/account/customers", "/account/products", "/production/content", "/staff-performance"]) { r = await call(p, { as: MKT }); assert.equal(r.status, 200, `${p} as MKT`); }
   for (const p of ["/dashboard/facebook-ads", "/dashboard/line-oa", "/dashboard/website", "/settings/metrics", "/lead-report"]) { r = await call(p, { as: MKT }); assert.equal(r.status, 200, `${p} as MKT`); }
   for (const p of ["/dashboard/facebook-ads", "/dashboard/performance", "/dashboard/line-oa", "/lead-report", "/settings/metrics"]) { r = await call(p, { as: PRD }); assert.equal(r.status, 200, `${p} as PRD`); }
   for (const p of ["/production"]) { r = await call(p, { as: PRD }); assert.equal(r.status, 200, `${p} as PRD`); } assert.equal((await call("/api/production", { as: PRD })).status, 200); assert.equal((await call("/api/production", { as: PRD, method: "PATCH", body: {} })).status, 403);
-  for (const p of ["/work/leads", "/account", "/account/revenue", "/dashboard/import", "/dashboard/export", "/settings", "/settings/targets"]) { r = await call(p, { as: PRD }); assert.ok(redirectedTo(r, "/"), `${p} as PRD → ${r.status}`); }
-  assert.equal((await call("/api/leads", { as: PRD })).status, 403); assert.equal((await call("/api/line-oa", { as: PRD, method: "POST", body: {} })).status, 403); assert.equal((await call("/api/line-oa", { as: PRD })).status, 200);
-  r = await call("/", { as: PRD }); assert.ok(r.html.includes('href="/dashboard/facebook-ads"') && r.html.includes('href="/production/content"') && !r.html.includes('href="/work/leads"') && !r.html.includes('href="/account"'));
-  ok("Login", "Production: ดู Dashboard ได้ (ดูอย่างเดียว) · ระบบ Production ดูงานได้ (แก้ไขไม่ได้) · ติดตามงาน / บัญชี / นำเข้า / ส่งออก / ตั้งค่า ถูกพาออก · API Lead 403");
+  for (const p of ["/account", "/account/revenue", "/dashboard/export", "/settings"]) { r = await call(p, { as: PRD }); assert.ok(redirectedTo(r, "/"), `${p} as PRD → ${r.status}`); }
+  for (const p of ["/work/leads", "/dashboard/import", "/settings/targets", "/account/customers"]) { r = await call(p, { as: PRD }); assert.equal(r.status, 200, `${p} as PRD`); }
+  assert.equal((await call("/api/leads", { as: PRD })).status, 200); assert.equal((await call("/api/leads", { as: PRD, method: "POST", body: {} })).status, 403); assert.equal((await call("/api/line-oa", { as: PRD, method: "POST", body: {} })).status, 403); assert.equal((await call("/api/line-oa", { as: PRD })).status, 200);
+  r = await call("/", { as: PRD }); assert.ok(r.html.includes('href="/dashboard/facebook-ads"') && r.html.includes('href="/production/content"') && r.html.includes('href="/work/leads"') && r.html.includes('href="/account/customers"') && !r.html.includes('href="/account"'));
+  ok("Login", "Production: ดูทุกระบบได้ · หน้าการเงิน / ส่งออก / ตั้งค่าระบบ ถูกพาออก · แก้ Lead ไม่ได้ (403)");
+  // Observer (11/11/2026): ดูทุกหน้าอย่างเดียว · ไม่เห็นการเงิน · แก้ไขอะไรไม่ได้
+  for (const p of ["/", "/dashboard", "/dashboard/facebook-ads", "/dashboard/import", "/work/leads", "/work/seller-leads", "/work/developers", "/work/sale-developer", "/account/customers", "/account/products", "/production/content", "/production/reports", "/lead-report", "/settings/targets", "/settings/metrics", "/staff-performance"]) { r = await call(p, { as: OBS }); assert.equal(r.status, 200, `${p} as OBS`); }
+  for (const p of ["/settings", "/settings/performance", "/dashboard/export", "/account", "/account/new", "/account/summary", "/account/revenue", "/account/revenue/import"]) { r = await call(p, { as: OBS }); assert.ok(redirectedTo(r, "/"), `${p} as OBS → ${r.status}`); }
+  for (const p of ["/api/leads", "/api/developers", "/api/content", "/api/production", "/api/account/customers", "/api/account/products", "/api/targets", "/api/line-oa", "/api/website", "/api/import/history", "/api/perf/report"]) assert.equal((await call(p, { as: OBS })).status, 200, `GET ${p} as OBS`);
+  for (const p of ["/api/account", "/api/sales/history", "/api/badges", "/api/users", "/api/export/leads"]) assert.equal((await call(p, { as: OBS })).status, 403, `GET ${p} as OBS`);
+  for (const [p, m] of [["/api/leads", "POST"], ["/api/leads", "PATCH"], ["/api/developers", "POST"], ["/api/content", "POST"], ["/api/content", "PATCH"], ["/api/account/customers", "POST"], ["/api/account/products", "POST"], ["/api/targets", "POST"], ["/api/production", "PATCH"], ["/api/import/plan", "POST"]]) assert.equal((await call(p, { as: OBS, method: m, body: {} })).status, 403, `${m} ${p} as OBS`);
+  r = await call("/work/leads", { as: OBS }); assert.ok(!r.html.includes("+ เพิ่ม Lead"));
+  { // ราคา Product ของ Developer = การเงิน → Role ที่ไม่เห็นการเงินได้ค่าว่าง
+    const d = await call("/api/developers", { as: IMP, method: "POST", body: { company_name: "บ.ทดสอบราคา Observer", project_main: "โครงการราคา" } }); assert.equal(d.status, 200, d.text);
+    const pr = await call("/api/developers", { as: IMP, method: "POST", body: { action: "product", developer_id: d.json.dev.developer_id, category: "Product", product: "Top ads", start_date: "2026-11-01", end_date: "2026-12-31", price_thb: "12345" } }); assert.equal(pr.status, 200, pr.text);
+    const priceOf = async (as) => (await call("/api/developers", { as })).json.products.find((x) => x.developer_id === d.json.dev.developer_id)?.price_thb;
+    assert.equal(await priceOf(IMP), "12345"); assert.equal(await priceOf(SALES), "12345");
+    for (const as of [OBS, MKT, PRD]) assert.equal(await priceOf(as), "", `ราคาต้องว่างสำหรับ ${as}`);
+  }
+  r = await call("/dashboard/import", { as: OBS }); assert.ok(r.html.includes("ดูประวัติการนำเข้าได้อย่างเดียว"));
+  ok("Login", "Observer: ดูทุกหน้า (ยกเว้นตั้งค่าระบบ / ตั้งเป้ารายคน / ส่งออก / การเงิน) · API อ่านได้ · เพิ่ม/แก้/นำเข้า ทุกอย่าง 403");
   for (const p of ["/dashboard", "/dashboard/import", "/dashboard/export", "/work/leads", "/account/revenue", "/account/revenue/import", "/settings/targets"]) { r = await call(p, { as: IMP }); assert.equal(r.status, 200, `${p} as IMP`); }
-  ok("Login", "AE: เข้าเฉพาะ ฝ่ายขาย + Project (ภาพรวมการตลาดถูกพาออก) · Marketing: การตลาด + รายงาน Lead + คำอธิบายตัวเลข (นำเข้า/ส่งออก/เป้าหมาย/Lead ถูกพาออก) · Admin: นำเข้า / ส่งออก / ฝ่ายขาย / Project ได้");
-  ok("Login", "หน้าเว็บตามสิทธิ์: Marketing → /leads ถูกพาออก · Sales → /performance, /import, /settings, /facebook-ads ถูกพาออก (ไม่แสดงเนื้อหา) · เมนูของ Sales ไม่มี Performance/นำเข้า");
+  ok("Login", "ทุก Role เปิดดูได้ทุกหน้า (11/11/2026) · ตั้งค่าระบบ / ตั้งเป้ารายคน = Super Admin · ส่งออก = Admin ขึ้นไป · หน้าการเงิน = Super Admin, Admin, AE · Admin เข้านำเข้า / ส่งออก / Revenue ได้");
+  ok("Login", "Role ที่แก้ไม่ได้เห็นหน้าแบบอ่านอย่างเดียว (ไม่มีปุ่มเพิ่ม Lead · หน้านำเข้าเหลือแต่ประวัติ) · เมนูข้างของแต่ละระบบไม่ปนกัน");
   assert.equal((await call("/api/leads", { as: ADMIN, method: "POST", body: {}, headers: { "sec-fetch-site": "cross-site" } })).status, 403);
   ok("Login", "คำขอข้ามเว็บ (cross-site) แม้มีคุกกี้ Admin → 403");
 
@@ -183,7 +204,7 @@ try {
   console.log("6) Website Analytics");
   r = await call("/dashboard/website", { as: MKT }); assert.equal(r.status, 200); assert.ok(!r.html.includes("นำเข้าไฟล์ GA4 / Search Console") && r.html.includes("ข้อมูลที่นำเข้าแล้ว"));
   r = await call("/dashboard/website", { as: IMP }); assert.ok(r.html.includes("นำเข้าไฟล์ GA4 / Search Console"));
-  r = await call("/dashboard/website", { as: SALES }); assert.ok(redirectedTo(r, "/")); assert.equal((await call("/api/website", { as: SALES })).status, 403);
+  r = await call("/dashboard/website", { as: SALES }); assert.equal(r.status, 200); assert.ok(!r.html.includes("นำเข้าไฟล์ GA4 / Search Console")); assert.equal((await call("/api/website", { as: SALES })).status, 200); // ทุก Role ดูได้ (11/11/2026)
   const day = (d, c, i, p) => ({ source: "search_console", property: "Page: +buriram", granularity: "day", report_start: d, report_end: d, search_clicks: c, search_impressions: i, search_ctr_pct: Math.round(c / i * 10000) / 100, search_position: p });
   const chart = { kind: "gsc_chart", filename: "Chart.csv", sha256: "a".repeat(64), period: { start: "2026-10-01", end: "2026-10-02" }, property: "Page: +buriram", summary: [day("2026-10-01", 163, 7379, 6.8), day("2026-10-02", 169, 7529, 6.9)], dims: [] };
   const ga = { kind: "ga4_pages", filename: "pages.csv", sha256: "b".repeat(64), period: { start: "2026-10-01", end: "2026-10-02" }, property: "buriram",

@@ -1,5 +1,5 @@
 import { requirePage } from "@/lib/page-guard";
-import { canDelete } from "@/lib/roles";
+import { canDelete, canEditSales } from "@/lib/roles";
 import { LeadsManager } from "@/components/LeadsManager";
 
 export default async function LeadsPage() {
@@ -10,7 +10,7 @@ export default async function LeadsPage() {
         <h1 className="text-[26px] font-bold tracking-tight">Leads</h1>
         <p className="text-sm text-slate-500">บันทึกและติดตามลูกค้า · มีข้อมูลส่วนบุคคล เข้าถึงได้เฉพาะ Admin และ AE</p>
       </div>
-      <LeadsManager canDelete={canDelete(role)} />
+      <LeadsManager canDelete={canDelete(role)} readOnly={!canEditSales(role)} />
     </section>
   );
 }

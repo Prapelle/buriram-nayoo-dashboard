@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 // ตั้งค่าต่อ Product: จำนวนโพสต์ + ระยะติดตามผล = Super Admin, Admin, AE
 export async function GET() {
-  const g = await requireRole(["admin", "ae"]);
+  const g = await requireRole(["admin", "ae", "marketing", "production", "observer"]);
   if (!g.ok) return g.res;
   try { return NextResponse.json({ settings: (await getBoard()).settings }); } catch (e) { return contentFail("/api/content/products GET", e); }
 }

@@ -12,7 +12,7 @@ async function api(url: string, init?: RequestInit) { const r = await fetch(url,
 const json = (method: string, body: unknown): RequestInit => ({ method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
 /** Product: เพิ่ม · แก้ไข (เปลี่ยนชื่อ แก้ทุกที่ที่ใช้) · ลบ (ลบได้เมื่อไม่มีที่ใช้งานอยู่) */
-export function ProductsManager({ canDelete }: { canDelete: boolean }) {
+export function ProductsManager({ canDelete, readOnly = false }: { canDelete: boolean; readOnly?: boolean }) {
   const [rows, setRows] = useState<P[] | null>(null); const [msg, setMsg] = useState<Msg>(null); const [busy, setBusy] = useState(false);
   const [name, setName] = useState(""); const [edit, setEdit] = useState<{ from: string; name: string } | null>(null); const [err, setErr] = useState("");
   const load = useCallback(async () => { try { setRows((await api("/api/account/products")).products); } catch (e) { setMsg({ type: "error", text: e instanceof Error ? e.message : "โหลดไม่สำเร็จ" }); setRows([]); } }, []);
@@ -34,7 +34,7 @@ export function ProductsManager({ canDelete }: { canDelete: boolean }) {
   return (
     <div className="space-y-3">
       <Notice msg={msg} onClose={() => setMsg(null)} />
-      {(
+      {!readOnly && (
         <div className="flex flex-wrap items-start gap-2 rounded-xl border border-slate-200 bg-white p-4">
           <label className="min-w-64 flex-1 text-sm">เพิ่ม Product ใหม่<input value={name} onChange={(e) => { setName(e.target.value); setErr(""); }} onKeyDown={(e) => { if (e.key === "Enter") void add(); }} placeholder="เช่น Top ads, Super Topads, แพ็กเกจ STD" className={err && !edit ? inpErr : inp} />{err && !edit && <span role="alert" className="mt-0.5 block text-xs font-medium text-red-600">⚠ {err}</span>}</label>
           <button type="button" disabled={busy} onClick={add} className={`${btn.primary} mt-5`}>＋ เพิ่ม</button>
@@ -48,8 +48,8 @@ export function ProductsManager({ canDelete }: { canDelete: boolean }) {
               <tr key={p.name} className="border-t border-slate-100">
                 <td className="p-2">{edit?.from === p.name ? <><input value={edit.name} onChange={(e) => { setEdit({ ...edit, name: e.target.value }); setErr(""); }} onKeyDown={(e) => { if (e.key === "Enter") void rename(); }} className={err ? inpErr : inp} aria-label="ชื่อ Product" autoFocus />{err && <span role="alert" className="mt-0.5 block text-xs font-medium text-red-600">⚠ {err}</span>}</> : p.name}</td>
                 <td className="text-right tabular-nums">{p.developers}</td><td className="text-right tabular-nums">{p.docs}</td>
-                {sets && <>{(["c", "d"] as const).map((k) => <td key={k} className="p-1 text-right"><input inputMode="numeric" aria-label={`${k === "c" ? "จำนวนโพสต์" : "ติดตามผลกี่วัน"} ${p.name}`} value={sets[p.name]?.[k] ?? ""} onChange={(e) => setSets({ ...sets, [p.name]: { ...(sets[p.name] ?? { c: "", d: "" }), [k]: e.target.value } })} onBlur={() => void saveSet(p.name)} placeholder="0" className="w-16 rounded-md border border-slate-300 px-1.5 py-1 text-right text-sm" /></td>)}</>}
-                <td className="whitespace-nowrap p-2 text-right">{(edit?.from === p.name
+                {sets && <>{(["c", "d"] as const).map((k) => <td key={k} className="p-1 text-right"><input inputMode="numeric" aria-label={`${k === "c" ? "จำนวนโพสต์" : "ติดตามผลกี่วัน"} ${p.name}`} value={sets[p.name]?.[k] ?? ""} onChange={(e) => setSets({ ...sets, [p.name]: { ...(sets[p.name] ?? { c: "", d: "" }), [k]: e.target.value } })} onBlur={() => { if (!readOnly) void saveSet(p.name); }} readOnly={readOnly} placeholder="0" className="w-16 rounded-md border border-slate-300 px-1.5 py-1 text-right text-sm" /></td>)}</>}
+                <td className="whitespace-nowrap p-2 text-right">{readOnly ? null : (edit?.from === p.name
                   ? <><button type="button" disabled={busy} onClick={rename} className={`${btn.primary} !h-8 !px-3`}>บันทึก</button> <button type="button" disabled={busy} onClick={() => { setEdit(null); setErr(""); }} className={`${btn.secondary} !h-8 !px-3`}>ยกเลิก</button></>
                   : <><button type="button" disabled={busy} onClick={() => { setEdit({ from: p.name, name: p.name }); setErr(""); }} className={`${btn.secondary} !h-8 !px-3`}>✎ แก้ไข</button> {canDelete && <button type="button" disabled={busy} onClick={() => remove(p)} className={btnDanger}>🗑 ลบ</button>}</>)}</td>
               </tr>))}

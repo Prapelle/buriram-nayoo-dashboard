@@ -4,11 +4,14 @@
  * - admin: เห็นทุกหน้า (ยกเว้นตั้งค่าระบบ) · นำเข้า CSV · เพิ่ม/แก้ข้อมูลได้ แต่ลบไม่ได้
  * - ae: ฝ่ายขาย + Project (เดิม sales — ค่า "sales" ใน Sheet ถือเป็น ae)
  * - marketing: ดูอย่างเดียว — ภาพรวม · การตลาด · รายงาน Lead · คำอธิบายตัวเลข
+ * - observer: ดูอย่างเดียวทุกหน้า (ยกเว้นหน้าเฉพาะ Super Admin · ส่งออก/นำเข้า = Admin ขึ้นไป · ไม่เห็นการเงิน) (11/11/2026)
+ * - ทุก Role เปิดดูได้ทุกหน้า (11/11/2026) ยกเว้น: ตั้งค่าระบบ / ตั้งเป้ารายคน = Super Admin · ส่งออก / นำเข้า Revenue = Admin ขึ้นไป
+ *   · หน้าการเงิน (เอกสารบัญชี / สรุปบัญชี / Revenue) = Super Admin, Admin, AE · แก้ไขได้ตามสิทธิ์เดิม (ตรวจที่ API)
  * - production: ดูอย่างเดียว — Dashboard (เหมือน Marketing) + ระบบ Production (ดูงาน · แก้ไขได้เฉพาะ Admin ขึ้นไป) (5/11/2026)
  */
-export type Role = "super_admin" | "admin" | "ae" | "marketing" | "production";
-export const ROLES: Role[] = ["super_admin", "admin", "ae", "marketing", "production"];
-export const ROLE_LABEL: Record<Role, string> = { super_admin: "Super Admin", admin: "Admin", ae: "AE", marketing: "Marketing", production: "Production" };
+export type Role = "super_admin" | "admin" | "ae" | "marketing" | "production" | "observer";
+export const ROLES: Role[] = ["super_admin", "admin", "ae", "marketing", "production", "observer"];
+export const ROLE_LABEL: Record<Role, string> = { super_admin: "Super Admin", admin: "Admin", ae: "AE", marketing: "Marketing", production: "Production", observer: "Observer" };
 export const normRole = (v: unknown): Role | null => {
   const r = String(v ?? "").trim().toLowerCase();
   if (r === "sales") return "ae"; // ชื่อเดิม
@@ -18,8 +21,14 @@ export const normRole = (v: unknown): Role | null => {
 export const canDelete = (role: Role) => role === "super_admin" || role === "ae";
 /** ยืนยันนำเข้าไฟล์ที่เคยนำเข้าแล้ว — Super Admin เท่านั้น */
 export const canOverrideImport = (role: Role) => role === "super_admin";
-/** ดูข้อมูลการตลาดอย่างเดียว (ไม่เห็นตัวเลขการเงิน / ข้อมูลลูกค้า) */
-export const isMktViewer = (role: Role) => role === "marketing" || role === "production";
+/** ไม่เห็นตัวเลขการเงิน (ยอดขาย / ราคา / Revenue) — Marketing, Production, Observer */
+export const isMktViewer = (role: Role) => role === "marketing" || role === "production" || role === "observer";
+/** เห็นตัวเลขการเงิน */
+export const seesFinance = (role: Role) => role === "super_admin" || role === "admin" || role === "ae";
+/** แก้บอร์ด Content / รายงานลูกค้า (ระบบ Production) */
+export const canEditContent = (role: Role) => role === "super_admin" || role === "admin" || role === "ae" || role === "production";
+/** แก้ข้อมูลงานขาย (Leads / Developer / Home Builder) */
+export const canEditSales = (role: Role) => role === "super_admin" || role === "admin" || role === "ae";
 /** เพิ่ม / แก้ข้อมูลการตลาด (LINE OA, Website, เป้าหมาย, นำเข้า) */
 export const canEditMarketing = (role: Role) => role === "super_admin" || role === "admin";
 
@@ -31,9 +40,11 @@ export const canEditMarketing = (role: Role) => role === "super_admin" || role =
 export type SystemId = "dashboard" | "work" | "account" | "production";
 export type NavItem = { href: string; label: string; roles: Role[]; group?: string; icon?: string; children?: NavItem[]; system?: SystemId | "shared"; hideIn?: SystemId[] };
 
-const ALL: Role[] = ["super_admin", "admin", "ae", "marketing", "production"];
-const MKT: Role[] = ["super_admin", "admin", "marketing", "production"]; // ภาพรวม + การตลาด (Marketing ดูอย่างเดียว)
-const SALES: Role[] = ["super_admin", "admin", "ae"]; // ฝ่ายขาย + Project
+const ALL: Role[] = ["super_admin", "admin", "ae", "marketing", "production", "observer"];
+// ทุก Role ดูได้ทุกหน้า (11/11/2026) — MKT / SALES ในเมนู = ALL · สิทธิ์แก้ไขตรวจที่ API
+const MKT: Role[] = ALL;
+const SALES: Role[] = ALL;
+const FIN: Role[] = ["super_admin", "admin", "ae"]; // หน้าการเงิน
 const DATA: Role[] = ["super_admin", "admin"]; // นำเข้า / ส่งออก / เป้าหมาย / คู่มือนำเข้า
 const SUPER: Role[] = ["super_admin"];
 
@@ -50,33 +61,33 @@ export const NAV: NavItem[] = [
   { href: "/work/leads", label: "Leads", roles: SALES, group: "ฝ่ายขาย", icon: "users", system: "work" },
   { href: "/work/seller-leads", label: "คนต้องการขาย", roles: SALES, group: "ฝ่ายขาย", icon: "board", system: "work" },
   { href: "/work/buyer-leads", label: "คนต้องการซื้อ", roles: SALES, group: "ฝ่ายขาย", icon: "board", system: "work" },
-  { href: "/staff-performance", label: "ประสิทธิภาพรายคน", roles: ["super_admin", "admin", "ae", "production"], icon: "target", system: "shared" }, // ผลงานเทียบเป้ารายเดือน (5/11/2026) — Admin เห็นทุกคน / AE, Production เห็นของตัวเอง
+  { href: "/staff-performance", label: "ประสิทธิภาพรายคน", roles: ALL, icon: "target", system: "shared" }, // ผลงานเทียบเป้ารายเดือน (5/11/2026) — Admin เห็นทุกคน / AE, Production เห็นของตัวเอง
   { href: "/lead-report", label: "รายงาน Lead", roles: ALL, group: "รายงาน", icon: "report", system: "shared", hideIn: ["account", "production"] }, // ไม่แสดงในระบบบัญชี / Production (5/11/2026)
   { href: "/work/developers", label: "Developer", roles: SALES, group: "Project", icon: "building", system: "work" },
   { href: "/work/sale-developer", label: "Sale developer", roles: SALES, group: "Project", icon: "board", system: "work" },
   { href: "/work/home-builders", label: "Home Builder", roles: SALES, group: "Project", icon: "building", system: "work" }, // 1/11/2026
   { href: "/work/sale-home-builder", label: "Sale home builder", roles: SALES, group: "Project", icon: "board", system: "work" },
-  { href: "/account/revenue", label: "Revenue", roles: SALES, icon: "chart", system: "account" }, // ย้ายมาอยู่ในระบบบัญชี 5/11/2026 (เดิม /work/sales) — // ยอดขาย FlowAccount (มาจากโครงการหมู่บ้าน) — เปลี่ยนชื่อจาก Sales 31/10/2026
+  { href: "/account/revenue", label: "Revenue", roles: FIN, icon: "chart", system: "account" }, // ย้ายมาอยู่ในระบบบัญชี 5/11/2026 (เดิม /work/sales) — // ยอดขาย FlowAccount (มาจากโครงการหมู่บ้าน) — เปลี่ยนชื่อจาก Sales 31/10/2026
   // ระบบบัญชี + Production (5/11/2026): ดู/ออกเอกสาร = Super Admin, Admin, AE · ยืนยันชำระเงิน/เริ่มงาน/แก้ Job = Super Admin, Admin (ตรวจที่ API)
-  { href: "/account/summary", label: "สรุปบัญชี", roles: SALES, icon: "report", system: "account" },
-  { href: "/account", label: "เอกสารบัญชี", roles: SALES, icon: "money", system: "account" },
+  { href: "/account/summary", label: "สรุปบัญชี", roles: FIN, icon: "report", system: "account" },
+  { href: "/account", label: "เอกสารบัญชี", roles: FIN, icon: "money", system: "account" },
   { href: "/account/customers", label: "รายชื่อลูกค้า", roles: SALES, icon: "users", system: "account" },
   { href: "/account/products", label: "Product", roles: SALES, icon: "board", system: "account" },
-  { href: "/production/content", label: "งาน Production", roles: [...SALES, "production"], icon: "board", system: "production" },
-  { href: "/dashboard/import", label: "นำเข้า CSV", roles: DATA, group: "ข้อมูล", icon: "upload", system: "dashboard" },
+  { href: "/production/content", label: "งาน Production", roles: ALL, icon: "board", system: "production" },
+  { href: "/dashboard/import", label: "นำเข้า CSV", roles: ALL, group: "ข้อมูล", icon: "upload", system: "dashboard" },
   { href: "/dashboard/export", label: "ส่งออกข้อมูล", roles: DATA, group: "ข้อมูล", icon: "download", system: "dashboard" },
   // ตั้งค่า: เมนูย่อย — ตั้งค่าระบบ (Admin) · คู่มือนำเข้าข้อมูล และ คำอธิบายตัวเลข (ทุก Role)
   { href: "/settings", label: "ตั้งค่า", roles: ALL, icon: "gear", system: "shared", children: [
     { href: "/settings", label: "ตั้งค่าระบบ", roles: SUPER, icon: "gear", system: "shared" },
-    { href: "/settings/targets", label: "เป้าหมายรายเดือน", roles: DATA, icon: "target", system: "dashboard" },
-    { href: "/settings/import-guide", label: "คู่มือนำเข้าข้อมูล", roles: DATA, icon: "book", system: "dashboard" },
+    { href: "/settings/targets", label: "เป้าหมายรายเดือน", roles: ALL, icon: "target", system: "dashboard" },
+    { href: "/settings/import-guide", label: "คู่มือนำเข้าข้อมูล", roles: ALL, icon: "book", system: "dashboard" },
     { href: "/settings/metrics", label: "คำอธิบายตัวเลข", roles: MKT, icon: "info", system: "shared" },
     { href: "/settings/performance", label: "ตั้งเป้าประสิทธิภาพรายคน", roles: SUPER, icon: "target", system: "shared" }, // ตำแหน่ง / เป้ารายคน / วันหยุด (5/11/2026)
   ] },
   // คู่มือการใช้งานแบบเป็นขั้นตอน (5/11/2026): อยู่ล่างสุดของเมนูแต่ละระบบ · Dashboard ไม่มี (มี คู่มือนำเข้าข้อมูล / คำอธิบายตัวเลข อยู่แล้ว)
   { href: "/work/manual", label: "คู่มือการใช้งาน", roles: SALES, icon: "book", system: "work" },
   { href: "/account/manual", label: "คู่มือการใช้งาน", roles: SALES, icon: "book", system: "account" },
-  { href: "/production/manual", label: "คู่มือการใช้งาน", roles: [...SALES, "production"], icon: "book", system: "production" },
+  { href: "/production/manual", label: "คู่มือการใช้งาน", roles: ALL, icon: "book", system: "production" },
 ];
 
 /** เมนูตาม Role: ตัดเมนูย่อยที่ไม่มีสิทธิ์ · เมนูหลักชี้ไปเมนูย่อยแรกที่เข้าได้ (ไม่มีเมนูย่อยเหลือ = ซ่อน) */
@@ -94,9 +105,14 @@ export const SYSTEMS: SystemDef[] = [
   { id: "dashboard", label: "Dashboard", desc: "การตลาด · Facebook / Google / LINE OA / Website · นำเข้า-ส่งออกข้อมูล", href: "/dashboard/facebook-ads", prefix: "/dashboard", roles: MKT },
   { id: "work", label: "ติดตามงาน", desc: "Leads คนต้องการซื้อ / ขาย · Developer · Home Builder", href: "/work/leads", prefix: "/work", roles: SALES },
   { id: "account", label: "บัญชี", desc: "ใบเสนอราคา · ใบวางบิล · ใบแจ้งหนี้ · ใบเสร็จ · สรุปยอดรอเรียกเก็บ · Revenue", href: "/account", prefix: "/account", roles: SALES },
-  { id: "production", label: "Production", desc: "บอร์ด Content ผลิตถึงเผยแพร่ · รายงานลูกค้า · สร้างการ์ดอัตโนมัติเมื่อเปิด Job", href: "/production/content", prefix: "/production", roles: [...SALES, "production"] },
+  { id: "production", label: "Production", desc: "บอร์ด Content ผลิตถึงเผยแพร่ · รายงานลูกค้า · สร้างการ์ดอัตโนมัติเมื่อเปิด Job", href: "/production/content", prefix: "/production", roles: ALL },
 ];
-export const systemsFor = (role: Role) => SYSTEMS.filter((x) => !x.soon && x.roles.includes(role));
+/** หน้าแรกของระบบสำหรับ Role = หน้าแรกที่เข้าได้ (เช่น บัญชีของ Role ที่ไม่เห็นการเงิน → รายชื่อลูกค้า) (11/11/2026) */
+export const systemHref = (role: Role, x: SystemDef) => {
+  if (canAccess(role, x.href)) return x.href;
+  return navOfSystem(navFor(role), x.id).flatMap((n) => n.children ?? [n]).find((n) => n.system === x.id)?.href ?? x.href;
+};
+export const systemsFor = (role: Role) => SYSTEMS.filter((x) => !x.soon && x.roles.includes(role)).map((x) => ({ ...x, href: systemHref(role, x) }));
 /** ระบบของ path (หน้าที่ใช้ร่วมกันคืน null) */
 export const systemOf = (path: string): SystemId | null => SYSTEMS.find((x) => path === x.prefix || path.startsWith(x.prefix + "/"))?.id ?? null;
 /** เมนูของระบบหนึ่ง = เมนูของระบบนั้น + เมนูที่ใช้ร่วมกัน */
@@ -109,7 +125,7 @@ export const navOfSystem = (items: NavItem[], sys: SystemId | null) => items.fil
 export const homeFor = (_role?: string) => "/";
 
 /** สิทธิ์เข้าหน้า (ใช้ NAV เป็นที่เดียว) · หน้าย่อยใช้สิทธิ์ของเมนูที่ยาวที่สุดที่ตรงกัน เช่น /settings/metrics/x → /settings/metrics · /sales/import = นำเข้า (DATA) */
-const EXTRA: Record<string, Role[]> = { "/account/revenue/import": DATA, "/": ALL, "/production": [...SALES, "production"], "/production/reports": [...SALES, "production"] }; // /production = มุมมอง Job ในเมนูเดียวกับบอร์ด Content
+const EXTRA: Record<string, Role[]> = { "/account/revenue/import": DATA, "/": ALL, "/production": ALL, "/production/reports": ALL }; // /production = มุมมอง Job ในเมนูเดียวกับบอร์ด Content
 export function canAccess(role: Role | null | undefined, path: string): boolean {
   if (!role) return false;
   if (EXTRA[path]) return EXTRA[path].includes(role);

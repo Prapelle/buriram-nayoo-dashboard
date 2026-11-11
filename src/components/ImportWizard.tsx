@@ -217,7 +217,8 @@ export function ImportWizard({ role = "admin" }: { role?: Role }) {
 
   return (
     <div className="space-y-8">
-      <section className="space-y-4">
+      {!canEditMarketing(role) && <p className="rounded-md bg-slate-100 p-3 text-sm text-slate-700">ดูประวัติการนำเข้าได้อย่างเดียว — นำเข้าไฟล์ได้เฉพาะ Admin ขึ้นไป</p>}
+      {canEditMarketing(role) && <section className="space-y-4">
         <div
           onDragOver={(e) => { e.preventDefault(); setDrag(true); }} onDragLeave={() => setDrag(false)}
           onDrop={(e) => { e.preventDefault(); setDrag(false); pick(e.dataTransfer.files); }}
@@ -354,9 +355,9 @@ export function ImportWizard({ role = "admin" }: { role?: Role }) {
         {queue.length > 0 && (state === "done" || state === "error" || state === "idle") && (
           <button onClick={nextInQueue} className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">ไฟล์ถัดไป: {queue[0].name}</button>
         )}
-      </section>
+      </section>}
 
-      {webIn && <WebsiteManager key={webIn.id} isAdmin={canOverrideImport(role)} importOnly incoming={webIn} />}
+      {webIn && canEditMarketing(role) && <WebsiteManager key={webIn.id} isAdmin={canOverrideImport(role)} importOnly incoming={webIn} />}
       {salesIn && canEditMarketing(role) && (
         <section className="space-y-2 rounded-xl border border-slate-200 bg-white p-5">
           <h2 className="font-semibold">ไฟล์รายงานยอดขาย (Sales)</h2>

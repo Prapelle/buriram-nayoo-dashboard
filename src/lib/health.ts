@@ -43,9 +43,9 @@ export async function systemCheck(): Promise<Check[]> {
     const active = APP_USERS.rows.filter((u) => String(u.active).toUpperCase() === "TRUE");
     const cnt = (r: Role) => active.filter((u) => normRole(u.role) === r).length;
     const admins = cnt("super_admin");
-    add("admin", "มี Super Admin ที่ใช้งานได้", admins || process.env.INITIAL_ADMIN_EMAIL ? "ok" : "fail", `Super Admin ${admins} · Admin ${cnt("admin")} · AE ${cnt("ae")} · Marketing ${cnt("marketing")} · Production ${cnt("production")}${process.env.INITIAL_ADMIN_EMAIL ? " (+ Super Admin เริ่มต้นจาก INITIAL_ADMIN_EMAIL)" : ""}`);
+    add("admin", "มี Super Admin ที่ใช้งานได้", admins || process.env.INITIAL_ADMIN_EMAIL ? "ok" : "fail", `Super Admin ${admins} · Admin ${cnt("admin")} · AE ${cnt("ae")} · Marketing ${cnt("marketing")} · Production ${cnt("production")} · Observer ${cnt("observer")}${process.env.INITIAL_ADMIN_EMAIL ? " (+ Super Admin เริ่มต้นจาก INITIAL_ADMIN_EMAIL)" : ""}`);
     const bad = APP_USERS.rows.filter((u) => u.email && !normRole(u.role));
-    if (bad.length) add("roles", "Role ของผู้ใช้ถูกต้อง", "warn", `${bad.length} แถวใน APP_USERS มี role ที่ไม่รู้จัก (ใช้ super_admin / admin / ae / marketing / production) ผู้ใช้เหล่านี้จะเข้าระบบไม่ได้`);
+    if (bad.length) add("roles", "Role ของผู้ใช้ถูกต้อง", "warn", `${bad.length} แถวใน APP_USERS มี role ที่ไม่รู้จัก (ใช้ super_admin / admin / ae / marketing / production / observer) ผู้ใช้เหล่านี้จะเข้าระบบไม่ได้`);
     const keys = new Set(APP_CONFIG.rows.map((r) => r.config_key));
     add("config", "ค่า Config เริ่มต้น", ["max_upload_mb", "excluded_fb_pages"].every((k) => keys.has(k)) ? "ok" : "warn", ["max_upload_mb", "excluded_fb_pages"].every((k) => keys.has(k)) ? "ครบ" : "ขาดบางค่า — แจ้งผู้ดูแล");
     const stuck = IMPORT_BATCHES.rows.filter((b) => b.status === "processing" && Date.now() - Date.parse(b.uploaded_at) > 10 * 60_000);

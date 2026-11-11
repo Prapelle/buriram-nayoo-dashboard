@@ -16,6 +16,7 @@
 | 8 | Export (Looker Studio ถูกตัดออกจากขอบเขต) | เสร็จ (ทดสอบอัตโนมัติ + HTTP Integration ผ่าน · ผู้ใช้ยังไม่ได้รายงานผลบนเว็บจริง) |
 | 9 | Integration Testing | เสร็จ (310/310 ผ่าน) |
 | 10 | Final Audit & Handover | **เสร็จ** — ดู `HANDOVER.md` |
+| — | Role Observer + ทุก Role ดูได้ทุกหน้า (11/11/2026) | เสร็จ · เทสต์ทั้งชุดผ่าน (696 รายการ) · รายละเอียดสิทธิ์ใน `HANDOVER.md` |
 
 ## ข้อจำกัดของ Audit รอบนี้ (ต้องอ่านก่อน)
 - ตรวจจาก **Source Code, ตัวสร้างโครงสร้าง Sheet (schema.ts) และไฟล์ตัวอย่าง CSV/Excel** เท่านั้น

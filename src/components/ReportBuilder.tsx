@@ -13,7 +13,7 @@ const iso = (d: Date) => d.toISOString().slice(0, 10);
 async function api(url: string, init?: RequestInit) { const r = await fetch(url, { cache: "no-store", ...init }); const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`); return j; }
 const csvCell = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
 
-export function ReportBuilder() {
+export function ReportBuilder({ readOnly = false }: { readOnly?: boolean }) {
   const [customers, setCustomers] = useState<{ developer_id: string; name: string }[]>([]);
   const [cust, setCust] = useState(""); const [from, setFrom] = useState(iso(new Date(Date.now() - 30 * 86400000))); const [to, setTo] = useState(iso(new Date()));
   const [sent, setSent] = useState(false); const [rep, setRep] = useState<Rep | null>(null); const [busy, setBusy] = useState(false); const [msg, setMsg] = useState<Msg>(null);
@@ -83,9 +83,9 @@ export function ReportBuilder() {
               <div className="flex flex-wrap items-end gap-2 border-t border-slate-100 pt-3 print:hidden">
                 <button type="button" onClick={() => window.print()} className={btn.secondary}>🖨 พิมพ์ / บันทึก PDF</button>
                 <button type="button" onClick={csv} className={btn.secondary}>⬇ CSV</button>
-                <label className="ml-auto min-w-56 flex-1 text-sm sm:flex-none"><span className="mb-0.5 block text-xs text-slate-500">ลิงก์ไฟล์รายงาน (Drive) — ใส่ให้ทุกการ์ดที่เลือก</span><input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://" className={`${inp} w-full`} /></label>
+                {!readOnly && <><label className="ml-auto min-w-56 flex-1 text-sm sm:flex-none"><span className="mb-0.5 block text-xs text-slate-500">ลิงก์ไฟล์รายงาน (Drive) — ใส่ให้ทุกการ์ดที่เลือก</span><input value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://" className={`${inp} w-full`} /></label>
                 <button type="button" disabled={busy || !chosen.length} onClick={() => mark("รายงานเสร็จแล้ว")} className={btn.secondary}>✔ รายงานเสร็จแล้ว</button>
-                <button type="button" disabled={busy || !chosen.length} onClick={() => mark("ส่งให้ลูกค้าแล้ว")} className={btn.primary}>ส่งให้ลูกค้าแล้ว</button>
+                <button type="button" disabled={busy || !chosen.length} onClick={() => mark("ส่งให้ลูกค้าแล้ว")} className={btn.primary}>ส่งให้ลูกค้าแล้ว</button></>}
               </div>
             </>)}
         </article>)}

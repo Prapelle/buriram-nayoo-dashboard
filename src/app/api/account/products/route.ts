@@ -13,7 +13,7 @@ function fail(e: unknown) {
 
 // Product (ชนิด Product กลาง): ดู / เพิ่ม / แก้ไข(เปลี่ยนชื่อ) = Super Admin, Admin, AE · ลบ = Super Admin, Admin
 export async function GET() {
-  const g = await requireRole(["admin", "ae"]);
+  const g = await requireRole(["admin", "ae", "marketing", "production", "observer"]);
   if (!g.ok) return g.res;
   try { return NextResponse.json(await listProducts()); } catch (e) { return fail(e); }
 }
