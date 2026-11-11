@@ -143,6 +143,24 @@ try {
   lr = await tab("LEADS"); assert.equal(get("B2", "call_status"), "กู้ไม่ผ่าน"); assert.equal(get("B2", "lost_reason"), "รายได้ไม่ผ่านเกณฑ์");
   assert.equal(await page.getByRole("heading", { name: "คนต้องการซื้อ", level: 1 }).count(), 1);
   ok("คนต้องการซื้อ (กู้ไม่ผ่าน ต้องกรอกสาเหตุ: ยกเลิกแล้วการ์ดไม่ย้าย · กรอกแล้วบันทึกลงช่องสาเหตุ) · Call Status ชื่อเดิม (ยังไม่ได้โทร / เข้าชมโครงการแล้ว) อยู่คอลัมน์ใหม่ถูกต้อง · ลากไป ติดต่อได้แล้ว (contactable TRUE) · เมนูเปลี่ยนเป็น จอง · ไม่แสดง Lead ขาย");
+  { // กดการ์ดบนบอร์ด = ดูข้อมูล (11/11/2026) · แก้ไข → หน้า Leads เปิดฟอร์มของ Lead นั้น
+    await col(page, "กู้ไม่ผ่าน").getByRole("button", { name: /^ดู Lead .*ผู้ซื้อ ข$/ }).click();
+    const lv = page.getByRole("dialog", { name: /ผู้ซื้อ ข/ }); await lv.waitFor();
+    const lt = await lv.innerText();
+    assert.ok(lt.includes("เบอร์โทร") && lt.includes("Call Status") && lt.includes("กู้ไม่ผ่าน") && lt.includes("รายได้ไม่ผ่านเกณฑ์"), lt.slice(0, 300));
+    assert.equal(await lv.locator("input, select, textarea").count(), 0); // อ่านอย่างเดียว
+    await page.keyboard.press("Escape"); await lv.waitFor({ state: "detached" });
+    await col(page, "กู้ไม่ผ่าน").locator("li", { hasText: "ผู้ซื้อ ข" }).locator("span.font-mono").click(); await lv.waitFor(); // กดตรงไหนของการ์ดก็เปิด
+    await lv.getByRole("link", { name: "แก้ไข" }).click(); await page.waitForURL(/\/work\/leads\?edit=/);
+    await page.getByRole("heading", { name: /^แก้ไข LD-/ }).waitFor();
+    assert.ok(await page.evaluate(() => [...document.querySelectorAll("input")].some((i) => i.value === "ผู้ซื้อ ข")), "ฟอร์มแก้ไขเป็นของ ผู้ซื้อ ข");
+    await page.goto(BASE + "/work/buyer-leads"); await col(page, "กู้ไม่ผ่าน").getByText("ผู้ซื้อ ข").waitFor();
+    await col(page, "กู้ไม่ผ่าน").getByRole("button", { name: /^ดู Lead .*ผู้ซื้อ ข$/ }).click(); await lv.getByRole("link", { name: "เปิดในหน้า Leads" }).click();
+    await page.waitForURL(/\/work\/leads\?view=/); await page.getByRole("heading", { name: /ผู้ซื้อ ข$/ }).waitFor();
+    await page.goto(BASE + "/work/buyer-leads"); await col(page, "กู้ไม่ผ่าน").getByText("ผู้ซื้อ ข").waitFor();
+    assert.deepEqual(errors, []);
+    ok("บอร์ด คนต้องการซื้อ: กดการ์ด = หน้าต่างดูข้อมูล (อ่านอย่างเดียว · Esc ปิด) · แก้ไข → หน้า Leads เปิดฟอร์มของ Lead นั้น · เปิดในหน้า Leads → แผงดูข้อมูล");
+  }
   { // ใช้พร้อมกันหลายคน (1/11/2026): อีกคนเปิดบอร์ดเดียวกันอยู่ → เห็นการ์ดที่ย้ายเองภายใน 1 นาที (ไม่ต้องรีเฟรช) · ใช้ข้อมูลเก่า → แจ้งและโหลดใหม่
     const other = await open("admin@example.com"); const p2 = other.page;
     await p2.clock.install(); await p2.goto(BASE + "/work/buyer-leads"); await col(p2, "ติดต่อได้แล้ว").getByText("ผู้ซื้อ ก").waitFor();
@@ -295,6 +313,18 @@ try {
   const lg = await tab("DEVELOPER_STATUS_LOG"); assert.equal(lg.length - 1, 4); assert.equal(lg.filter((x) => x[lg[0].indexOf("kind")] === "auto_product").length, 1); // ย้ายอัตโนมัติตาม Product 1 + สร้างเป็น เข้าร่วมแล้ว 1 + ย้ายด้วยมือ 2
   if (process.env.SHOT_DIR) await page.screenshot({ path: process.env.SHOT_DIR + "/sale-developer.png", fullPage: true });
   ok("หน้า Sale developer: 8 คอลัมน์ตามลำดับที่กำหนด · การ์ดที่มี Product อยู่คอลัมน์ กำลังใช้ Product และล็อก · เมนู → มีแผนเข้าพบ · ลาก → เข้าพบแล้ว (ติดต่อล่าสุด = วันนี้) · บันทึกประวัติ");
+  { // กดการ์ด Sale developer = ดูข้อมูล + Product ที่ใช้อยู่ (11/11/2026) · แก้ไข → หน้า Developer เปิดฟอร์ม
+    await page.goto(BASE + "/work/sale-developer"); await page.locator('[data-col="กำลังใช้ Product"]').getByText("บ้านดี วิลล์").first().waitFor();
+    await page.locator('[data-col="กำลังใช้ Product"]').getByRole("button", { name: /^ดู DV-.*บริษัท บ้านดี จำกัด$/ }).click();
+    const dvv = page.getByRole("dialog", { name: /บริษัท บ้านดี จำกัด/ }); await dvv.waitFor();
+    const dt = await dvv.innerText(); assert.ok(dt.includes("Product ที่ใช้อยู่") && dt.includes("กำลังใช้") && dt.includes("Nayoo URL"), dt.slice(0, 300));
+    assert.equal(await dvv.locator("input, select, textarea").count(), 0);
+    await dvv.getByRole("link", { name: "แก้ไข" }).click(); await page.waitForURL(/\/work\/developers\?edit=/);
+    await page.getByRole("heading", { name: /^แก้ไข DV-/ }).waitFor();
+    assert.ok(await page.evaluate(() => [...document.querySelectorAll("input")].some((i) => i.value === "บริษัท บ้านดี จำกัด")));
+    assert.deepEqual(errors, []);
+    ok("บอร์ด Sale developer: กดการ์ด = หน้าต่างดูข้อมูล + Product ที่ใช้อยู่ · แก้ไข → หน้า Developer เปิดฟอร์มของบริษัทนั้น");
+  }
   { // Home Builder + Sale home builder (1/11/2026): ระบบเดียวกับ Developer แยกข้อมูลกัน · ไม่มีช่องโครงการ
     await page.goto(BASE + "/work/home-builders"); await page.getByRole("button", { name: "+ เพิ่ม Home Builder" }).click();
     const hform = page.locator("section", { has: page.getByRole("heading", { name: "เพิ่ม Home Builder ใหม่" }) }).last();

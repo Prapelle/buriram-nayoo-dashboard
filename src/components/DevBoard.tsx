@@ -6,6 +6,8 @@ import { thDate, thDateTime, thMonth, thDayMonth } from "@/lib/thdate";
 import Link from "next/link";
 import { BoardScroller, BoardTabs } from "@/components/Board";
 import { useAsk } from "@/components/AskDialog";
+import { RecordModal } from "@/components/RecordModal";
+import { DevDetails } from "@/components/DevDetails";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AUTO_STATUS, KIND_LABEL, type DevKind, CONTACT_METHODS, DEV_DEFAULT, DEV_STATUS, productState, TIERS, type Dev, type DevProduct } from "@/lib/developers";
 
@@ -26,6 +28,7 @@ export function DevBoard({ kind = "developer" }: { kind?: DevKind }) {
   const [msg, setMsg] = useState<{ type: "ok" | "error"; text: string; link?: string } | null>(null);
   const [q, setQ] = useState(""); const [staffF, setStaffF] = useState(""); const [tierF, setTierF] = useState("");
   const [busy, setBusy] = useState<Set<string>>(new Set()); const [dragId, setDragId] = useState(""); const [over, setOver] = useState("");
+  const [viewId, setViewId] = useState(""); // กดการ์ด = ดูข้อมูล (11/11/2026)
 
   const load = useCallback(async (silent = false) => {
     try { const r = await fetch(`/api/developers?kind=${kind}`); const j = await r.json(); if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`); setAll(j.devs); setProducts(j.products); setStaff(j.staff); setToday(j.today); setState("ok"); }
@@ -91,11 +94,11 @@ export function DevBoard({ kind = "developer" }: { kind?: DevKind }) {
                     const lock = locked(d), b = busy.has(d.developer_id), act = (activeOf.get(d.developer_id) ?? []).sort((x, y) => x.end_date.localeCompare(y.end_date));
                     const overdue = d.next_follow_up_at && d.next_follow_up_at < today;
                     return (
-                      <li key={d.developer_id} draggable={!b && !lock}
+                      <li key={d.developer_id} draggable={!b && !lock} onClick={(e) => { if (!(e.target as HTMLElement).closest("a, select, button, input")) setViewId(d.developer_id); }}
                         onDragStart={(e) => { e.dataTransfer.setData("text/plain", d.developer_id); e.dataTransfer.effectAllowed = "move"; setDragId(d.developer_id); }}
                         onDragEnd={() => { setDragId(""); setOver(""); }}
                         className={`rounded-md border border-slate-200 bg-white p-2.5 text-sm shadow-sm ${b ? "opacity-50" : lock ? "" : "cursor-grab active:cursor-grabbing"} ${dragId === d.developer_id ? "opacity-40" : ""}`}>
-                        <div className="flex items-start justify-between gap-2"><div className="font-medium leading-snug">{d.company_name || d.project_main}</div>{d.tier && <span className="rounded bg-slate-800 px-1.5 text-[11px] font-semibold text-white">{d.tier}</span>}</div>
+                        <div className="flex items-start justify-between gap-2"><button type="button" onClick={() => setViewId(d.developer_id)} className="text-left font-medium leading-snug hover:underline" aria-label={`ดู ${d.dev_code} ${d.company_name || d.project_main}`}>{d.company_name || d.project_main}</button>{d.tier && <span className="rounded bg-slate-800 px-1.5 text-[11px] font-semibold text-white">{d.tier}</span>}</div>
                         {d.company_name && d.project_main && <div className="text-xs text-slate-500">{d.project_main}</div>}
                         {act.map((p) => <div key={p.product_id} className="mt-1 text-[11px]"><span className="rounded bg-green-100 px-1">{p.product}</span> {productState(p, today) === "future" ? `เริ่ม ${dmy(p.start_date)}` : `หมด ${dmy(p.end_date)}`}</div>)}
                         <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-slate-500"><span className="font-mono">{d.dev_code}</span>{d.staff && <span>{d.staff}</span>}{d.next_follow_up_at && <span className={overdue ? "font-semibold text-red-600" : ""}>ติดต่อ {dmy(d.next_follow_up_at)}</span>}</div>
@@ -112,6 +115,11 @@ export function DevBoard({ kind = "developer" }: { kind?: DevKind }) {
         </>
       )}
       <p className="text-xs text-slate-500">• ลากการ์ดเพื่อเปลี่ยน Status (มือถือใช้เมนูบนการ์ด) · 🔒 = ระบบย้ายให้เองตามวันของ Product · ปิดการขาย = Win ของเดือนนั้น · ย้ายไป เข้าพบแล้ว → ติดต่อล่าสุด = วันนี้</p>
+      {(() => { const v = viewId ? all.find((x) => x.developer_id === viewId) : undefined; return v ? (
+        <RecordModal label={`${v.dev_code} ${v.company_name || v.project_main}`} kicker={<><span className="font-mono">{v.dev_code}</span> · {v.status || DEV_DEFAULT}{v.tier && ` · Tier ${v.tier}`}</>} title={v.company_name || v.project_main} onClose={() => setViewId("")}
+          actions={[{ href: `${page}?edit=${encodeURIComponent(v.developer_id)}`, text: "แก้ไข", primary: true }, { href: `${page}?view=${encodeURIComponent(v.developer_id)}`, text: "Product / บันทึกการติดต่อ" }]}>
+          <DevDetails dev={v} products={products.filter((p) => p.developer_id === v.developer_id)} today={today} homeBuilder={kind === "home_builder"} />
+        </RecordModal>) : null; })()}
       {askEl}
     </div>
   );

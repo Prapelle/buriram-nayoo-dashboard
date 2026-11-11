@@ -63,6 +63,14 @@ export function DevelopersManager({ kind = "developer", canDelete = true }: { ki
     if (v === "overdue" || v === "today" || v === "stale") setFollow(v);
     if (sp.get("view")) setViewId(sp.get("view")!); // เปิดจากบอร์ด Sale developer (ปิดการขาย → เพิ่ม Product)
   }, []);
+  // ?edit=<developer_id> (11/11/2026): เปิดฟอร์มแก้ไขจากหน้าต่างดูข้อมูลบนบอร์ด — ทำครั้งเดียวเมื่อโหลดข้อมูลเสร็จ
+  const [editOpened, setEditOpened] = useState(false);
+  useEffect(() => {
+    if (editOpened || !data) return;
+    const id = new URLSearchParams(window.location.search).get("edit"); setEditOpened(true);
+    const d = id ? data.devs.find((x: Dev) => x.developer_id === id) : undefined;
+    if (d) { openForm(d); window.scrollTo({ top: 0 }); }
+  }, [data, editOpened]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function call(method: string, body: object) {
     const r = await fetch("/api/developers", { method, headers: { "content-type": "application/json" }, body: JSON.stringify({ ...body, kind }) });

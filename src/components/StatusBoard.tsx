@@ -7,6 +7,9 @@ import Link from "next/link";
 import { BoardScroller, BoardTabs } from "@/components/Board";
 import { useAsk } from "@/components/AskDialog";
 import { telHref } from "@/lib/contact-links";
+import { RecordModal } from "@/components/RecordModal";
+import { LeadDetails } from "@/components/LeadDetails";
+import type { LeadProperty } from "@/lib/lead-properties";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BUY_NEEDS, CALL_DEFAULT, CALL_STATUS, normCall, SELL_DEFAULT, SELL_NEEDS, SELL_STATUS } from "@/lib/lead-options";
 import { filterLeads, leadStatusOf, todayBkk, type Lead } from "@/lib/leads";
@@ -54,12 +57,14 @@ export function StatusBoard({ kind }: { kind: "seller" | "buyer" }) {
   const [busy, setBusy] = useState<Set<string>>(new Set());
   const [dragId, setDragId] = useState("");
   const [over, setOver] = useState("");
+  const [props, setProps] = useState<Record<string, LeadProperty[]>>({});
+  const [viewId, setViewId] = useState(""); // กดการ์ด = ดูข้อมูล (11/11/2026)
 
   const load = useCallback(async (silent = false) => {
     try {
       const r = await fetch("/api/leads"); const j = await r.json();
       if (!r.ok) throw new Error(j.error ?? `HTTP ${r.status}`);
-      setAll(j.rows as Lead[]); setStaff(j.staff ?? []); setState("ok");
+      setAll(j.rows as Lead[]); setStaff(j.staff ?? []); setProps(j.properties ?? {}); setState("ok");
     } catch (e) { if (silent) return; setMsg({ type: "error", text: e instanceof Error ? e.message : "โหลดข้อมูลไม่ได้" }); setState("error"); }
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -138,11 +143,11 @@ export function StatusBoard({ kind }: { kind: "seller" | "buyer" }) {
                     const overdue = r.next_follow_up_at && r.next_follow_up_at < today && !(cfg.closed as readonly string[]).includes(colOf(r));
                     const b = busy.has(r.lead_id);
                     return (
-                      <li key={r.lead_id} draggable={!b}
+                      <li key={r.lead_id} draggable={!b} onClick={(e) => { if (!(e.target as HTMLElement).closest("a, select, button, input")) setViewId(r.lead_id); }}
                         onDragStart={(e) => { e.dataTransfer.setData("text/plain", r.lead_id); e.dataTransfer.effectAllowed = "move"; setDragId(r.lead_id); }}
                         onDragEnd={() => { setDragId(""); setOver(""); }}
                         className={`rounded-md border border-slate-200 bg-white p-2.5 text-sm shadow-sm ${b ? "opacity-50" : "cursor-grab active:cursor-grabbing"} ${dragId === r.lead_id ? "opacity-40" : ""}`}>
-                        <div className="font-medium leading-snug">{r.customer_name}</div>
+                        <button type="button" onClick={() => setViewId(r.lead_id)} className="block text-left font-medium leading-snug hover:underline" aria-label={`ดู Lead ${r.lead_code} ${r.customer_name}`}>{r.customer_name}</button>
                         <div className="mt-0.5 text-xs text-slate-500">{r.phone && <><a href={telHref(r.phone)} className="text-sky-700 hover:underline" draggable={false}>{r.phone}</a>{(r.property_type || r.price_range) && " · "}</>}{[r.property_type, r.price_range].filter(Boolean).join(" · ")}{!r.phone && !r.property_type && !r.price_range && <span className="text-slate-300">—</span>}</div>
                         {r.interest && <div className="mt-0.5 line-clamp-2 text-xs text-slate-600" title={r.interest}>สนใจ: {r.interest}</div>}
                         {kind === "buyer" && <div className="mt-1 flex gap-1 text-[11px]"><span className="rounded bg-slate-100 px-1.5 py-0.5">{r.need}</span>{r.buy_status && <span className="rounded bg-slate-100 px-1.5 py-0.5">{r.buy_status}</span>}</div>}
@@ -165,6 +170,11 @@ export function StatusBoard({ kind }: { kind: "seller" | "buyer" }) {
         </>
       )}
       <p className="text-xs text-slate-500">• {cfg.note} · ลากบนมือถือไม่สะดวก ใช้เมนูสถานะบนการ์ดแทน{noNeed > 0 && ` · มี ${noNeed} Lead ที่ยังไม่ระบุ Need ไม่แสดงบนบอร์ด (กำหนด Need ที่หน้า Leads)`}</p>
+      {(() => { const v = viewId ? all.find((x) => x.lead_id === viewId) : undefined; return v ? (
+        <RecordModal label={`${v.lead_code} ${v.customer_name}`} kicker={<><span className="font-mono">{v.lead_code}</span> · {colOf(v) === OTHER ? "ค่าเดิมที่ไม่รู้จัก" : colOf(v)}</>} title={v.customer_name} onClose={() => setViewId("")}
+          actions={[{ href: `/work/leads?edit=${encodeURIComponent(v.lead_id)}`, text: "แก้ไข", primary: true }, { href: `/work/leads?view=${encodeURIComponent(v.lead_id)}`, text: "เปิดในหน้า Leads" }]}>
+          <LeadDetails lead={v} properties={props[v.lead_id] ?? []} />
+        </RecordModal>) : null; })()}
       {askEl}
     </div>
   );

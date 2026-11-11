@@ -11,6 +11,7 @@ import { CHANNELS } from "@/lib/dashboard";
 import { CALL_DEFAULT, normCall } from "@/lib/lead-options";
 import { CLOSED_BUY, CLOSED_CALL, CLOSED_SELL, followUps, STALE_DAYS } from "@/lib/lead-insights";
 import { lineHref, telHref } from "@/lib/contact-links";
+import { LeadDetails } from "@/components/LeadDetails";
 import { nayooUrlError, propDefault, propSideSell, propStatusesFor, type LeadProperty } from "@/lib/lead-properties";
 import {
   areaLabel, BUY_STATUS, CALL_STATUS, CONDITIONS, EDITABLE, NEEDS, PRICE_RANGES, PROPERTY_TYPES, SELL_NEEDS, SELL_STATUS,
@@ -69,6 +70,15 @@ export function LeadsManager({ canDelete = true }: { canDelete?: boolean }) {
   // รายการติดตาม (เลยกำหนด / วันนี้ / ค้างนาน) · เปิดจากการ์ดหน้า ภาพรวม ด้วย ?follow=...
   const [follow, setFollow] = useState<"" | "overdue" | "today" | "stale">("");
   useEffect(() => { const v = new URLSearchParams(window.location.search).get("follow"); if (v === "overdue" || v === "today" || v === "stale") setFollow(v); }, []);
+  // เปิดจากบอร์ด คนต้องการซื้อ / ขาย (11/11/2026): ?view=<lead_id> = ดูข้อมูล · ?edit=<lead_id> = เปิดฟอร์มแก้ไข (ทำครั้งเดียวเมื่อโหลดข้อมูลเสร็จ)
+  const [urlOpened, setUrlOpened] = useState(false);
+  useEffect(() => {
+    if (urlOpened || data.state !== "ok") return;
+    setUrlOpened(true);
+    const sp = new URLSearchParams(window.location.search), id = sp.get("edit") || sp.get("view");
+    const r = id ? data.rows.find((x) => x.lead_id === id) : undefined;
+    if (r) { if (sp.get("edit")) openForm(r); else setViewing(r); window.scrollTo({ top: 0 }); }
+  }, [data, urlOpened]); // eslint-disable-line react-hooks/exhaustive-deps
   const fu = useMemo(() => followUps(data.rows, todayBkk()), [data.rows]);
   const shown = useMemo(() => {
     const base = filterLeads(data.rows, f);
@@ -203,23 +213,7 @@ export function LeadsManager({ canDelete = true }: { canDelete?: boolean }) {
         <section className="space-y-3 rounded-lg border border-slate-300 bg-white p-5">
           <div className="flex items-center justify-between"><h2 className="font-semibold">{viewing.lead_code} · {viewing.customer_name}</h2>
             <span className="flex gap-4 text-sm"><button onClick={() => openForm(viewing)} className="underline">แก้ไข</button><button onClick={() => setViewing(null)} className="underline">ปิด</button></span></div>
-          <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
-            {([
-              ["วันที่รับ Lead", dmy(viewing.received_at)], ["ช่องทาง", viewing.source_channel], ["ชื่อลูกค้า", viewing.customer_name],
-              ["เบอร์โทร", viewing.phone ? <a href={telHref(viewing.phone)} className="text-sky-700 underline">{viewing.phone}</a> : ""],
-              ["Line", viewing.line_id ? <a href={lineHref(viewing.line_id)} target="_blank" rel="noreferrer" className="text-sky-700 underline">{viewing.line_id}</a> : ""],
-              ["ความต้องการ", viewing.need], [statusLabel(viewing.need), leadStatusOf(viewing)], ["ประเภททรัพย์", viewing.property_type], ["สภาพทรัพย์", viewing.property_condition],
-              ["ช่วงราคา", viewing.price_range], ["Call Status", viewing.call_status], ["Staff", viewing.staff], ["พื้นที่", areaLabel(viewing.area)],
-              ["ความสนใจ", viewing.interest], ["Campaign", viewing.campaign_name],
-              ["ติดต่อล่าสุด", dmy(viewing.last_contacted_at)], ["ติดตามครั้งถัดไป", dmy(viewing.next_follow_up_at)], ["ขั้น Pipeline (คำนวณ)", viewing.status], ["สร้างโดย", `${viewing.created_by} · ${dmy(viewing.created_at)}`], ["แก้ไขล่าสุด", `${viewing.updated_by} · ${dmy(viewing.updated_at)}`],
-            ] as [string, React.ReactNode][]).map(([k, v]) => <div key={k}><dt className="text-xs text-slate-500">{k}</dt><dd>{v || <span className="text-slate-300">—</span>}</dd></div>)}
-          </dl>
-          {[["รายละเอียดเพิ่มเติม (Remark)", viewing.need_description], ["บันทึกภายใน (Note)", viewing.notes], ...(viewing.lost_reason ? [["เหตุผลที่ปิดไม่สำเร็จ", viewing.lost_reason]] : [])].map(([k, v]) => (
-            <div key={k} className="text-sm"><div className="text-xs text-slate-500">{k}</div><p className="whitespace-pre-wrap">{v || <span className="text-slate-300">—</span>}</p></div>))}
-          {(data.properties[viewing.lead_id] ?? []).length > 0 && (
-            <div className="text-sm"><div className="text-xs text-slate-500">{propSideSell(viewing.need) ? "ทรัพย์ที่ต้องการขาย" : "ทรัพย์ที่สนใจ"}</div>
-              <ul className="mt-1 space-y-1">{data.properties[viewing.lead_id].map((p) => <li key={p.property_id} className="flex flex-wrap items-center gap-2"><span className="rounded bg-slate-100 px-1.5 text-xs">{p.status}</span><a href={p.url} target="_blank" rel="noreferrer noopener" className="break-all text-sky-700 underline">{p.url}</a></li>)}</ul></div>)}
-          {!viewing.need && <p className="rounded-md bg-amber-50 p-2 text-sm text-amber-800">Lead นี้บันทึกก่อนมีช่อง Need — กด แก้ไข เพื่อเลือก Need และสถานะ</p>}
+          <LeadDetails lead={viewing} properties={data.properties[viewing.lead_id] ?? []} />
         </section>
       )}
 
