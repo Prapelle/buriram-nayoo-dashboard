@@ -37,6 +37,7 @@ export function ContentBoard({ canDelete }: { canDelete: boolean }) {
   const [tab, setTab] = useState(""); const [dragId, setDragId] = useState(""); const [over, setOver] = useState("");
   const [busy, setBusy] = useState<Set<string>>(new Set());
   const [edit, setEdit] = useState<Card | "new" | null>(null);
+  const [viewId, setViewId] = useState(""); // กดการ์ด = ดูข้อมูล (11/11/2026) · ข้อมูลอัปเดตตามบอร์ดที่โหลดใหม่
   // มุมมอง บอร์ด / ปฏิทิน (10/11/2026) · จำใน URL (?view=calendar) ให้บุ๊กมาร์ก/รีเฟรชแล้วอยู่หน้าเดิม
   const [view, setView] = useState<"board" | "calendar">("board");
   useEffect(() => { if (new URLSearchParams(window.location.search).get("view") === "calendar") setView("calendar"); }, []);
@@ -131,7 +132,7 @@ export function ContentBoard({ canDelete }: { canDelete: boolean }) {
 
       {state === "loading" && <Skeleton kind="board" />}
       {state === "ok" && b && view === "calendar" && (
-        <ContentCalendar cards={shown} today={b.today} stageCls={HEAD} busy={busy} onOpen={(c) => setEdit(c)} onReschedule={(c, d) => void reschedule(c, d)} />)}
+        <ContentCalendar cards={shown} today={b.today} stageCls={HEAD} busy={busy} onOpen={(c) => setViewId(c.card_id)} onReschedule={(c, d) => void reschedule(c, d)} />)}
       {state === "ok" && b && view === "board" && (
         <>
           <BoardTabs tabs={STAGES.map((k) => ({ key: k, label: k, count: cols[k]?.length ?? 0, cls: HEAD[k] }))} active={active} onPick={setTab} />
@@ -151,7 +152,7 @@ export function ContentBoard({ canDelete }: { canDelete: boolean }) {
                     <li key={c.card_id} draggable={!busy.has(c.card_id)}
                       onDragStart={(e) => { e.dataTransfer.setData("text/plain", c.card_id); e.dataTransfer.effectAllowed = "move"; setDragId(c.card_id); }} onDragEnd={() => { setDragId(""); setOver(""); }}
                       className={`rounded-md bg-white p-2.5 text-sm shadow-sm ${c.sales_tag === "TRUE" ? "border-2 border-red-500" : "border border-slate-200"} ${busy.has(c.card_id) ? "opacity-50" : "cursor-grab active:cursor-grabbing"} ${dragId === c.card_id ? "opacity-40" : ""}`}>
-                      <button type="button" onClick={() => setEdit(c)} className="block w-full text-left">{chip(c)}</button>
+                      <button type="button" onClick={() => setViewId(c.card_id)} className="block w-full text-left" aria-label={`ดูการ์ด ${c.card_code} ${c.title}`}>{chip(c)}</button>
                       <select aria-label={`ย้ายสถานะ ${c.card_code}`} value={c.stage} disabled={busy.has(c.card_id)} onChange={(e) => void move(c.card_id, e.target.value)} className="mt-2 w-full rounded border border-slate-300 bg-white px-1.5 py-1 text-xs">
                         {STAGES.map((s) => <option key={s}>{s}</option>)}
                       </select>
@@ -161,7 +162,78 @@ export function ContentBoard({ canDelete }: { canDelete: boolean }) {
           </BoardScroller>
           <p className="text-xs text-slate-500">• 7 คอลัมน์แรก = ช่วงผลิต · 4 คอลัมน์หลัง = ช่วงรายงานลูกค้า (เฉพาะ Content ที่ติดแท็กงานขาย) · งานขายที่เผยแพร่แล้วจะเลื่อนไป "รอครบเพื่อทำรายงาน" อัตโนมัติ พร้อมวันครบกำหนดจากระยะติดตามผล · ลากบนมือถือไม่สะดวก ใช้เมนูสถานะบนการ์ดแทน</p>
         </>)}
+      {!edit && viewId && b && (() => { const vc = b.cards.find((x) => x.card_id === viewId); return vc ? <CardView card={vc} onClose={() => setViewId("")} onEdit={() => { setViewId(""); setEdit(vc); }} /> : null; })()}
       {edit && b && <CardDialog board={b} card={edit === "new" ? null : edit} canDelete={canDelete} onClose={() => setEdit(null)} onDone={(t) => { setEdit(null); setMsg({ type: "ok", text: t }); void load(true); }} />}
+    </div>
+  );
+}
+
+/** ดูข้อมูลการ์ด (อ่านอย่างเดียว) — กด แก้ไข เพื่อเปิดฟอร์มเดิม */
+function CardView({ card, onClose, onEdit }: { card: Card; onClose: () => void; onEdit: () => void }) {
+  const [hist, setHist] = useState<Hist[] | null>(null);
+  const [mx, setMx] = useState<Metrics | null | undefined>(undefined);
+  useEffect(() => { api(`/api/content/history?id=${card.card_id}`).then((j) => setHist(j.history)).catch(() => setHist([])); }, [card.card_id]);
+  useEffect(() => { if (card.post_id) api(`/api/content/metrics?post_id=${encodeURIComponent(card.post_id)}`).then((j) => setMx(j.metrics)).catch(() => setMx(null)); }, [card.post_id]);
+  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [onClose]);
+  const sales = card.sales_tag === "TRUE";
+  const link = (u: string) => (/^https?:\/\//i.test(u) ? <a href={u} target="_blank" rel="noopener noreferrer" className="break-all text-sky-700 underline">{u}</a> : <span className="break-all">{u}</span>);
+  const rows: [string, React.ReactNode][] = [
+    ["ประเภท Content", card.content_type],
+    ["ลูกค้า", card.customer_name],
+    ["Product", card.product],
+    ["วันลง (กำหนดเผยแพร่)", card.planned_date && <>{dmy(card.wait.planned_eff || card.planned_date)}{card.wait.planned_eff && card.wait.planned_eff !== card.planned_date && <span className="text-slate-500"> (เลื่อนจาก {dmy(card.planned_date)} เพราะรอลูกค้า)</span>}</>],
+    ["เผยแพร่จริง", card.published_at && dmy(card.published_at)],
+    ...(sales ? [
+      ["เป้าหมายงานขาย", card.sales_goal],
+      ["ระยะติดตามผล", card.follow_days && `${card.follow_days} วันหลังเผยแพร่`],
+      ["รายงานครบกำหนด", (card.wait.report_due_eff || card.report_due_date) && <span className={card.due === "overdue" ? "font-semibold text-red-600" : card.due === "due" ? "font-semibold text-amber-700" : ""}>{dmy(card.wait.report_due_eff || card.report_due_date)}{card.due === "overdue" && " (เลยกำหนด)"}{card.due === "due" && " (วันนี้)"}</span>],
+      ["ส่งรายงานแล้ว", card.report_sent_at && dmy(card.report_sent_at)],
+    ] as [string, React.ReactNode][] : []),
+    ["ลิงก์ไฟล์งาน", card.drive_link && link(card.drive_link)],
+    ...(sales ? [["ลิงก์ไฟล์รายงาน", card.report_link && link(card.report_link)]] as [string, React.ReactNode][] : []),
+    ["Facebook Post ID", card.post_id],
+  ];
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-3 md:p-8" role="dialog" aria-modal="true" aria-label={`${card.card_code} ${card.title}`} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className={`w-full max-w-2xl space-y-3 rounded-xl bg-white p-4 shadow-xl ${sales ? "border-2 border-red-500" : ""}`}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-xs text-slate-500"><span className="font-mono">{card.card_code}</span> · {card.stage}</div>
+            <h2 className="text-lg font-semibold leading-snug">{card.title}</h2>
+            <div className="mt-1 flex flex-wrap gap-1 text-[11px]">
+              {sales && <span className="rounded bg-red-50 px-1.5 py-0.5 font-medium text-red-700">งานขาย</span>}
+              {card.wait.open && <span className={`rounded px-1.5 py-0.5 ${card.wait.alert ? "bg-red-100 font-semibold text-red-700" : "bg-amber-100 text-amber-800"}`}>⏳ รอ {card.wait.open.kind} ตั้งแต่ {dmy(card.wait.open.since)} · {card.wait.open.days} วันทำการ</span>}
+            </div>
+          </div>
+          <button type="button" onClick={onClose} aria-label="ปิด" className="px-2 text-xl leading-none text-slate-500">×</button>
+        </div>
+        <dl className="grid gap-x-4 gap-y-2 text-sm sm:grid-cols-2">
+          {rows.map(([k, v]) => <div key={k} className="min-w-0"><dt className="text-xs text-slate-500">{k}</dt><dd>{v || <span className="text-slate-300">—</span>}</dd></div>)}
+        </dl>
+        {(card.wait.prod_days > 0 || card.wait.report_days > 0) && <p className="text-xs text-slate-600">รอลูกค้ามาแล้ว: ช่วงผลิต {card.wait.prod_days} วันทำการ · ช่วงรายงาน {card.wait.report_days} วันทำการ</p>}
+        <div>
+          <div className="text-xs text-slate-500">ผู้ร่วมงาน</div>
+          {card.members.length ? <ul className="mt-0.5 flex flex-wrap gap-1.5 text-sm">{card.members.map((m) => <li key={m.email} className={`rounded-full px-2 py-0.5 ${m.is_main ? "bg-brand-50 font-medium text-brand-700" : "bg-slate-100"}`}>{m.name}{m.duty && <span className="text-slate-500"> · {m.duty}</span>}{m.is_main && " (หลัก)"}</li>)}</ul> : <span className="text-sm text-slate-300">—</span>}
+        </div>
+        <div>
+          <div className="text-xs text-slate-500">แคปชัน / รายละเอียด</div>
+          {card.caption ? <p className="whitespace-pre-wrap text-sm">{card.caption}</p> : <span className="text-sm text-slate-300">—</span>}
+        </div>
+        {card.post_id && (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+            <div className="mb-1 flex items-center justify-between text-xs text-slate-600"><span>ผลโพสต์ Facebook</span>{mx?.permalink && <a href={mx.permalink} target="_blank" rel="noopener noreferrer" className="underline">เปิดโพสต์</a>}</div>
+            {mx === undefined ? <span className="text-xs text-slate-500">กำลังโหลด…</span> : !mx || mx.scope === "none" ? <span className="text-xs text-slate-500">ยังไม่พบสถิติของ Post ID นี้</span> : (
+              <dl className="grid grid-cols-3 gap-2 text-center sm:grid-cols-6">
+                {([["Views", mx.views], ["Reach", mx.reach], ["Reactions", mx.reactions], ["Comments", mx.comments], ["Shares", mx.shares], ["Link clicks", mx.link_clicks]] as const).map(([k, v]) => <div key={k}><dt className="text-[11px] text-slate-500">{k}</dt><dd className="font-semibold">{Number(v).toLocaleString("th-TH")}</dd></div>)}
+              </dl>)}
+          </div>)}
+        <details className="text-xs text-slate-600"><summary className="cursor-pointer">ประวัติสถานะ{hist ? ` (${hist.length})` : ""}</summary>
+          <ul className="mt-1 space-y-0.5">{(hist ?? []).map((h, i) => <li key={i}>{thDateTime(h.at)} · {h.actor_name} · {h.from_stage || "สร้าง"} → {h.to_stage}{h.note && ` · ${h.note}`}</li>)}</ul></details>
+        <div className="flex items-center gap-2 border-t border-slate-200 pt-3">
+          <button type="button" onClick={onEdit} className={btn.primary} autoFocus>แก้ไข</button>
+          <button type="button" onClick={onClose} className={btn.secondary}>ปิด</button>
+        </div>
+      </div>
     </div>
   );
 }
