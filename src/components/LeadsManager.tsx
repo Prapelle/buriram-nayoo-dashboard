@@ -12,6 +12,7 @@ import { CALL_DEFAULT, normCall } from "@/lib/lead-options";
 import { CLOSED_BUY, CLOSED_CALL, CLOSED_SELL, followUps, STALE_DAYS } from "@/lib/lead-insights";
 import { lineHref, telHref } from "@/lib/contact-links";
 import { LeadDetails } from "@/components/LeadDetails";
+import { useLeadImport } from "@/components/LeadImport";
 import { nayooUrlError, propDefault, propSideSell, propStatusesFor, type LeadProperty } from "@/lib/lead-properties";
 import {
   areaLabel, BUY_STATUS, CALL_STATUS, CONDITIONS, EDITABLE, NEEDS, PRICE_RANGES, PROPERTY_TYPES, SELL_NEEDS, SELL_STATUS,
@@ -65,6 +66,7 @@ export function LeadsManager({ canDelete = true, readOnly = false }: { canDelete
     } catch (e) { if (silent) return; setData({ state: "error", rows: [], staff: [], staffUsers: [], areas: [], properties: {}, propsReady: false, error: e instanceof Error ? e.message : "error" }); }
   }, []);
   useEffect(() => { load(); }, [load]);
+  const imp = useLeadImport((text) => { setMsg({ type: "ok", text }); void load(true); }); // นำเข้า CSV (12/11/2026)
   useAutoRefresh(() => load(true));
 
   // รายการติดตาม (เลยกำหนด / วันนี้ / ค้างนาน) · เปิดจากการ์ดหน้า ภาพรวม ด้วย ?follow=...
@@ -340,9 +342,13 @@ export function LeadsManager({ canDelete = true, readOnly = false }: { canDelete
         {fsel("callStatus", "Call Status", pair(CALL_STATUS))}{fsel("staff", "Staff", pair(data.staff))}
         {fsel("area", "พื้นที่", pair(data.areas))}
         {Object.values(f).some(Boolean) && <button onClick={() => { setF(EMPTY_F); setPage(1); }} className="py-1.5 text-sm underline">ล้าง</button>}
-        {!readOnly && <button onClick={() => openForm(null)} className="ml-auto hidden rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700 md:block">+ เพิ่ม Lead</button>}
+        {!readOnly && <span className="ml-auto flex flex-wrap items-center gap-2">
+          {imp.buttons}
+          <button onClick={() => openForm(null)} className="hidden rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700 md:block">+ เพิ่ม Lead</button>
+        </span>}
       </div>
 
+      {!readOnly && imp.panel}
       {data.state === "loading" && <Skeleton kind={"rows"} />}
       {data.state === "error" && <p role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">โหลดข้อมูลไม่ได้: {data.error}</p>}
       {data.state === "ok" && data.rows.length === 0 && <p className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500">ยังไม่มี Lead — กด &quot;+ เพิ่ม Lead&quot; เพื่อเริ่มบันทึก</p>}

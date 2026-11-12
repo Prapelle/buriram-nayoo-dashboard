@@ -10,6 +10,7 @@ python3 tests/make-sales-fixture.py "$FIX/synthetic_SalesReport.xlsx"
 echo "== sales";     npx tsx tests/sales.test.mts
 echo "== seller-leads"; npx tsx tests/sellerleads.test.ts
 echo "== seller-leads-service"; npx tsx tests/sellerleads-service.test.mts
+echo "== lead-import (นำเข้า Lead จาก CSV)"; npx tsx tests/lead-import.test.mts
 echo "== callstatus-kpi"; npx tsx tests/callstatus-kpi.test.ts
 echo "== insights";    npx tsx tests/insights.test.ts
 echo "== developers";  npx tsx tests/developers.test.ts

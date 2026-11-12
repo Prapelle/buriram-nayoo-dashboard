@@ -4,13 +4,14 @@ import { casWrite, dedupeCode } from "./row-guard";
 import { writeAudit } from "./audit";
 import { checkStaff, followupRow, leadStatusChanges, mergeStaff, staffUserNames } from "./perf";
 import { logFollowup } from "./perf-log";
-import { logLeadStatus } from "./perf-service";
+import { logLeadStatus, logLeadStatusMany } from "./perf-service";
 import { CALL_DEFAULT, CALL_STATUS, isSellerLead, normCall, SELL_DEFAULT, SELL_STATUS } from "./lead-options";
 import { areaLabel, AREA_SUGGEST, contactableFor, findDuplicates, LEAD_COLUMNS, leadStatusOf, nextLeadCode, normalizeEmail, normalizeLine, normalizePhone, pipelineOf, resolveNeedStatus, stampStatus, statusFieldOf, todayBkk, validateLead, type DupMatch, type Lead } from "./leads";
 import { appendRows, deleteWhere, readTab, readTabs, toRow, updateById } from "./sheets";
 import { readColumns } from "./tabdata";
 import { diffProps, PROP_COLUMNS, validateProps, type LeadProperty } from "./lead-properties";
 import type { Role } from "./roles";
+import { DUP_LABEL, importDuplicates, importRowToInput, LEAD_IMPORT_HEADERS, MAX_IMPORT_ROWS } from "./lead-import";
 
 /** ค่าเริ่มต้นของช่องสถานะ (ใช้เทียบก่อน/หลังเพื่อบันทึกประวัติ) */
 const STATUS_DEFAULTS = { sell_status: SELL_DEFAULT, call_status: CALL_DEFAULT } as const;
@@ -157,6 +158,74 @@ export async function saveLead(input: Record<string, unknown>, actor: string, ro
   await writeAudit(actor, ps !== cs || prev.need !== rec.need ? "lead_status_change" : "lead_update", "lead", rec.lead_id,
     parts.length ? `${rec.lead_code}: ${parts.join(" · ")}` : `แก้ไข ${rec.lead_code}`);
   return { created: false, lead: rec };
+}
+
+/**
+ * นำเข้า Lead จากไฟล์ (12/11/2026) — plan = ตรวจอย่างเดียว · commit = เพิ่มเฉพาะแถวที่ถูกต้องและไม่ซ้ำ
+ * ซ้ำ = ฝั่งเดียวกัน + ชื่อลูกค้า / เบอร์โทร / Line เหมือนกัน (เทียบ Lead เดิมและแถวก่อนหน้าในไฟล์) → ข้าม
+ */
+export type LeadImportRow = { n: number; status: "insert" | "duplicate" | "invalid"; name: string; errors?: Record<string, string>; matches?: string[] };
+export async function importLeads(grid: unknown, commit: boolean, actor: string) {
+  if (!Array.isArray(grid) || grid.length < 2 || grid.length > MAX_IMPORT_ROWS + 1) throw new LeadError(422, `ไฟล์ต้องมีหัวคอลัมน์และข้อมูล 1–${MAX_IMPORT_ROWS.toLocaleString()} แถว`, "VALIDATION");
+  const head = (grid[0] as unknown[]).map((h) => String(h ?? "").replace(/^\uFEFF/, "").trim().replace(/\s+/g, " ").toLowerCase());
+  const map = head.map((h) => LEAD_IMPORT_HEADERS[h]);
+  if (!map.includes("customer_name") || !map.includes("need")) throw new LeadError(422, "ไม่พบคอลัมน์ ชื่อลูกค้า หรือ ความต้องการ — ดาวน์โหลดฟอร์ม CSV แล้วใช้หัวคอลัมน์ตามฟอร์ม", "VALIDATION");
+  const t = await load();
+  const tab = t.LEADS;
+  if (!tab.headers.includes("lead_id") || !tab.headers.includes("need")) throw new LeadError(409, "แท็บ LEADS ยังไม่พร้อม กรุณากด เตรียม Google Sheet", "SHEET_NOT_READY");
+  const users = staffUserNames(t.APP_USERS.rows, normRole);
+  const today = todayBkk();
+  const existing = tab.rows.filter((r) => r.lead_id).map(pick);
+  const fresh: Lead[] = []; // แถวที่จะเพิ่ม (ใช้เทียบซ้ำภายในไฟล์)
+  const results: LeadImportRow[] = [];
+  (grid as unknown[][]).slice(1).forEach((cells, k) => {
+    if (!Array.isArray(cells) || cells.every((c) => String(c ?? "").trim() === "")) return;
+    const n = k + 2;
+    const input = importRowToInput(map, cells, today);
+    const v = validateLead(input);
+    const name = input.customer_name ?? "";
+    const errors: Record<string, string> = v.ok ? {} : { ...v.errors };
+    for (const [key, label] of [["line_id", "Line"], ["interest", "ความสนใจ"]] as const) if (input[key] && !tab.headers.includes(key)) errors[key] = `ยังไม่มีคอลัมน์ ${label} — ให้ Admin กด ตั้งค่า → เตรียม Google Sheet`;
+    let staff = "";
+    if (v.ok) { const st = checkStaff(v.rec.staff, undefined, users); if (st === null) errors.staff = `Staff "${v.rec.staff}" ไม่อยู่ในรายชื่อผู้ใช้`; else staff = st; }
+    if (!v.ok || Object.keys(errors).length) { results.push({ n, status: "invalid", name, errors }); return; }
+    const rec: Lead = { ...v.rec, staff };
+    const side = isSellerLead(rec);
+    const dupOld = importDuplicates(existing.filter((r) => isSellerLead(r) === side), rec);
+    const dupNew = importDuplicates(fresh.filter((r) => isSellerLead(r) === side), rec);
+    if (dupOld.length || dupNew.length) {
+      results.push({ n, status: "duplicate", name, matches: [...dupOld.map((d) => `${d.lead_code} (${d.matched.map((x) => DUP_LABEL[x]).join(", ")})`), ...dupNew.map((d) => `แถว ${d.lead_code} ในไฟล์ (${d.matched.map((x) => DUP_LABEL[x]).join(", ")})`)] });
+      return;
+    }
+    fresh.push({ ...rec, lead_code: String(n) });
+    results.push({ n, status: "insert", name });
+  });
+  const counts = { insert: fresh.length, duplicate: results.filter((r) => r.status === "duplicate").length, invalid: results.filter((r) => r.status === "invalid").length };
+  if (!commit || !fresh.length) return { counts, results: results.slice(0, 300), committed: false };
+
+  const now = new Date().toISOString(), year = Number(today.slice(0, 4));
+  const floor = Number(t.APP_CONFIG.rows.find((r) => r.config_key === `lead_code_floor_${today.slice(0, 4)}`)?.config_value) || 0;
+  const codes = tab.rows.map((r) => r.lead_code);
+  const recs = fresh.map((f) => {
+    const { lead_code: _row, ...base } = f; void _row;
+    const r: Lead = { ...resolveNeedStatus(null, base).rec };
+    if (statusFieldOf(r.need) === "sell_status" && !r.sell_status) r.sell_status = SELL_DEFAULT;
+    r.status = pipelineOf(r);
+    r.contactable = contactableFor(r.call_status, r.contactable);
+    const code = nextLeadCode(codes, year, floor); codes.push(code);
+    return { ...r, ...stampStatus(null, r, today), lead_id: crypto.randomUUID(), lead_code: code, created_by: actor, created_at: now, updated_by: actor, updated_at: now } as Lead;
+  });
+  for (let i = 0; i < recs.length; i += 500) await appendRows("LEADS", recs.slice(i, i + 500).map((r) => toRow(tab.headers, r)));
+  // มีคนเพิ่ม Lead พร้อมกันจนรหัสชน → ออกรหัสใหม่ให้แถวที่ชน
+  const after = await readTab("LEADS");
+  const owner = new Map<string, string>();
+  for (const r of after.rows) if (r.lead_code && r.lead_id && !owner.has(r.lead_code)) owner.set(r.lead_code, r.lead_id);
+  for (const r of recs) if (owner.get(r.lead_code) !== r.lead_id) r.lead_code = await dedupeCode("LEADS", tab.headers, "lead_code", "lead_id", r.lead_id, r.lead_code, (cs) => nextLeadCode(cs, year, floor));
+  // บันทึกสถานะเริ่มต้นสำหรับนับผลงาน (ครั้งเดียวทั้งไฟล์ · หลังได้รหัสจริง)
+  const logs = recs.flatMap((r) => leadStatusChanges(null, r, STATUS_DEFAULTS, logFieldOf(r)).map((c) => ({ c, r })));
+  if (logs.length) await logLeadStatusMany(logs, actor, now);
+  await writeAudit(actor, "lead_import", "lead", "-", `นำเข้า ${recs.length} รายการ (${recs[0].lead_code}–${recs[recs.length - 1].lead_code}) · ซ้ำ ${counts.duplicate} · ไม่ถูกต้อง ${counts.invalid}`);
+  return { counts, results: results.slice(0, 300), committed: true, codes: recs.map((r) => r.lead_code) };
 }
 
 /** ลบ Lead ถาวร: ต้องไม่ถูกอ้างอิงโดยรายการขาย, ตรวจว่าข้อมูลไม่เก่า, ไม่ใช้รหัสซ้ำหลังลบ, บันทึก Audit (ไม่ใส่ข้อมูลส่วนบุคคล) */

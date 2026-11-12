@@ -148,7 +148,7 @@ export function DevelopersManager({ kind = "developer", canDelete = true, readOn
     try { const j = await call("POST", { action: "import_commit", grid: imp.grid }); setImp({ ...imp, plan: j }); setMsg({ type: "ok", text: `นำเข้า ${j.counts.insert} รายการแล้ว` }); await load(); }
     catch (e) { setMsg({ type: "error", text: e instanceof Error ? e.message : "นำเข้าไม่สำเร็จ" }); } finally { setBusy(false); }
   }
-  const downloadTemplate = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + toCsv(template)], { type: "text/csv;charset=utf-8" })); a.download = hb ? "home_builder_template.csv" : "developer_template.csv"; a.click(); URL.revokeObjectURL(a.href); };
+  const downloadTemplate = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([toCsv(template)], { type: "text/csv;charset=utf-8" })); a.download = hb ? "home_builder_template.csv" : "developer_template.csv"; a.click(); URL.revokeObjectURL(a.href); };
 
   if (err) return <p role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">{err}</p>;
   if (!data) return <Skeleton kind={"rows"} />;

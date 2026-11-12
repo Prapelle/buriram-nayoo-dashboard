@@ -2,7 +2,7 @@ import { logError } from "@/lib/log";
 import { NextResponse } from "next/server";
 import { migratingResponse } from "@/lib/http-errors";
 import { requireRole } from "@/lib/guard";
-import { changeLeadStatus, deleteLead, LeadError, listLeads, saveLead } from "@/lib/leads-service";
+import { changeLeadStatus, deleteLead, importLeads, LeadError, listLeads, saveLead } from "@/lib/leads-service";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +11,7 @@ function fail(e: unknown) {
   { { const mg = migratingResponse(e); if (mg) return mg; } logError("/api/leads", e); return NextResponse.json({ error: e instanceof Error ? e.message : "unknown error" }, { status: 500 }); }
 }
 
-// ข้อมูลลูกค้า (PII) — เฉพาะ Admin และ AE
+// ข้อมูลลูกค้า: ดูได้ทุก Role (11/11/2026) · เพิ่ม/แก้/นำเข้า = Admin, AE
 export async function GET() {
   const g = await requireRole(["admin", "ae", "marketing", "production", "observer"]);
   if (!g.ok) return g.res;
@@ -21,7 +21,12 @@ export async function GET() {
 export async function POST(req: Request) {
   const g = await requireRole(["admin", "ae"]);
   if (!g.ok) return g.res;
-  try { return NextResponse.json(await saveLead((await req.json()) as Record<string, unknown>, g.email, g.role)); } catch (e) { return fail(e); }
+  try {
+    const b = (await req.json()) as Record<string, unknown>;
+    // นำเข้าไฟล์ CSV / XLSX (12/11/2026): import_plan = ตรวจ · import_commit = เพิ่มจริง
+    if (b.action === "import_plan" || b.action === "import_commit") return NextResponse.json(await importLeads(b.grid, b.action === "import_commit", g.email));
+    return NextResponse.json(await saveLead(b, g.email, g.role));
+  } catch (e) { return fail(e); }
 }
 
 export async function DELETE(req: Request) {

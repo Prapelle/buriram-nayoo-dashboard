@@ -26,6 +26,17 @@ export async function logLeadStatus(changes: LeadStatusChange[], lead: Record<st
   } catch (e) { logError("perf.logLeadStatus", e); }
 }
 
+/** บันทึกสถานะของหลาย Lead ในครั้งเดียว (นำเข้าไฟล์) */
+export async function logLeadStatusMany(items: { c: LeadStatusChange; r: Record<string, string> }[], actor: string, at: string) {
+  if (!items.length) return;
+  try {
+    for (let i = 0; i < items.length; i += 500) await appendRows("LEAD_STATUS_LOG", items.slice(i, i + 500).map(({ c, r }) => toRow(LEAD_LOG_COLUMNS, {
+      log_id: crypto.randomUUID(), lead_id: r.lead_id ?? "", lead_code: r.lead_code ?? "", field: c.field, from_status: c.from, to_status: c.to,
+      staff: r.staff ?? "", changed_by: actor, changed_at: at,
+    })));
+  } catch (e) { logError("perf.logLeadStatusMany", e); }
+}
+
 // ── หน้าตั้งค่า: ตำแหน่ง / เป้ารายเดือน / วันหยุดบริษัท (Super Admin) ──
 const POS = "PERF_POSITIONS", TGT = "PERF_TARGETS", HOL = "PERF_HOLIDAYS";
 type Row = Record<string, string>;
