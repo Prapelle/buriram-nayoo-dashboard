@@ -5,16 +5,21 @@ import { normalizeLine, normalizePhone, type Lead } from "./leads";
 /**
  * นำเข้า Lead จากไฟล์ CSV / XLSX (12/11/2026)
  * - แถวแรก = หัวคอลัมน์ตามฟอร์ม (ภาษาไทย หรือรหัสคอลัมน์)
+ * - บังคับ: ชื่อลูกค้า · เบอร์โทร · ความต้องการ (13/11/2026) · นอกนั้นไม่บังคับ · ทุกแถวเข้า "รอติดต่อ"
  * - ซ้ำ = ฝั่งเดียวกัน (ซื้อ/เช่า/สร้าง หรือ ขาย) และ ชื่อลูกค้าเหมือนกัน หรือ เบอร์โทร / Line เหมือนกัน
  *   (เทียบทั้งกับ Lead ที่มีอยู่และแถวก่อนหน้าในไฟล์เดียวกัน) → ข้าม ไม่เพิ่ม
  */
+/** ฟอร์ม (13/11/2026): บังคับ 3 ช่องแรก (มี *) · นอกนั้นใส่หรือไม่ใส่ก็ได้ · ทุกแถวเข้าคอลัมน์ "รอติดต่อ" */
 export const LEAD_TEMPLATE: string[][] = [
-  ["วันที่รับ Lead", "ชื่อลูกค้า", "เบอร์โทร", "Line", "ช่องทาง", "Campaign", "ความต้องการ", "ประเภททรัพย์", "ช่วงราคา", "สภาพทรัพย์", "ความสนใจ", "พื้นที่", "สถานะ", "Call Status", "Staff", "ติดต่อล่าสุด", "ติดตามครั้งถัดไป", "Note"],
-  ["2026-11-12", "คุณตัวอย่าง ใจดี", "0812345678", "@example", "Facebook Ads", "", "ซื้อ", "บ้านเดี่ยว", "1.5–2.5 m", "", "ใกล้โรงเรียน", "บุรีรัมย์", "Warm", "รอติดต่อ", "", "", "2026-11-15", "แถวตัวอย่าง — ลบก่อนนำเข้า"],
+  ["ชื่อลูกค้า *", "เบอร์โทร *", "ความต้องการ *", "วันที่รับ Lead", "Line", "ช่องทาง", "Campaign", "ประเภททรัพย์", "ช่วงราคา", "สภาพทรัพย์", "ความสนใจ", "พื้นที่", "Staff", "ติดตามครั้งถัดไป", "Note"],
+  ["คุณตัวอย่าง ใจดี", "0812345678", "ซื้อ", "", "", "", "", "", "", "", "", "", "", "", "แถวตัวอย่าง — ลบก่อนนำเข้า"],
 ];
+export const IMPORT_STATUS = "รอติดต่อ";
 export const MAX_IMPORT_ROWS = 1000;
 
 const norm = (s: unknown) => String(s ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+/** หัวคอลัมน์ → คีย์ค้นหา (ตัด BOM และเครื่องหมาย * ของช่องบังคับ) */
+export const headKey = (s: unknown) => norm(String(s ?? "").replace(/^\uFEFF/, "").replace(/\s*\*+\s*$/, ""));
 /** หัวคอลัมน์ → ช่องข้อมูล · "สถานะ" = Buy Status หรือ Sell Status ตามความต้องการ */
 export const LEAD_IMPORT_HEADERS: Record<string, string> = Object.fromEntries(([
   ["วันที่รับ lead", "received_at"], ["วันที่รับ", "received_at"], ["วันที่", "received_at"], ["received_at", "received_at"],
@@ -25,9 +30,8 @@ export const LEAD_IMPORT_HEADERS: Record<string, string> = Object.fromEntries(([
   ["ความต้องการ", "need"], ["need", "need"], ["ประเภททรัพย์", "property_type"], ["type", "property_type"], ["property_type", "property_type"],
   ["ช่วงราคา", "price_range"], ["price", "price_range"], ["price_range", "price_range"], ["สภาพทรัพย์", "property_condition"], ["condition", "property_condition"], ["property_condition", "property_condition"],
   ["ความสนใจ", "interest"], ["interest", "interest"], ["พื้นที่", "area"], ["area", "area"],
-  ["สถานะ", "status_in"], ["buy status", "buy_status"], ["buy_status", "buy_status"], ["sell status", "sell_status"], ["sell_status", "sell_status"],
-  ["call status", "call_status"], ["call_status", "call_status"], ["staff", "staff"], ["พนักงาน", "staff"],
-  ["ติดต่อล่าสุด", "last_contacted_at"], ["last_contacted_at", "last_contacted_at"], ["ติดตามครั้งถัดไป", "next_follow_up_at"], ["next_follow_up_at", "next_follow_up_at"],
+  // สถานะ / Call Status / ติดต่อล่าสุด ในไฟล์ไม่ใช้ — Lead ที่นำเข้าเริ่มที่ "รอติดต่อ" เสมอ (13/11/2026)
+  ["staff", "staff"], ["พนักงาน", "staff"], ["ติดตามครั้งถัดไป", "next_follow_up_at"], ["next_follow_up_at", "next_follow_up_at"],
   ["note", "notes"], ["notes", "notes"], ["หมายเหตุ", "notes"],
 ] as [string, string][]).map(([k, v]) => [norm(k), v]));
 
@@ -52,10 +56,11 @@ const channelOf = (v: string) => CHANNELS.find((c) => norm(c) === norm(v)) ?? v;
 export function importRowToInput(map: (string | undefined)[], cells: unknown[], today: string): Record<string, string> {
   const o: Record<string, string> = {};
   map.forEach((f, j) => { if (f) o[f] = String(cells[j] ?? "").trim(); });
-  for (const k of ["received_at", "last_contacted_at", "next_follow_up_at"]) if (o[k]) o[k] = importDate(o[k]);
+  for (const k of ["received_at", "next_follow_up_at"]) if (o[k]) o[k] = importDate(o[k]);
   if (!o.received_at) o.received_at = today;
   o.source_channel = o.source_channel ? channelOf(o.source_channel) : "Unknown";
-  if (o.status_in) { o[SELL_NEEDS.includes(o.need ?? "") ? "sell_status" : "buy_status"] ||= o.status_in; delete o.status_in; }
+  // เริ่มที่ "รอติดต่อ" เสมอ: ฝั่งซื้อ/เช่า/สร้าง = Call Status · ฝั่งขาย = Sell Status
+  if (SELL_NEEDS.includes(o.need ?? "")) o.sell_status = IMPORT_STATUS; else o.call_status = IMPORT_STATUS;
   return o;
 }
 

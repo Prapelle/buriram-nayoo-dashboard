@@ -11,7 +11,7 @@ import { appendRows, deleteWhere, readTab, readTabs, toRow, updateById } from ".
 import { readColumns } from "./tabdata";
 import { diffProps, PROP_COLUMNS, validateProps, type LeadProperty } from "./lead-properties";
 import type { Role } from "./roles";
-import { DUP_LABEL, importDuplicates, importRowToInput, LEAD_IMPORT_HEADERS, MAX_IMPORT_ROWS } from "./lead-import";
+import { DUP_LABEL, headKey, importDuplicates, importRowToInput, LEAD_IMPORT_HEADERS, MAX_IMPORT_ROWS } from "./lead-import";
 
 /** ค่าเริ่มต้นของช่องสถานะ (ใช้เทียบก่อน/หลังเพื่อบันทึกประวัติ) */
 const STATUS_DEFAULTS = { sell_status: SELL_DEFAULT, call_status: CALL_DEFAULT } as const;
@@ -167,9 +167,9 @@ export async function saveLead(input: Record<string, unknown>, actor: string, ro
 export type LeadImportRow = { n: number; status: "insert" | "duplicate" | "invalid"; name: string; errors?: Record<string, string>; matches?: string[] };
 export async function importLeads(grid: unknown, commit: boolean, actor: string) {
   if (!Array.isArray(grid) || grid.length < 2 || grid.length > MAX_IMPORT_ROWS + 1) throw new LeadError(422, `ไฟล์ต้องมีหัวคอลัมน์และข้อมูล 1–${MAX_IMPORT_ROWS.toLocaleString()} แถว`, "VALIDATION");
-  const head = (grid[0] as unknown[]).map((h) => String(h ?? "").replace(/^\uFEFF/, "").trim().replace(/\s+/g, " ").toLowerCase());
-  const map = head.map((h) => LEAD_IMPORT_HEADERS[h]);
-  if (!map.includes("customer_name") || !map.includes("need")) throw new LeadError(422, "ไม่พบคอลัมน์ ชื่อลูกค้า หรือ ความต้องการ — ดาวน์โหลดฟอร์ม CSV แล้วใช้หัวคอลัมน์ตามฟอร์ม", "VALIDATION");
+  const map = (grid[0] as unknown[]).map((h) => LEAD_IMPORT_HEADERS[headKey(h)]);
+  const missing = ([["customer_name", "ชื่อลูกค้า"], ["phone", "เบอร์โทร"], ["need", "ความต้องการ"]] as const).filter(([k]) => !map.includes(k)).map(([, l]) => l);
+  if (missing.length) throw new LeadError(422, `ไม่พบคอลัมน์ ${missing.join(" / ")} — ดาวน์โหลดฟอร์ม CSV แล้วใช้หัวคอลัมน์ตามฟอร์ม`, "VALIDATION");
   const t = await load();
   const tab = t.LEADS;
   if (!tab.headers.includes("lead_id") || !tab.headers.includes("need")) throw new LeadError(409, "แท็บ LEADS ยังไม่พร้อม กรุณากด เตรียม Google Sheet", "SHEET_NOT_READY");
@@ -185,6 +185,7 @@ export async function importLeads(grid: unknown, commit: boolean, actor: string)
     const v = validateLead(input);
     const name = input.customer_name ?? "";
     const errors: Record<string, string> = v.ok ? {} : { ...v.errors };
+    if (!String(input.phone ?? "").trim()) errors.phone = "กรุณาระบุเบอร์โทร";
     for (const [key, label] of [["line_id", "Line"], ["interest", "ความสนใจ"]] as const) if (input[key] && !tab.headers.includes(key)) errors[key] = `ยังไม่มีคอลัมน์ ${label} — ให้ Admin กด ตั้งค่า → เตรียม Google Sheet`;
     let staff = "";
     if (v.ok) { const st = checkStaff(v.rec.staff, undefined, users); if (st === null) errors.staff = `Staff "${v.rec.staff}" ไม่อยู่ในรายชื่อผู้ใช้`; else staff = st; }

@@ -4,7 +4,7 @@ import { parseCsv, readTextFile, toCsv } from "@/lib/csv";
 import { readXlsx } from "@/lib/xlsx";
 import { LEAD_TEMPLATE, MAX_IMPORT_ROWS } from "@/lib/lead-import";
 import { CHANNELS } from "@/lib/dashboard";
-import { BUY_STATUS, CALL_STATUS, CONDITIONS, NEEDS, PRICE_RANGES, PROPERTY_TYPES, SELL_STATUS } from "@/lib/leads";
+import { CONDITIONS, PRICE_RANGES, PROPERTY_TYPES } from "@/lib/leads";
 
 /**
  * นำเข้า Lead จากไฟล์ CSV / XLSX (12/11/2026)
@@ -82,12 +82,11 @@ export function useLeadImport(onDone: (text: string) => void) {
           <details className="text-xs text-slate-600">
             <summary className="cursor-pointer">วิธีกรอกไฟล์</summary>
             <ul className="mt-1 list-disc space-y-0.5 pl-5">
-              <li>ใช้หัวคอลัมน์ตามฟอร์ม · ต้องมี <b>ชื่อลูกค้า</b> และ <b>ความต้องการ</b> · วันที่รับว่าง = วันนี้ · ช่องทางว่าง = Unknown</li>
-              <li>วันที่: 2026-11-12 หรือ 12/11/2026 หรือ 12/11/2569</li>
-              <li>ซ้ำ = ฝั่งเดียวกัน (ซื้อ/เช่า/สร้าง หรือ ขาย) และ ชื่อ / เบอร์โทร / Line เหมือน Lead ที่มีอยู่หรือแถวก่อนหน้าในไฟล์ → ข้าม</li>
-              <li>ความต้องการ: {NEEDS.join(" / ")} · ช่องทาง: {CHANNELS.join(" / ")}</li>
-              <li>สถานะ — ซื้อ/เช่า/สร้าง: {BUY_STATUS.join(" / ")} · ขาย: {SELL_STATUS.join(" / ")}</li>
-              <li>Call Status: {CALL_STATUS.join(" / ")} · ประเภททรัพย์: {PROPERTY_TYPES.join(" / ")}</li>
+              <li>ต้องมี 3 ช่อง: <b>ชื่อลูกค้า</b> · <b>เบอร์โทร</b> · <b>ความต้องการ</b> (ซื้อ / ขาย / เช่า / สร้าง) — ช่องอื่นใส่หรือไม่ใส่ก็ได้</li>
+              <li>ทุกรายการที่นำเข้าเริ่มที่สถานะ <b>รอติดต่อ</b> (ซื้อ/เช่า/สร้าง → บอร์ดคนต้องการซื้อ · ขาย → บอร์ดคนต้องการขาย)</li>
+              <li>ไม่ใส่วันที่รับ = วันนี้ · ไม่ใส่ช่องทาง = Unknown · วันที่เขียนได้ 2026-11-12 หรือ 12/11/2026 หรือ 12/11/2569</li>
+              <li>ซ้ำ = ฝั่งเดียวกัน และ ชื่อ / เบอร์โทร / Line เหมือน Lead ที่มีอยู่หรือแถวก่อนหน้าในไฟล์ → ข้าม</li>
+              <li>ช่องทาง: {CHANNELS.join(" / ")} · ประเภททรัพย์: {PROPERTY_TYPES.join(" / ")}</li>
               <li>ช่วงราคา: {PRICE_RANGES.join(" / ")} · สภาพทรัพย์: {CONDITIONS.join(" / ")} · Staff ต้องตรงกับชื่อผู้ใช้</li>
             </ul>
           </details>

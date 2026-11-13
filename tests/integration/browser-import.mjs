@@ -464,9 +464,9 @@ try {
     const [dl] = await Promise.all([lp.waitForEvent("download"), lp.getByRole("button", { name: "ดาวน์โหลดฟอร์ม CSV" }).click()]);
     assert.equal(dl.suggestedFilename(), "lead_import_template.csv");
     const tpl = (await (await import("node:fs/promises")).readFile(await dl.path(), "utf8"));
-    assert.ok(tpl.startsWith("\uFEFFวันที่รับ Lead,ชื่อลูกค้า,เบอร์โทร,Line,ช่องทาง") && !tpl.startsWith("\uFEFF\uFEFF"), "ฟอร์มต้องมี BOM ตัวเดียว (Excel อ่านภาษาไทยได้) และหัวคอลัมน์ตามฟอร์ม");
+    assert.ok(tpl.startsWith("\uFEFFชื่อลูกค้า *,เบอร์โทร *,ความต้องการ *,วันที่รับ Lead,Line,ช่องทาง") && !/สถานะ|Call Status/.test(tpl) && !tpl.startsWith("\uFEFF\uFEFF"), "ฟอร์มต้องมี BOM ตัวเดียว (Excel อ่านภาษาไทยได้) และหัวคอลัมน์ตามฟอร์ม");
     const head = tpl.replace(/^\uFEFF/, "").split(/\r?\n/)[0];
-    const csv = "\uFEFF" + [head, "12/11/2569,นำเข้าจากไฟล์ ก,0899990001,,Facebook Ads,,ซื้อ,บ้านเดี่ยว,,,,บุรีรัมย์,Hot,,,,,", ",นำเข้าจากไฟล์ ข,089-999-0001,,,,เช่า,,,,,,,,,,,", ",,0899990002,,,,ซื้อ,,,,,,,,,,,"].join("\r\n");
+    const csv = "\uFEFF" + [head, "นำเข้าจากไฟล์ ก,0899990001,ซื้อ,12/11/2569,,Facebook Ads,,บ้านเดี่ยว,,,,บุรีรัมย์,,,", "นำเข้าจากไฟล์ ข,089-999-0001,เช่า", ",0899990002,ซื้อ"].join("\r\n");
     await lp.getByLabel("ไฟล์ Lead (CSV / XLSX)").setInputFiles({ name: "leads.csv", mimeType: "text/csv", buffer: Buffer.from(csv, "utf8") });
     const panel = lp.getByRole("region", { name: "ผลการนำเข้า Lead" }); await panel.getByText(/เพิ่มได้ 1 · ซ้ำ \(ข้าม\) 1 · ไม่ถูกต้อง 1/).waitFor();
     const ptxt = await panel.innerText(); assert.ok(ptxt.includes("แถว 3 นำเข้าจากไฟล์ ข: ซ้ำกับ แถว 2 ในไฟล์ (เบอร์โทร)") && ptxt.includes("กรุณาระบุชื่อลูกค้า"), ptxt);
@@ -474,12 +474,12 @@ try {
     await panel.getByRole("button", { name: "ยืนยันนำเข้า 1 รายการ" }).click(); await panel.getByText("— นำเข้าแล้ว").waitFor();
     await lp.getByText(/^นำเข้า 1 รายการแล้ว/).first().waitFor(); await lp.getByText("นำเข้าจากไฟล์ ก").first().waitFor();
     const lr2 = await tab("LEADS"); assert.equal(lr2.length, n0 + 1); const nr = lr2.find((r) => r[lr2[0].indexOf("customer_name")] === "นำเข้าจากไฟล์ ก");
-    assert.equal(nr[lr2[0].indexOf("received_at")], "2026-11-12"); assert.equal(nr[lr2[0].indexOf("buy_status")], "Hot"); assert.equal(nr[lr2[0].indexOf("created_by")], "importer@example.com");
+    assert.equal(nr[lr2[0].indexOf("received_at")], "2026-11-12"); assert.equal(nr[lr2[0].indexOf("call_status")], "รอติดต่อ"); assert.equal(nr[lr2[0].indexOf("buy_status")], ""); assert.equal(nr[lr2[0].indexOf("created_by")], "importer@example.com");
     await panel.getByRole("button", { name: "ปิด", exact: true }).click(); assert.equal(await panel.count(), 0);
     const ob = await open("marketing@example.com"); await ob.page.goto(BASE + "/work/leads"); await ob.page.getByText("นำเข้าจากไฟล์ ก").first().waitFor();
     assert.equal(await ob.page.getByRole("button", { name: "นำเข้า CSV" }).count(), 0); assert.equal(await ob.page.getByRole("button", { name: "ดาวน์โหลดฟอร์ม CSV" }).count(), 0);
     assert.deepEqual(m.errors, []); assert.deepEqual(ob.errors, []);
-    ok("หน้า Leads → นำเข้า CSV: ดาวน์โหลดฟอร์ม (มี BOM) · เลือกไฟล์ → ตรวจก่อน (เพิ่ม 1 · เบอร์ซ้ำในไฟล์ข้าม 1 · ไม่มีชื่อ 1) → ยืนยัน → Lead ขึ้นในตาราง + Sheet · วันที่ พ.ศ. แปลงถูก · Role ที่แก้ไม่ได้ไม่เห็นปุ่ม");
+    ok("หน้า Leads → นำเข้า CSV: ดาวน์โหลดฟอร์ม (มี BOM · บังคับ ชื่อ / เบอร์ / ความต้องการ · ไม่มีช่องสถานะ) · นำเข้าแล้วอยู่ที่ รอติดต่อ · เลือกไฟล์ → ตรวจก่อน (เพิ่ม 1 · เบอร์ซ้ำในไฟล์ข้าม 1 · ไม่มีชื่อ 1) → ยืนยัน → Lead ขึ้นในตาราง + Sheet · วันที่ พ.ศ. แปลงถูก · Role ที่แก้ไม่ได้ไม่เห็นปุ่ม");
   }
   console.log(`\nผ่านทั้งหมด ${pass} รายการ`);
 } catch (e) { if (process.env.SHOT_DIR) try { await browser?.contexts().at(-1)?.pages()[0]?.screenshot({ path: process.env.SHOT_DIR + "/fail-import.png", fullPage: true }); } catch { /* */ } console.error("\n✗ FAIL:", e?.message ?? e); console.error(log.split("\n").slice(-20).join("\n")); process.exitCode = 1; } finally { try { await browser?.close(); } catch { /* */ } stop(); process.exit(process.exitCode ?? 0); }
