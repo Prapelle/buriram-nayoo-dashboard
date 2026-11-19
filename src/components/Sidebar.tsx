@@ -1,4 +1,5 @@
 "use client";
+import { NotificationBell } from "@/components/NotificationBell";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -139,6 +140,7 @@ export function AppShell({ items: allItems, systems, email, role, signOutAction,
                 className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-sm ${sys === x.id && !picker ? "bg-brand-600 font-semibold text-white" : "text-slate-700 hover:bg-slate-100"}`}>{x.label}</Link>)}
         </nav>
         <div className="ml-auto flex shrink-0 items-center gap-2.5 text-sm text-slate-600">
+          <NotificationBell />
           <span className="hidden max-w-48 truncate xl:inline">{email}</span>
           <span title={`${email} · สิทธิ์ ${role}`} className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-100 font-semibold text-brand-800">{(email[0] ?? "?").toUpperCase()}</span>
         </div>

@@ -3,6 +3,7 @@
  * บอร์ดเดียว 11 คอลัมน์: ช่วงผลิต (ทุก Content) ต่อด้วยช่วงรายงานลูกค้า (เฉพาะ Content ที่ติดแท็ก "งานขาย")
  */
 import { PERF_DEFS } from "./perf";
+import { NOTIF_DEFS } from "./notify";
 
 export const PROD_STAGES = ["IDEA", "CONTENT PLANS", "ART WORK / VIDEO", "เสร็จ ART / VIDEO", "REVIEW", "SCHEDULED", "PUBLISHED"] as const;
 export const REPORT_STAGES = ["รอครบเพื่อทำรายงาน", "กำลังทำรายงาน", "รายงานเสร็จแล้ว", "ส่งให้ลูกค้าแล้ว"] as const;
@@ -155,5 +156,5 @@ export const nextCardCode = (codes: string[]) => `CT-${String(codes.reduce((m, c
 export const NATIVE_DEFS = [
   { name: "CONTENT_CARDS", headers: CARD_COLUMNS }, { name: "CONTENT_MEMBERS", headers: MEMBER_COLUMNS },
   { name: "CONTENT_HISTORY", headers: HISTORY_COLUMNS }, { name: "PRODUCT_SETTINGS", headers: SETTING_COLUMNS }, { name: "CONTENT_WAITS", headers: WAIT_COLUMNS },
-  ...PERF_DEFS,
+  ...PERF_DEFS, ...NOTIF_DEFS,
 ];

@@ -500,5 +500,18 @@ try {
     assert.deepEqual(m.errors, []);
     ok("รายละเอียด Product: เพิ่ม / แก้ในหน้า Product (แสดงใต้ชื่อ) · ออกใบเสนอราคาแล้วเลือก Product → เติมรายละเอียดให้ (ขึ้นในเอกสารที่พิมพ์) · แก้เองได้ · ปุ่มใช้รายละเอียดของ Product");
   }
+  { // กระดิ่งแจ้งเตือน (20/11/2026): มีบนแถบด้านบน · เปิดแล้วเห็น 2 แท็บ · Esc ปิด · ไม่มี D1 = แจ้งว่าต้องใช้ D1
+    const bp = m.page; await bp.goto(BASE + "/work/leads"); const bell = bp.getByRole("button", { name: /^การแจ้งเตือน/ }); await bell.waitFor();
+    await bell.click(); const dlg = bp.getByRole("dialog", { name: "การแจ้งเตือน" }); await dlg.waitFor();
+    await dlg.getByRole("button", { name: /^การแจ้งเตือน/ }).waitFor(); await dlg.getByRole("button", { name: /^งานที่ต้องทำ/ }).click();
+    await dlg.getByText(/ไม่มีงานค้าง|Lead ที่ต้องติดตาม|Developer/).first().waitFor();
+    await dlg.getByRole("button", { name: /^การแจ้งเตือน/ }).click(); await dlg.locator("ul li, p").first().waitFor(); // มี D1 = รายการ / ยังไม่มี · ไม่มี D1 = แจ้งว่าต้องใช้ D1
+    await bp.keyboard.press("Escape"); assert.equal(await dlg.count(), 0);
+    await bp.setViewportSize({ width: 390, height: 800 }); await bell.click(); await dlg.waitFor();
+    const bb = await dlg.boundingBox(); assert.ok(bb && bb.x >= 0 && bb.x + bb.width <= 390, "มือถือ: หน้าต่างแจ้งเตือนไม่ล้นจอ");
+    await bp.keyboard.press("Escape"); await bp.setViewportSize({ width: 1280, height: 900 });
+    assert.deepEqual(m.errors, []);
+    ok("กระดิ่งแจ้งเตือน: อยู่บนแถบด้านบน · แท็บ การแจ้งเตือน / งานที่ต้องทำ · Esc ปิด · มือถือไม่ล้นจอ");
+  }
   console.log(`\nผ่านทั้งหมด ${pass} รายการ`);
 } catch (e) { if (process.env.SHOT_DIR) try { await browser?.contexts().at(-1)?.pages()[0]?.screenshot({ path: process.env.SHOT_DIR + "/fail-import.png", fullPage: true }); } catch { /* */ } console.error("\n✗ FAIL:", e?.message ?? e); console.error(log.split("\n").slice(-20).join("\n")); process.exitCode = 1; } finally { try { await browser?.close(); } catch { /* */ } stop(); process.exit(process.exitCode ?? 0); }

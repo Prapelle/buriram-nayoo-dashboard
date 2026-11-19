@@ -194,6 +194,31 @@ export async function patchById(db: D1Like, tab: string, idCol: string, id: stri
   const r = await db.prepare(`UPDATE ${tabName(tab)} SET ${cols.map((c) => `${q(c)}=?`).join(",")} WHERE ${q(idCol)}=?`).bind(...cols.map((c) => str(patch[c])), id).run();
   return Number(r.meta.changes);
 }
+/** อ่านแถวที่ตรงเงื่อนไข (คอลัมน์ = ค่า ทุกคู่) เรียงตามคอลัมน์ · ใช้กับตารางที่โตเรื่อย ๆ (เช่น การแจ้งเตือน) แทนการอ่านทั้งตาราง */
+export async function selectWhere(db: D1Like, tab: string, where: Record<string, string>, opts: { orderBy?: string; desc?: boolean; limit?: number } = {}): Promise<Record<string, string>[]> {
+  const hdr = await mustHeaders(db, tab), cols = Object.keys(where);
+  for (const c of [...cols, ...(opts.orderBy ? [opts.orderBy] : [])]) if (!hdr.includes(c)) throw new Error(`ตาราง ${tab} ไม่มีคอลัมน์ ${c}`);
+  const sql = `SELECT ${hdr.map(q).join(",")} FROM ${tabName(tab)}${cols.length ? ` WHERE ${cols.map((c) => `${q(c)}=?`).join(" AND ")}` : ""}`
+    + ` ORDER BY ${opts.orderBy ? `${q(opts.orderBy)} ${opts.desc ? "DESC" : "ASC"}, ` : ""}_id ${opts.desc ? "DESC" : "ASC"}${opts.limit ? ` LIMIT ${Math.max(1, Math.floor(opts.limit))}` : ""}`;
+  const r = await db.prepare(sql).bind(...cols.map((c) => where[c])).all<Record<string, unknown>>();
+  return r.results.map((x) => Object.fromEntries(hdr.map((h) => [h, str(x[h])])));
+}
+/** แก้บางช่องของทุกแถวที่ตรงเงื่อนไข (คอลัมน์ = ค่า ทุกคู่ · emptyCol = ช่องที่ต้องว่าง) — คืนจำนวนแถวที่แก้ */
+export async function patchWhere(db: D1Like, tab: string, where: Record<string, string>, patch: Record<string, string>, emptyCol?: string): Promise<number> {
+  const hdr = await mustHeaders(db, tab), wc = Object.keys(where), pc = Object.keys(patch);
+  if (!pc.length || !wc.length) return 0;
+  for (const c of [...wc, ...pc, ...(emptyCol ? [emptyCol] : [])]) if (!hdr.includes(c)) throw new Error(`ตาราง ${tab} ไม่มีคอลัมน์ ${c}`);
+  const r = await db.prepare(`UPDATE ${tabName(tab)} SET ${pc.map((c) => `${q(c)}=?`).join(",")} WHERE ${wc.map((c) => `${q(c)}=?`).join(" AND ")}${emptyCol ? ` AND ${q(emptyCol)}=''` : ""}`)
+    .bind(...pc.map((c) => patch[c]), ...wc.map((c) => where[c])).run();
+  return Number(r.meta.changes);
+}
+/** ลบแถวที่ค่าในคอลัมน์ col น้อยกว่า value (เทียบข้อความ — ใช้กับวันที่ ISO) — คืนจำนวนแถวที่ลบ */
+export async function deleteBefore(db: D1Like, tab: string, col: string, value: string): Promise<number> {
+  const hdr = await mustHeaders(db, tab);
+  if (!hdr.includes(col)) throw new Error(`ตาราง ${tab} ไม่มีคอลัมน์ ${col}`);
+  const r = await db.prepare(`DELETE FROM ${tabName(tab)} WHERE ${q(col)}<? AND ${q(col)}<>''`).bind(value).run();
+  return Number(r.meta.changes);
+}
 /** ลบทุกแถวที่คอลัมน์ col = value — คืนจำนวนแถวที่ลบ */
 export async function deleteWhere(db: D1Like, tab: string, col: string, value: string): Promise<number> {
   const hdr = await mustHeaders(db, tab);

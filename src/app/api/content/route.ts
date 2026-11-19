@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireRole } from "@/lib/guard";
 import { contentFail } from "@/lib/content-http";
-import { deleteCard, getBoard, moveCard, rescheduleCard, saveCard } from "@/lib/content-service";
+import { claimCard, deleteCard, getBoard, moveCard, rescheduleCard, saveCard } from "@/lib/content-service";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +23,7 @@ export async function PATCH(req: Request) {
   if (!g.ok) return g.res;
   try {
     const b = await body(req);
+    if (b.action === "claim") return NextResponse.json(await claimCard(String(b.card_id ?? ""), b.duty, g.email)); // รับงาน ART WORK / VIDEO (20/11/2026)
     if (b.planned_day !== undefined) return NextResponse.json(await rescheduleCard(String(b.card_id ?? ""), String(b.planned_day), g.email, String(b.updated_at_seen ?? ""))); // ลากในปฏิทิน
     return NextResponse.json(await moveCard(String(b.card_id ?? ""), String(b.stage ?? ""), g.email, b.updated_at_seen === undefined ? undefined : String(b.updated_at_seen)));
   } catch (e) { return contentFail("/api/content PATCH", e); }

@@ -31,6 +31,7 @@ const EXPECT: Record<string, string[] | "public" | Record<string, string[]>> = {
   "src/app/api/account/files/route.ts": { GET: ["admin", "ae"], POST: ["admin"], DELETE: ["super_admin"] }, "src/app/api/account/customers/route.ts": { GET: VIEW, POST: ["admin", "ae"], DELETE: ["super_admin"] }, "src/app/api/account/products/route.ts": { GET: VIEW, POST: ["admin", "ae"], PATCH: ["admin", "ae"], DELETE: ["admin"] }, "src/app/api/production/route.ts": { GET: VIEW, PATCH: ["admin"] },
   "src/app/api/content/route.ts": { GET: VIEW, POST: ["admin", "ae", "production"], PATCH: ["admin", "ae", "production"], DELETE: ["ae"] }, "src/app/api/content/wait/route.ts": { POST: ["admin", "ae", "production"], DELETE: ["admin", "ae", "production"] }, "src/app/api/content/history/route.ts": VIEW, "src/app/api/content/match/route.ts": ["admin", "ae", "production"], "src/app/api/content/report/route.ts": { GET: VIEW, POST: ["admin", "ae", "production"] }, "src/app/api/content/metrics/route.ts": VIEW, "src/app/api/content/products/route.ts": { GET: VIEW, PUT: ["admin", "ae"] },
   "src/app/api/targets/route.ts": { GET: VIEW, POST: ["admin"] },
+  "src/app/api/notifications/route.ts": { GET: VIEW, POST: VIEW }, // การแจ้งเตือน (20/11/2026): ทุก Role · เห็น/อ่านเฉพาะของตัวเอง
   "src/app/api/perf/report/route.ts": VIEW, // Admin เห็นทุกคน · Role อื่นเห็นของตัวเอง (กรองฝั่ง Server)
   "src/app/api/perf/settings/route.ts": ["super_admin"], // ประสิทธิภาพรายคน: ตำแหน่ง / เป้า / วันหยุด (5/11/2026)
 };

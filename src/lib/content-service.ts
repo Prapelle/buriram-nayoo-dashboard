@@ -8,6 +8,8 @@ import { plannedForTarget, workdaysBetween, waitSummary, type WaitRow } from "./
 import { addDays, validDate, CARD_COLUMNS, WAIT_COLUMNS, waitKindsOf, HISTORY_COLUMNS, isStage, isTrue, MEMBER_COLUMNS, nextCardCode, planMove, reportDue, SETTING_COLUMNS, S_FIRST, validateCard, STAGES, type Rec } from "./content";
 import { todayBkk } from "./developers";
 import { productTypesOf } from "./developers-service";
+import { notifyCardMembers, notifyCardMove, notifyCardReschedule, resolveClaims } from "./notify-service";
+import { ART_DUTIES } from "./notify";
 import { normRole } from "./roles";
 import { dedupeCode } from "./row-guard";
 import { appendRows, atomicWrite, casRow, deleteWhere, patchById, readTabs, toRow, updateById } from "./sheets";
@@ -30,6 +32,7 @@ async function load(): Promise<Record<string, Tab>> {
 
 const activeUsers = (t: Record<string, Tab>) => t.APP_USERS.rows.filter((u) => u.email && isTrue(u.active) && normRole(u.role));
 const settingOf = (t: Record<string, Tab>, product: string) => t.PRODUCT_SETTINGS.rows.find((s) => s.product === product);
+const membersOf = (t: Record<string, Tab>, cardId: string) => t.CONTENT_MEMBERS.rows.filter((m) => m.card_id === cardId).map((m) => m.email.toLowerCase());
 const userName = (t: Record<string, Tab>, email: string) => { const u = t.APP_USERS.rows.find((x) => x.email.toLowerCase() === email.toLowerCase()); return u ? nameOf(u) : email.split("@")[0]; };
 
 const holidaysOf = (t: Record<string, Tab>) => new Set(t.PERF_HOLIDAYS.rows.map((h) => h.holiday_date).filter(Boolean));
@@ -103,6 +106,7 @@ export async function saveCard(input: Record<string, unknown>, actor: string, id
     rec.card_code = await dedupeCode("CONTENT_CARDS", t.CONTENT_CARDS.headers.length ? t.CONTENT_CARDS.headers : CARD_COLUMNS, "card_code", "card_id", rec.card_id, rec.card_code, nextCardCode); // สร้างพร้อมกัน → รหัสไม่ซ้ำ
     await logMove(rec.card_id, "", S_FIRST, actor, now, "สร้างการ์ด");
     await replaceMembers(t, rec.card_id, c.members, now);
+    await notifyCardMembers(rec, [], c.members.map((m) => m.email), actor);
     await writeAudit(actor, "content_create", "content_card", rec.card_id, `${rec.card_code} ${rec.title}`);
     return { card_id: rec.card_id, card_code: rec.card_code };
   }
@@ -116,6 +120,8 @@ export async function saveCard(input: Record<string, unknown>, actor: string, id
   if (rec.published_at && rec.sales_tag === "TRUE" && Number(rec.follow_days) >= 1 && rec.report_due_date && rec.stage !== "ส่งให้ลูกค้าแล้ว") rec.report_due_date = addDays(rec.published_at, Number(rec.follow_days));
   await casCard(t, cur, rec);
   await replaceMembers(t, id, c.members, now);
+  await notifyCardMembers(rec, membersOf(t, id), c.members.map((m) => m.email), actor);
+  if (c.members.some((m) => ART_DUTIES.includes(m.duty))) await resolveClaims(id);
   await writeAudit(actor, "content_update", "content_card", id, `${cur.card_code} ${rec.title}`);
   return { card_id: id, card_code: cur.card_code };
 }
@@ -136,6 +142,7 @@ export async function rescheduleCard(id: string, day: string, actor: string, upd
   const rec: Rec = { ...c, planned_date: planned, updated_by: actor, updated_at: now };
   const H = t.CONTENT_CARDS.headers.length ? t.CONTENT_CARDS.headers : CARD_COLUMNS;
   if (!(await casRow("CONTENT_CARDS", H, "card_id", id, c.updated_at, toRow(H, rec)))) throw new ContentError(409, "การ์ดนี้ถูกแก้ไขโดยผู้อื่นไปแล้ว กรุณาโหลดใหม่", "STALE");
+  await notifyCardReschedule({ card: rec, members: membersOf(t, id), actor }, c.planned_date, planned);
   await writeAudit(actor, "content_reschedule", "content_card", id, `${c.card_code}: วันลง ${c.planned_date || "(ไม่มี)"} → ${planned}${planned !== day ? ` (วันลงจริง ${day} หลังรวมวันรอลูกค้า ${w.prod} วันทำการ)` : ""}`);
   return { planned_date: planned, planned_eff: w.prod > 0 ? waitSummary(rec, waitsOf(t, id), todayBkk(), hol).plannedEff : planned };
 }
@@ -157,7 +164,30 @@ export async function moveCard(id: string, to: string, actor: string, updatedAtS
   }
   let prev = cur.stage;
   for (const s of plan.steps) { await logMove(id, prev, s, actor, now, s !== to ? "เลื่อนอัตโนมัติ (งานขาย)" : ""); prev = s; }
+  await notifyCardMove({ card: rec, members: membersOf(t, id), actor }, cur.stage, final);
   return { stage: final, auto: final !== to };
+}
+
+/**
+ * รับงาน ART WORK / VIDEO (20/11/2026): ผู้ใช้กด "รับงานนี้" → เพิ่มตัวเองในการ์ดตามหน้าที่ (Graphic Designer / Video Creator)
+ * · เพิ่มเฉพาะตัวเอง ไม่ลบคนอื่น · การแจ้งเตือน "เข้ามารับงาน" ของการ์ดนี้ถือว่าจัดการแล้ว
+ */
+export async function claimCard(id: string, dutyRaw: unknown, actor: string) {
+  const duty = String(dutyRaw ?? "");
+  if (!ART_DUTIES.includes(duty)) throw new ContentError(422, "เลือกหน้าที่ Graphic Designer หรือ Video Creator", "VALIDATION", { fields: { duty: "เลือกหน้าที่" } });
+  const t = await load(), c = t.CONTENT_CARDS.rows.find((r) => r.card_id === id);
+  if (!c) throw new ContentError(404, "ไม่พบการ์ด (อาจถูกลบ)", "NOT_FOUND");
+  const me = actor.toLowerCase();
+  if (!activeUsers(t).some((u) => u.email.toLowerCase() === me)) throw new ContentError(403, "ไม่พบผู้ใช้ของคุณ (หรือถูกปิดใช้งาน)", "FORBIDDEN");
+  const cur = t.CONTENT_MEMBERS.rows.filter((m) => m.card_id === id);
+  const mine = cur.find((m) => m.email.toLowerCase() === me);
+  if (mine && mine.duty === duty) return { ok: true, already: true };
+  const now = new Date().toISOString();
+  const next = [...cur.filter((m) => m.email.toLowerCase() !== me).map((m) => ({ email: m.email.toLowerCase(), duty: m.duty, is_main: isTrue(m.is_main) })), { email: me, duty, is_main: mine ? isTrue(mine.is_main) : !cur.length }];
+  await replaceMembers(t, id, next, now);
+  await resolveClaims(id);
+  await writeAudit(actor, "content_claim", "content_card", id, `${c.card_code}: รับงาน ${duty}`);
+  return { ok: true, already: false };
 }
 
 /** เริ่มรอลูกค้า / ลูกค้าตอบแล้ว — เฉพาะการ์ดงานขาย และเฉพาะผู้ร่วมงานในการ์ด · รอได้ทีละเรื่อง */

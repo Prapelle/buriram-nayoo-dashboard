@@ -5,6 +5,7 @@ import { writeAudit } from "./audit";
 import { checkStaff, followupRow, leadStatusChanges, mergeStaff, staffUserNames } from "./perf";
 import { logFollowup } from "./perf-log";
 import { logLeadStatus, logLeadStatusMany } from "./perf-service";
+import { notifyLeads } from "./notify-service";
 import { CALL_DEFAULT, CALL_STATUS, isSellerLead, normCall, SELL_DEFAULT, SELL_STATUS } from "./lead-options";
 import { areaLabel, AREA_SUGGEST, contactableFor, findDuplicates, LEAD_COLUMNS, leadStatusOf, nextLeadCode, normalizeEmail, normalizeLine, normalizePhone, pipelineOf, resolveNeedStatus, stampStatus, statusFieldOf, todayBkk, validateLead, type DupMatch, type Lead } from "./leads";
 import { appendRows, deleteWhere, readTab, readTabs, toRow, updateById } from "./sheets";
@@ -140,6 +141,7 @@ export async function saveLead(input: Record<string, unknown>, actor: string, ro
     await logLeadStatus(leadStatusChanges(null, rec, STATUS_DEFAULTS, logFieldOf(rec)), rec, actor, now);
     rec.lead_code = await dedupeCode("LEADS", tab.headers, "lead_code", "lead_id", rec.lead_id, rec.lead_code, (codes) => nextLeadCode(codes, Number(today.slice(0, 4)), Number(t.APP_CONFIG.rows.find((r) => r.config_key === `lead_code_floor_${today.slice(0, 4)}`)?.config_value) || 0));
     if (pd) await applyProps(rec.lead_id, pd, actor, now);
+    await notifyLeads([{ prev: null, rec }], actor);
     await writeAudit(actor, "lead_create", "lead", rec.lead_id, `สร้าง ${rec.lead_code} (${rec.source_channel}, ${rec.need}${leadStatusOf(rec) ? ` / ${leadStatusOf(rec)}` : ""})${pd && propSummary(pd) ? ` · ${propSummary(pd)}` : ""}`);
     return { created: true, lead: rec };
   }
@@ -155,6 +157,7 @@ export async function saveLead(input: Record<string, unknown>, actor: string, ro
   const ps = leadStatusOf(prev), cs = leadStatusOf(rec);
   const parts = [prev.need !== rec.need ? `Need ${prev.need || "(ว่าง)"} → ${rec.need}` : "", ps !== cs ? `สถานะ ${ps || "(ว่าง)"} → ${cs || "(ว่าง)"}` : "",
     ns.conflict ? `ล้าง ${ns.conflict.field}="${ns.conflict.value}"` : "", prev.call_status !== rec.call_status ? `Call ${prev.call_status || "(ว่าง)"} → ${rec.call_status}` : "", propSummary(pd)].filter(Boolean);
+  await notifyLeads([{ prev, rec }], actor);
   await writeAudit(actor, ps !== cs || prev.need !== rec.need ? "lead_status_change" : "lead_update", "lead", rec.lead_id,
     parts.length ? `${rec.lead_code}: ${parts.join(" · ")}` : `แก้ไข ${rec.lead_code}`);
   return { created: false, lead: rec };
@@ -225,6 +228,7 @@ export async function importLeads(grid: unknown, commit: boolean, actor: string)
   // บันทึกสถานะเริ่มต้นสำหรับนับผลงาน (ครั้งเดียวทั้งไฟล์ · หลังได้รหัสจริง)
   const logs = recs.flatMap((r) => leadStatusChanges(null, r, STATUS_DEFAULTS, logFieldOf(r)).map((c) => ({ c, r })));
   if (logs.length) await logLeadStatusMany(logs, actor, now);
+  await notifyLeads(recs.filter((r) => r.staff).map((rec) => ({ prev: null, rec })), actor);
   await writeAudit(actor, "lead_import", "lead", "-", `นำเข้า ${recs.length} รายการ (${recs[0].lead_code}–${recs[recs.length - 1].lead_code}) · ซ้ำ ${counts.duplicate} · ไม่ถูกต้อง ${counts.invalid}`);
   return { counts, results: results.slice(0, 300), committed: true, codes: recs.map((r) => r.lead_code) };
 }
@@ -300,6 +304,7 @@ export async function changeLeadStatus(leadId: string, field: StatusField, value
   await writeLead(tab.headers, leadId, prev.updated_at, rec);
   await logLeadStatus(leadStatusChanges(prev, rec, STATUS_DEFAULTS, logFieldOf(rec)), rec, actor, rec.updated_at);
   await logFollowup(followupRow("lead", { id: rec.lead_id, code: rec.lead_code, staff: rec.staff ?? "" }, prev.next_follow_up_at, actor, rec.updated_at));
+  await notifyLeads([{ prev, rec }], actor);
   if (field === "sell_status") await writeAudit(actor, "lead_status_change", "lead", rec.lead_id, `${rec.lead_code}: สถานะ ${before} → ${value}`);
   else await writeAudit(actor, "lead_update", "lead", rec.lead_id, `${rec.lead_code}: Call ${before} → ${value}`);
   return { changed: true, lead: rec };

@@ -1,4 +1,5 @@
 "use client";
+import { ART_DUTIES, ART_STAGE } from "@/lib/notify";
 import { useAutoRefresh } from "@/lib/use-auto-refresh";
 import { Skeleton } from "@/components/Skeleton";
 import { Notice, type Msg } from "@/components/Toast";
@@ -29,7 +30,7 @@ async function api(url: string, init?: RequestInit) {
 }
 const send = (method: string, body: unknown): RequestInit => ({ method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
-export function ContentBoard({ canDelete, readOnly = false }: { canDelete: boolean; readOnly?: boolean }) {
+export function ContentBoard({ canDelete, readOnly = false, me = "" }: { canDelete: boolean; readOnly?: boolean; me?: string }) {
   const [state, setState] = useState<"loading" | "ok" | "error">("loading");
   const [b, setB] = useState<Board | null>(null);
   const [msg, setMsg] = useState<Msg>(null);
@@ -57,6 +58,21 @@ export function ContentBoard({ canDelete, readOnly = false }: { canDelete: boole
     catch (e) { if (silent) return; setMsg({ type: "error", text: e instanceof Error ? e.message : "โหลดไม่สำเร็จ" }); setState("error"); }
   }, []);
   useEffect(() => { void load(); }, [load]);
+  // เปิดการ์ดจากลิงก์แจ้งเตือน (?card=<id>) ครั้งเดียวเมื่อโหลดบอร์ดแล้ว (20/11/2026)
+  const [cardParam, setCardParam] = useState<string | null>(null);
+  useEffect(() => { setCardParam(new URLSearchParams(window.location.search).get("card")); }, []);
+  useEffect(() => {
+    if (!cardParam || !b) return;
+    if (b.cards.some((x) => x.card_id === cardParam)) setViewId(cardParam); else setMsg({ type: "error", text: "ไม่พบการ์ดนี้ (อาจถูกลบไปแล้ว)" });
+    setCardParam(null);
+    try { const u = new URL(window.location.href); u.searchParams.delete("card"); window.history.replaceState(null, "", u); } catch { /* */ }
+  }, [cardParam, b]);
+  async function claim(c: Card, duty: string) {
+    setBusy((x) => new Set(x).add(c.card_id));
+    try { await api("/api/content", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "claim", card_id: c.card_id, duty }) }); setMsg({ type: "ok", text: `รับงาน ${c.card_code} แล้ว (${duty})` }); await load(true); }
+    catch (e) { setMsg({ type: "error", text: e instanceof Error ? e.message : "รับงานไม่สำเร็จ" }); }
+    finally { setBusy((x) => { const n = new Set(x); n.delete(c.card_id); return n; }); }
+  }
   useAutoRefresh(() => load(true), busy.size > 0 || !!dragId || edit !== null);
 
   const shown = useMemo(() => (b?.cards ?? []).filter((c) =>
@@ -162,14 +178,16 @@ export function ContentBoard({ canDelete, readOnly = false }: { canDelete: boole
           </BoardScroller>
           <p className="text-xs text-slate-500">• 7 คอลัมน์แรก = ช่วงผลิต · 4 คอลัมน์หลัง = ช่วงรายงานลูกค้า (เฉพาะ Content ที่ติดแท็กงานขาย) · งานขายที่เผยแพร่แล้วจะเลื่อนไป "รอครบเพื่อทำรายงาน" อัตโนมัติ พร้อมวันครบกำหนดจากระยะติดตามผล · ลากบนมือถือไม่สะดวก ใช้เมนูสถานะบนการ์ดแทน</p>
         </>)}
-      {!edit && viewId && b && (() => { const vc = b.cards.find((x) => x.card_id === viewId); return vc ? <CardView card={vc} onClose={() => setViewId("")} onEdit={readOnly ? undefined : () => { setViewId(""); setEdit(vc); }} /> : null; })()}
+      {!edit && viewId && b && (() => { const vc = b.cards.find((x) => x.card_id === viewId); return vc ? <CardView card={vc} onClose={() => setViewId("")} onEdit={readOnly ? undefined : () => { setViewId(""); setEdit(vc); }}
+        onClaim={!readOnly && me && vc.stage === ART_STAGE && !vc.members.some((m) => m.email.toLowerCase() === me.toLowerCase()) ? (d) => void claim(vc, d) : undefined} claiming={busy.has(vc.card_id)} /> : null; })()}
       {edit && b && !readOnly && <CardDialog board={b} card={edit === "new" ? null : edit} canDelete={canDelete} onClose={() => setEdit(null)} onDone={(t) => { setEdit(null); setMsg({ type: "ok", text: t }); void load(true); }} />}
     </div>
   );
 }
 
 /** ดูข้อมูลการ์ด (อ่านอย่างเดียว) — กด แก้ไข เพื่อเปิดฟอร์มเดิม */
-function CardView({ card, onClose, onEdit }: { card: Card; onClose: () => void; onEdit?: () => void }) {
+function CardView({ card, onClose, onEdit, onClaim, claiming }: { card: Card; onClose: () => void; onEdit?: () => void; onClaim?: (duty: string) => void; claiming?: boolean }) {
+  const [duty, setDuty] = useState(ART_DUTIES[0]);
   const [hist, setHist] = useState<Hist[] | null>(null);
   const [mx, setMx] = useState<Metrics | null | undefined>(undefined);
   useEffect(() => { api(`/api/content/history?id=${card.card_id}`).then((j) => setHist(j.history)).catch(() => setHist([])); }, [card.card_id]);
@@ -211,6 +229,12 @@ function CardView({ card, onClose, onEdit }: { card: Card; onClose: () => void; 
           {rows.map(([k, v]) => <div key={k} className="min-w-0"><dt className="text-xs text-slate-500">{k}</dt><dd>{v || <span className="text-slate-300">—</span>}</dd></div>)}
         </dl>
         {(card.wait.prod_days > 0 || card.wait.report_days > 0) && <p className="text-xs text-slate-600">รอลูกค้ามาแล้ว: ช่วงผลิต {card.wait.prod_days} วันทำการ · ช่วงรายงาน {card.wait.report_days} วันทำการ</p>}
+        {onClaim && (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 p-2 text-sm">
+            <span className="font-medium text-sky-900">การ์ดนี้อยู่ใน {ART_STAGE} — รับงาน:</span>
+            <select value={duty} onChange={(e) => setDuty(e.target.value)} aria-label="หน้าที่ที่รับ" className="h-9 rounded-md border border-slate-300 bg-white px-2">{ART_DUTIES.map((d) => <option key={d}>{d}</option>)}</select>
+            <button type="button" disabled={claiming} onClick={() => onClaim(duty)} className={btn.primary}>{claiming ? "กำลังบันทึก…" : "รับงานนี้"}</button>
+          </div>)}
         <div>
           <div className="text-xs text-slate-500">ผู้ร่วมงาน</div>
           {card.members.length ? <ul className="mt-0.5 flex flex-wrap gap-1.5 text-sm">{card.members.map((m) => <li key={m.email} className={`rounded-full px-2 py-0.5 ${m.is_main ? "bg-brand-50 font-medium text-brand-700" : "bg-slate-100"}`}>{m.name}{m.duty && <span className="text-slate-500"> · {m.duty}</span>}{m.is_main && " (หลัก)"}</li>)}</ul> : <span className="text-sm text-slate-300">—</span>}

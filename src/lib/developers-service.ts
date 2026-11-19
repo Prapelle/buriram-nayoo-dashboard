@@ -4,6 +4,7 @@
  * - การเปลี่ยน Status อัตโนมัติ (สิ้นเดือน / ตาม Product) ทำตอนเปิดรายการ · log อัตโนมัติมีรหัสคงที่ → เปิดพร้อมกันหลายคนไม่บันทึกซ้ำ
  * - ไม่ลบ log · ตรวจข้อมูลเก่าก่อนแก้ (updated_at) · เตือนชื่อบริษัท/โครงการ/เบอร์/Line ซ้ำ (ไม่ merge อัตโนมัติ) · บันทึก Audit Log
  */
+import { notifyDev } from "./notify-service";
 import { writeAudit } from "./audit";
 import { checkStaff, followupRow, mergeStaff, staffUserNames } from "./perf";
 import { logFollowup } from "./perf-log";
@@ -169,6 +170,7 @@ export async function saveDeveloper(input: Record<string, unknown>, actor: strin
     rec.dev_code = await dedupeCode("DEVELOPERS", t.DEVELOPERS.headers, "dev_code", "developer_id", rec.developer_id, rec.dev_code, (codes) => nextDevCode(codes, kind));
     if (rec.status !== DEV_DEFAULT) await writeLogs(t, [manualLog(rec, "", rec.status, actor, now)]);
     if (met) await writeContact(t, rec, v.rec.last_contact_method, rec.last_contacted_at, "status", "", actor, now);
+    await notifyDev(null, rec, actor);
     await writeAudit(actor, "developer_create", "developer", rec.developer_id, `${rec.dev_code} ${rec.company_name || rec.project_main}`);
     return { created: true, dev: rec };
   }
@@ -180,6 +182,7 @@ export async function saveDeveloper(input: Record<string, unknown>, actor: strin
   if (met) await writeContact(t, rec, v.rec.last_contact_method, rec.last_contacted_at, "status", "", actor, now);
   if (statusChanged || met || (prev.last_contacted_at || "") !== (rec.last_contacted_at || "")) await followLog(prev, rec, actor, now);
   const changed = DEV_EDITABLE.filter((k) => (prev![k] ?? "") !== (rec[k] ?? "")).map((k) => k === "status" ? `Status ${prev!.status} → ${rec.status}` : k);
+  await notifyDev(prev, rec, actor);
   await writeAudit(actor, "developer_update", "developer", rec.developer_id, `${rec.dev_code}: ${changed.join(", ") || "ไม่มีการเปลี่ยนแปลง"}`);
   return { created: false, dev: rec };
 }
@@ -203,6 +206,7 @@ export async function changeDevStatus(id: string, to: string, updatedAtSeen: str
   await writeLogs(t, [manualLog(rec, prev.status || DEV_DEFAULT, to, actor, now)]);
   if (to === "เข้าพบแล้ว") await writeContact(t, rec, String(method), rec.last_contacted_at, "status", "", actor, now);
   await followLog(prev, rec, actor, now);
+  await notifyDev(prev, rec, actor);
   await writeAudit(actor, "developer_status", "developer", id, `${rec.dev_code}: ${prev.status || DEV_DEFAULT} → ${to}`);
   return { changed: true, dev: rec };
 }
