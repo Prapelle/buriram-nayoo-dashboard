@@ -135,9 +135,10 @@ export async function listNotifs(email: string): Promise<{ items: NotifItem[]; u
   if (!db) return { items: [], unread: 0, enabled: false };
   await readTab(NOTIF_TAB);
   const me = norm(email);
-  const rows = await D.selectWhere(db, NOTIF_TAB, { user_email: me }, { orderBy: "created_at", desc: true, limit: NOTIF_LIST_LIMIT });
-  const unread = (await D.selectWhere(db, NOTIF_TAB, { user_email: me, read_at: "" })).length;
-  const us = await users();
+  const [rows, unreadRows, us] = await Promise.all([ // พร้อมกัน (ลดรอบไป-กลับ D1)
+    D.selectWhere(db, NOTIF_TAB, { user_email: me }, { orderBy: "created_at", desc: true, limit: NOTIF_LIST_LIMIT }),
+    D.selectWhere(db, NOTIF_TAB, { user_email: me, read_at: "" }), users()]);
+  const unread = unreadRows.length;
   return { items: rows.map((r) => ({ notif_id: r.notif_id, kind: r.kind, title: r.title, body: r.body, href: r.href, actor: r.actor ? nameOfEmail(us, r.actor) : "", created_at: r.created_at, read_at: r.read_at })), unread, enabled: true };
 }
 export async function markRead(email: string, ids: unknown, all = false) {
@@ -185,13 +186,15 @@ const STAGE_PROD = new Set(["IDEA", "CONTENT PLANS", "ART WORK / VIDEO", "เส
 
 export async function todosFor(email: string): Promise<Todo[]> {
   const me = norm(email), today = todayBkk();
-  const t = await readTabs(["APP_USERS", "LEADS", "DEVELOPERS"]);
+  const d1 = await hasD1();
+  // อ่านทุกอย่างพร้อมกัน (ลดรอบไป-กลับ D1)
+  const [t, cards, prodEmails] = await Promise.all([
+    readTabs(["APP_USERS", "LEADS", "DEVELOPERS"]),
+    d1 ? import("./content-service").then((m) => m.getBoard()).then((b) => b.cards as unknown as Card[]).catch(() => [] as Card[]) : Promise.resolve([] as Card[]),
+    d1 ? productionEmails() : Promise.resolve([] as string[]),
+  ]);
   const u = t.APP_USERS.rows.find((x) => norm(x.email) === me);
   const myName = u ? staffNameOf(u).trim() : "";
-  let cards: Card[] = [], isProduction = false;
-  if (await getD1()) {
-    try { const { getBoard } = await import("./content-service"); cards = (await getBoard()).cards as unknown as Card[]; } catch { cards = []; }
-    isProduction = (await productionEmails()).includes(me);
-  }
+  const isProduction = prodEmails.includes(me);
   return todosOf({ me, myName, today, leads: t.LEADS.rows.filter((r) => r.lead_id), devs: t.DEVELOPERS.rows, cards, isProduction });
 }

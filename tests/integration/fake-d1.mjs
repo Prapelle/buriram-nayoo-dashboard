@@ -8,7 +8,8 @@ export function makeD1() {
     bind: (...v) => stmt(sql, v),
     all: async () => ({ results: raw.prepare(sql).all(...params).map((r) => ({ ...r })) }),
     run: async () => runSync(sql, params),
-    _sync: () => runSync(sql, params),
+    // batch ของ D1 จริงคืนแถวของคำสั่งอ่านด้วย (results)
+    _sync: () => (/^\s*(SELECT|PRAGMA|WITH)\b/i.test(sql) ? { results: raw.prepare(sql).all(...params).map((r) => ({ ...r })), meta: { last_row_id: 0, changes: 0 } } : runSync(sql, params)),
   });
   const runSync = (sql, params) => { const r = raw.prepare(sql).run(...params); return { meta: { last_row_id: Number(r.lastInsertRowid), changes: Number(r.changes) } }; };
   return {

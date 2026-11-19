@@ -12,7 +12,7 @@ export type D1Stmt = {
   all<T = Record<string, unknown>>(): Promise<{ results: T[] }>;
   run(): Promise<{ meta: Meta }>;
 };
-export type D1Like = { prepare(sql: string): D1Stmt; batch(s: D1Stmt[]): Promise<{ meta: Meta }[]> };
+export type D1Like = { prepare(sql: string): D1Stmt; batch(s: D1Stmt[]): Promise<{ meta: Meta; results?: unknown[] }[]> };
 
 let testDb: D1Like | null | undefined;
 /** ใช้ในเทสต์เท่านั้น: ใส่ฐานข้อมูลจำลอง (null = บังคับว่าไม่มี D1, undefined = กลับไปใช้ของจริง) */
@@ -120,29 +120,74 @@ export async function getRange(db: D1Like, range: string): Promise<string[][]> {
  * ผลลัพธ์ตรงตัวกับ getRange ทีละอัน · range แบบอื่น (แถวเดียว/ช่วงแถว) ยังอ่านแยกตามเดิม
  */
 export async function getRanges(db: D1Like, ranges: string[]): Promise<string[][][]> {
+  // ความเร็ว (20/11/2026): D1 อยู่ไกลจากเครื่องที่รัน (~100 ms ต่อรอบ) และทำคำสั่งทีละคำสั่งต่อฐานข้อมูล
+  // → รวมทุกคำสั่งอ่านของคำขอนี้เป็น batch เดียว (1 รอบ) แทนการยิงพร้อมกันหลายคำสั่ง (ซึ่ง D1 ต่อคิวทำทีละคำสั่งอยู่ดี)
   const out: string[][][] = new Array(ranges.length);
   const parsed = ranges.map(parseRange);
+  await loadHeaders(db, [...new Set(parsed.map((g) => g.tab))]);
+  type Job = { sql: string; binds: unknown[]; take: (rows: Record<string, unknown>[]) => void };
+  const jobs: Job[] = [];
+  // ทั้งคอลัมน์ / ทั้งแท็บ ของตารางเดียวกัน → อ่านครั้งเดียว
   const groups = new Map<string, number[]>();
   parsed.forEach((g, i) => { if (g.r2 === Infinity && g.r1 <= 2) (groups.get(g.tab) ?? groups.set(g.tab, []).get(g.tab)!).push(i); });
-  await Promise.all([...groups].map(async ([tab, idx]) => {
-    if (idx.length < 2) return;
+  for (const [tab, idx] of groups) {
     const hdr = await mustHeaders(db, tab);
     const want = new Set<number>();
     for (const i of idx) { const g = parsed[i]; for (let c = g.c1; c <= Math.min(g.c2, hdr.length - 1); c++) want.add(c); }
     const cols = [...want].sort((a, b) => a - b);
-    const rows = cols.length ? (await db.prepare(`SELECT ${cols.map((c) => q(hdr[c])).join(",")} FROM ${tabName(tab)} ORDER BY _id`).all<Record<string, unknown>>()).results : [];
-    for (const i of idx) {
-      const g = parsed[i], hi = Math.min(g.c2, hdr.length - 1);
-      const names = hi >= g.c1 ? hdr.slice(g.c1, hi + 1) : [];
-      const res: string[][] = [];
-      if (g.r1 <= 1) res.push(names.slice());
-      if (names.length) for (const r of rows) res.push(names.map((n) => str(r[n])));
-      out[i] = res;
+    const fill = (rows: Record<string, unknown>[]) => {
+      for (const i of idx) {
+        const g = parsed[i], hi = Math.min(g.c2, hdr.length - 1);
+        const names = hi >= g.c1 ? hdr.slice(g.c1, hi + 1) : [];
+        const res: string[][] = [];
+        if (g.r1 <= 1) res.push(names.slice());
+        if (names.length) for (const r of rows) res.push(names.map((n) => str(r[n])));
+        out[i] = res;
+      }
+    };
+    if (cols.length) jobs.push({ sql: `SELECT ${cols.map((c) => q(hdr[c])).join(",")} FROM ${tabName(tab)} ORDER BY _id`, binds: [], take: fill });
+    else fill([]);
+  }
+  // range แบบอื่น (แถวเดียว / ช่วงแถว) — ผลเหมือน getRange ทีละอัน
+  for (let i = 0; i < ranges.length; i++) {
+    if (out[i] || parsed[i].r2 === Infinity && parsed[i].r1 <= 2) continue;
+    const g = parsed[i], hdr = await mustHeaders(db, g.tab);
+    const hi = Math.min(g.c2, hdr.length - 1);
+    const names = hi >= g.c1 ? hdr.slice(g.c1, hi + 1) : [];
+    const head: string[][] = g.r1 <= 1 && g.r2 >= 1 ? [names.slice()] : [];
+    const lo = Math.max(g.r1, 2);
+    if (g.r2 >= lo && names.length) {
+      const limit = g.r2 === Infinity ? -1 : g.r2 - lo + 1;
+      jobs.push({ sql: `SELECT ${names.map(q).join(",")} FROM ${tabName(g.tab)} ORDER BY _id LIMIT ? OFFSET ?`, binds: [limit, lo - 2], take: (rows) => { out[i] = [...head, ...rows.map((r) => names.map((n) => str(r[n])))]; } });
+    } else out[i] = head;
+  }
+  if (jobs.length === 1) { const j0 = jobs[0]; j0.take((await db.prepare(j0.sql).bind(...j0.binds).all<Record<string, unknown>>()).results); }
+  else if (jobs.length) {
+    for (let k = 0; k < jobs.length; k += CHUNK) {
+      const part = jobs.slice(k, k + CHUNK);
+      let res: { results?: unknown[] }[] | null = null;
+      try { res = await db.batch(part.map((j0) => db.prepare(j0.sql).bind(...j0.binds))); } catch { res = null; } // สำรอง: อ่านทีละคำสั่ง
+      if (res && res.length === part.length && res.every((r) => Array.isArray(r?.results))) part.forEach((j0, n) => j0.take(res![n].results as Record<string, unknown>[]));
+      else await Promise.all(part.map(async (j0) => j0.take((await db.prepare(j0.sql).bind(...j0.binds).all<Record<string, unknown>>()).results)));
     }
-  })); // ตารางต่างกันอ่านขนานกัน
-  const left = ranges.map((_, i) => i).filter((i) => !out[i]);
-  await Promise.all(left.map(async (i) => { out[i] = await getRange(db, ranges[i]); }));
+  }
   return out;
+}
+
+/** อ่านรายชื่อคอลัมน์ของหลายตารางที่ยังไม่อยู่ใน cache ในรอบเดียว */
+async function loadHeaders(db: D1Like, tabs: string[]) {
+  const miss = tabs.filter((t) => { const h = colCache.get(t); return !(h && Date.now() - h.at < COL_TTL); });
+  if (miss.length <= 1) { for (const t of miss) await headersOf(db, t); return; }
+  for (let k = 0; k < miss.length; k += CHUNK) {
+    const part = miss.slice(k, k + CHUNK);
+    let res: { results?: unknown[] }[];
+    try { res = await db.batch(part.map((t) => db.prepare(`PRAGMA table_info(${tabName(t)})`))); }
+    catch { await Promise.all(part.map((t) => headersOf(db, t))); continue; } // สำรอง: อ่านทีละตาราง
+    part.forEach((t, n) => {
+      const cols = ((res[n]?.results ?? []) as { name: string; cid: number }[]).sort((a, b) => a.cid - b.cid).map((c) => c.name).filter((x) => x !== "_id");
+      if (cols.length) colCache.set(t, { at: Date.now(), cols });
+    });
+  }
 }
 
 async function idsAt(db: D1Like, tab: string, firstRow: number, count: number): Promise<number[]> {

@@ -1,8 +1,8 @@
 "use client";
 import { NotificationBell } from "@/components/NotificationBell";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { canEditSales, navOfSystem, systemOf, type NavItem, type Role, type SystemId } from "@/lib/roles";
 import { TableSort } from "@/components/TableSort";
 
@@ -48,6 +48,10 @@ export function AppShell({ items: allItems, systems, email, role, signOutAction,
   items: NavItem[]; systems: SystemTab[]; email: string; role: string; signOutAction: () => Promise<void>; children: React.ReactNode;
 }) {
   const path = usePathname();
+  // โหลดหน้าล่วงหน้าเมื่อชี้ / แตะเมนู (20/11/2026) — กดแล้วเปิดเร็วขึ้น โดยไม่โหลดทุกเมนูทุกครั้ง (ประหยัดคำขอ)
+  const router = useRouter();
+  const warmed = useRef(new Set<string>());
+  const warm = (href: string) => { if (href === path || warmed.current.has(href)) return; warmed.current.add(href); try { router.prefetch(href); } catch { /* */ } };
   // ระบบที่กำลังใช้: จาก path (/dashboard, /work) · หน้าที่ใช้ร่วมกัน → ระบบล่าสุดที่เปิด · ไม่เคยเปิด → ระบบแรกที่มีสิทธิ์
   const allowed = systems.filter((x) => x.allowed && !x.soon);
   const [lastSys, setLastSys] = useState<SystemId | null>(null);
@@ -100,7 +104,7 @@ export function AppShell({ items: allItems, systems, email, role, signOutAction,
   const link = (n: NavItem, active: boolean, sub = false) => {
     const b = badges[n.href] ?? 0;
     return (
-      <Link key={n.href + n.label} href={n.href} prefetch={false} aria-current={active ? "page" : undefined} title={compact ? n.label : undefined} aria-label={compact ? n.label : undefined}
+      <Link key={n.href + n.label} href={n.href} prefetch={false} onMouseEnter={() => warm(n.href)} onFocus={() => warm(n.href)} onTouchStart={() => warm(n.href)} aria-current={active ? "page" : undefined} title={compact ? n.label : undefined} aria-label={compact ? n.label : undefined}
         className={`flex items-center gap-2.5 rounded-md text-sm ${compact ? "justify-center px-0 py-2" : sub ? "ml-3 px-3 py-1.5" : "px-3 py-2"} ${active ? "bg-brand-50 font-semibold text-brand-700 shadow-[inset_3px_0_0_var(--color-brand-600)]" : sub ? "text-slate-600 hover:bg-slate-100" : "text-slate-700 hover:bg-slate-100"}`}>
         <span className="relative"><Icon name={n.icon} />{compact && b > 0 && <span className="absolute -right-2 -top-2 h-2.5 w-2.5 rounded-full bg-red-600" />}</span>
         {!compact && <span className="min-w-0 flex-1 truncate">{n.label}</span>}
@@ -136,7 +140,7 @@ export function AppShell({ items: allItems, systems, email, role, signOutAction,
         <nav aria-label="ระบบ" className="-my-1 flex min-w-0 items-center gap-1 overflow-x-auto py-1">
           {systems.filter((x) => x.allowed || x.soon).map((x) => x.soon || !x.allowed
             ? <span key={x.id} aria-disabled="true" title={`${x.label} — เร็ว ๆ นี้`} className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-3 py-1.5 text-sm text-slate-400">{x.label}<span className="hidden rounded bg-slate-100 px-1 text-[10px] sm:inline">เร็ว ๆ นี้</span></span>
-            : <Link key={x.id} href={x.href} prefetch={false} aria-current={sys === x.id && !picker ? "true" : undefined}
+            : <Link key={x.id} href={x.href} prefetch={false} onMouseEnter={() => warm(x.href)} onTouchStart={() => warm(x.href)} aria-current={sys === x.id && !picker ? "true" : undefined}
                 className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-sm ${sys === x.id && !picker ? "bg-brand-600 font-semibold text-white" : "text-slate-700 hover:bg-slate-100"}`}>{x.label}</Link>)}
         </nav>
         <div className="ml-auto flex shrink-0 items-center gap-2.5 text-sm text-slate-600">
