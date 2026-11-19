@@ -19,12 +19,32 @@ let testDb: D1Like | null | undefined;
 export function setD1ForTest(db: D1Like | null | undefined) { testDb = db; colCache.clear(); }
 
 export async function getD1(): Promise<D1Like | null> {
-  if (testDb !== undefined) return testDb;
+  if (testDb !== undefined) return trace && testDb ? traced(testDb) : testDb;
   try {
     const { getCloudflareContext } = await import("@opennextjs/cloudflare");
     const b = (getCloudflareContext().env as unknown as Record<string, unknown>).DB;
-    return (b as D1Like) ?? null;
+    return b ? (trace ? traced(b as D1Like) : (b as D1Like)) : null;
   } catch { return null; }
+}
+
+// ── วัดเวลาคำสั่ง D1 (เฉพาะหน้าตรวจของ Super Admin: /api/admin/d1?trace=…) ──
+export type TraceEntry = { sql: string; startMs: number; ms: number };
+let trace: { t0: number; list: TraceEntry[] } | null = null;
+/** เริ่มเก็บทุกคำสั่ง D1 ของเครื่องนี้ (ใช้ทีละคำขอ — สำหรับตรวจความเร็วเท่านั้น) */
+export function startTrace() { trace = { t0: Date.now(), list: [] }; }
+export function stopTrace(): TraceEntry[] { const l = trace?.list ?? []; trace = null; return l; }
+function traced(db: D1Like): D1Like {
+  const rec = (sql: string) => { const tr = trace; const st = Date.now(); return () => { if (tr) tr.list.push({ sql: sql.slice(0, 120), startMs: st - tr.t0, ms: Date.now() - st }); }; };
+  const wrap = (st: D1Stmt, sql: string): D1Stmt => ({
+    __raw: st, // batch ของ D1 ต้องได้คำสั่งจริง
+    bind: (...v: unknown[]) => wrap(st.bind(...v), sql),
+    all: async <T,>() => { const done = rec(sql); try { return await st.all<T>(); } finally { done(); } },
+    run: async () => { const done = rec(sql); try { return await st.run(); } finally { done(); } },
+  }) as D1Stmt;
+  return {
+    prepare: (sql: string) => wrap(db.prepare(sql), sql),
+    batch: async (stmts: D1Stmt[]) => { const done = rec(`batch(${stmts.length})`); try { return await db.batch(stmts.map((x) => (x as unknown as { __raw?: D1Stmt }).__raw ?? x)); } finally { done(); } },
+  };
 }
 
 const q = (s: string) => `"${s.replace(/"/g, '""')}"`;

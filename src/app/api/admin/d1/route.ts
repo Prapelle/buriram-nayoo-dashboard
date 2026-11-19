@@ -19,6 +19,8 @@ export async function GET(req: Request) {
   if (!g.ok) return g.res;
   try {
     if (new URL(req.url).searchParams.get("ping")) return NextResponse.json(await pingD1());
+    const tr = new URL(req.url).searchParams.get("trace");
+    if (tr) return NextResponse.json(await traceD1(tr, g.email, g.role));
     return NextResponse.json(await d1Status());
   } catch (e) { return fail("/api/admin/d1 GET", e); }
 }
@@ -35,7 +37,7 @@ async function pingD1() {
   const t0 = Date.now(); await Promise.all(Array.from({ length: 5 }, one)); const par = Date.now() - t0;
   let colo = "";
   try { const { getCloudflareContext } = await import("@opennextjs/cloudflare"); colo = String((getCloudflareContext().cf as Record<string, unknown> | undefined)?.colo ?? ""); } catch { /* */ }
-  return { available: true, colo, sequential_ms: seq, parallel5_ms: par, served_by: meta.served_by_region ?? meta.served_by ?? "", served_by_primary: meta.served_by_primary ?? null };
+  return { available: true, colo, sequential_ms: seq, parallel5_ms: par, served_by: meta.served_by_region ?? meta.served_by ?? "", served_by_primary: meta.served_by_primary ?? null, meta };
 }
 
 /** action: init | check | cutover | rollback | unlock (group ใช้กับ check / cutover / rollback) */
@@ -54,4 +56,23 @@ export async function POST(req: Request) {
       default: return NextResponse.json({ error: "action ไม่ถูกต้อง" }, { status: 422 });
     }
   } catch (e) { return fail("/api/admin/d1 POST", e); }
+}
+
+/** วัดคำสั่ง D1 ของงานหนึ่ง (ทีละคำขอ) — ดูว่าช้าตรงไหน: จำนวนคำสั่ง · เรียงกัน/พร้อมกัน · เวลารวม */
+async function traceD1(what: string, email: string, role: string) {
+  const D = await import("@/lib/d1");
+  const jobs: Record<string, () => Promise<unknown>> = {
+    leads: async () => (await import("@/lib/leads-service")).listLeads(),
+    developers: async () => (await import("@/lib/developers-service")).listDevelopers("developer"),
+    content: async () => (await import("@/lib/content-service")).getBoard(),
+    notifications: async () => { const n = await import("@/lib/notify-service"); return Promise.all([n.todosFor(email), n.listNotifs(email)]); },
+    perf: async () => (await import("@/lib/perf-service")).getPerfReport(undefined, { email, role }),
+    badges: async () => (await import("@/lib/leads-service")).listLeads(),
+  };
+  const job = jobs[what];
+  if (!job) return { error: `trace ได้: ${Object.keys(jobs).join(", ")}` };
+  D.startTrace(); const t0 = Date.now();
+  try { await job(); } finally { /* */ }
+  const total = Date.now() - t0, list = D.stopTrace();
+  return { what, total_ms: total, queries: list.length, d1_ms_sum: list.reduce((a, x) => a + x.ms, 0), list };
 }
