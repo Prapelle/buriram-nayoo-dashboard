@@ -39,7 +39,7 @@ const profileOf = (t: Record<string, Tab>, id: string): Rec => t[PROFILE_TAB].ro
 const customersOf = (t: Record<string, Tab>): Customer[] => t.DEVELOPERS.rows.filter((r) => r.developer_id).map((r) => { const p = profileOf(t, r.developer_id); return {
   developer_id: r.developer_id, code: r.dev_code, kind: kindOf(r), name: r.company_name || r.project_main, project: r.project_main, contact_name: p.contact_name || r.contact_name, phone: p.phone || r.phone, address: p.address || "", tax_id: p.tax_id || "",
 }; }).sort((a, b) => a.name.localeCompare(b.name, "th"));
-const configOf = (t: Record<string, Tab>) => ({ types: productTypesOf(t.APP_CONFIG.rows), seller: parseSeller(t.APP_CONFIG.rows.find((r) => r.config_key === "account_seller")?.config_value) });
+const configOf = (t: Record<string, Tab>) => ({ types: productTypesOf(t.APP_CONFIG.rows), productDetails: detailsOf(t), seller: parseSeller(t.APP_CONFIG.rows.find((r) => r.config_key === "account_seller")?.config_value) });
 
 const chainOf = (t: Record<string, Tab>, rootId: string) => t.ACC_DOCS.rows.filter((d) => d.doc_id && (d.root_id || d.doc_id) === rootId);
 /** ยอดชำระทั้งสายเอกสาร (ใบเสนอราคา → วางบิล → แจ้งหนี้ คืองานเดียวกัน) — ใช้ตรวจยอดคงเหลือ ไม่ให้เก็บเงินซ้ำข้ามใบ (5/11/2026) */
@@ -532,25 +532,53 @@ async function writeTypes(t: Record<string, Tab>, next: string[]) {
   const row = { config_key: TYPE_KEY, config_value: next.join("|"), description: "ชนิด Product ที่ขายให้ Developer (คั่นด้วย |)", updated_at: new Date().toISOString() };
   if (!(i >= 0 && (await updateById("APP_CONFIG", t.APP_CONFIG.headers, "config_key", TYPE_KEY, toRow(t.APP_CONFIG.headers, { ...t.APP_CONFIG.rows[i], ...row }))))) await appendRows("APP_CONFIG", [toRow(t.APP_CONFIG.headers, row)]);
 }
+// รายละเอียด Product (19/11/2026): ข้อความหลายบรรทัดต่อ Product · เก็บใน APP_CONFIG "product_details" เป็น JSON { ชื่อ: รายละเอียด }
+// ใช้เติมช่อง "รายละเอียด" ของรายการในใบเสนอราคาเมื่อเลือก Product (แก้ต่อในเอกสารได้ · เอกสารที่ออกแล้วไม่เปลี่ยนตาม)
+const DETAIL_KEY = "product_details";
+export const MAX_PRODUCT_DETAIL = 2000;
+function detailsOf(t: Record<string, Tab>): Record<string, string> {
+  try { const v = JSON.parse(t.APP_CONFIG.rows.find((r) => r.config_key === DETAIL_KEY)?.config_value || "{}"); return v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, String(x ?? "")])) : {}; } catch { return {}; }
+}
+async function writeDetails(t: Record<string, Tab>, next: Record<string, string>) {
+  const clean = Object.fromEntries(Object.entries(next).filter(([, v]) => v.trim()));
+  const i = t.APP_CONFIG.rows.findIndex((r) => r.config_key === DETAIL_KEY);
+  const row = { config_key: DETAIL_KEY, config_value: JSON.stringify(clean), description: "รายละเอียดของแต่ละ Product (JSON) — เติมในใบเสนอราคาเมื่อเลือก Product", updated_at: new Date().toISOString() };
+  if (!(i >= 0 && (await updateById("APP_CONFIG", t.APP_CONFIG.headers, "config_key", DETAIL_KEY, toRow(t.APP_CONFIG.headers, { ...t.APP_CONFIG.rows[i], ...row }))))) await appendRows("APP_CONFIG", [toRow(t.APP_CONFIG.headers, row)]);
+}
+const cleanDetail = (v: unknown) => {
+  const d = String(v ?? "").replace(/\r\n?/g, "\n").split("\n").map((x) => x.replace(/\s+$/, "")).join("\n").trim();
+  if (d.length > MAX_PRODUCT_DETAIL) throw new AccError(422, `รายละเอียด Product ยาวได้ไม่เกิน ${MAX_PRODUCT_DETAIL.toLocaleString()} ตัวอักษร`, "VALIDATION", { fields: { detail: "ยาวเกินไป" } });
+  return d;
+};
+const prodList = (t: Record<string, Tab>, types: string[], details = detailsOf(t)) => types.map((name) => ({ name, detail: details[name] ?? "", ...usage(t, name) }));
 const usage = (t: Record<string, Tab>, name: string) => ({ developers: t.DEVELOPER_PRODUCTS.rows.filter((r) => r.product_id && r.product === name).length, docs: t.ACC_LINES.rows.filter((r) => r.line_id && r.product === name).length });
 export async function listProducts() {
   const t = await load();
-  return { products: productTypesOf(t.APP_CONFIG.rows).map((name) => ({ name, ...usage(t, name) })) };
+  return { products: prodList(t, productTypesOf(t.APP_CONFIG.rows)) };
 }
 const cleanName = (v: unknown) => { const n = String(v ?? "").trim().replace(/\s+/g, " "); if (!n || n.length > 60 || n.includes("|")) throw new AccError(422, "ชื่อ Product ต้องมี 1–60 ตัวอักษร และไม่มีเครื่องหมาย |  เช่น Top ads", "VALIDATION", { fields: { name: "ชื่อ Product ต้องมี 1–60 ตัวอักษร และไม่มีเครื่องหมาย |" } }); return n; };
-export async function addProduct(name: unknown, actor: string) {
-  const n = cleanName(name), t = await load(), types = productTypesOf(t.APP_CONFIG.rows);
+export async function addProduct(name: unknown, actor: string, detailRaw?: unknown) {
+  const n = cleanName(name), d = cleanDetail(detailRaw), t = await load(), types = productTypesOf(t.APP_CONFIG.rows);
   if (types.some((x) => x.toLowerCase() === n.toLowerCase())) throw new AccError(409, `มี Product "${n}" อยู่แล้ว`, "DUPLICATE", { fields: { name: "ชื่อนี้มีอยู่แล้ว" } });
   await writeTypes(t, [...types, n]);
-  await writeAudit(actor, "developer_product_type", "config", TYPE_KEY, `เพิ่ม ${n}`);
-  return { products: [...types, n].map((x) => ({ name: x, ...usage(t, x) })) };
+  const details = detailsOf(t);
+  if (d || details[n]) { details[n] = d; await writeDetails(t, details); } // ชื่อซ้ำกับรายละเอียดเก่าที่ค้างอยู่ → ใช้ค่าใหม่
+  await writeAudit(actor, "developer_product_type", "config", TYPE_KEY, `เพิ่ม ${n}${d ? " (มีรายละเอียด)" : ""}`);
+  return { products: prodList(t, [...types, n], details) };
 }
 /** เปลี่ยนชื่อ Product: แก้ในรายการ + ทุกที่ที่ใช้ชื่อเดิม (Product ของ Developer / Home Builder · รายการในเอกสาร · งาน Production) */
-export async function renameProduct(from: unknown, to: unknown, actor: string) {
+export async function renameProduct(from: unknown, to: unknown, actor: string, detailRaw?: unknown) {
   const old = String(from ?? ""), n = cleanName(to), t = await load(), types = productTypesOf(t.APP_CONFIG.rows);
+  const d = detailRaw === undefined ? undefined : cleanDetail(detailRaw);
   if (!types.includes(old)) throw new AccError(404, "ไม่พบ Product นี้ (อาจถูกเปลี่ยนชื่อหรือลบไปแล้ว) กรุณาโหลดใหม่", "NOT_FOUND");
   if (types.some((x) => x !== old && x.toLowerCase() === n.toLowerCase())) throw new AccError(409, `มี Product "${n}" อยู่แล้ว`, "DUPLICATE", { fields: { name: "ชื่อนี้มีอยู่แล้ว" } });
-  if (n === old) return { products: types.map((x) => ({ name: x, ...usage(t, x) })), updated: 0 };
+  // รายละเอียด: ย้ายไปชื่อใหม่ + แก้ค่าถ้าส่งมา
+  const details = detailsOf(t), prevDetail = details[old] ?? "", nextDetail = d ?? prevDetail;
+  if (n !== old || nextDetail !== prevDetail) {
+    delete details[old]; details[n] = nextDetail; await writeDetails(t, details);
+    if (nextDetail !== prevDetail) await writeAudit(actor, "developer_product_type", "config", DETAIL_KEY, `แก้รายละเอียด ${n}`);
+  }
+  if (n === old) return { products: prodList(t, types, details), updated: 0 };
   // แก้ชื่อตามค่าเดิม (คำสั่งเดียวต่อตาราง ไม่ใช้เลขแถว) · นับจำนวนรายการที่ใช้อยู่จากข้อมูลที่อ่านไว้
   const TABS_USING = ["DEVELOPER_PRODUCTS", "ACC_LINES", "PRODUCTION_JOBS"] as const;
   const updates = { length: TABS_USING.reduce((k, tab) => k + (t[tab].headers.includes("product") ? t[tab].rows.filter((r) => r.product === old).length : 0), 0) };
@@ -559,7 +587,7 @@ export async function renameProduct(from: unknown, to: unknown, actor: string) {
   try { await renameProductInContent(old, n); } catch { /* ตั้งค่า/การ์ด Content ตามไม่ทัน — ไม่กระทบการเปลี่ยนชื่อ */ }
   await writeAudit(actor, "developer_product_type", "config", TYPE_KEY, `เปลี่ยนชื่อ ${old} → ${n} (แก้ ${updates.length} รายการที่ใช้อยู่)`);
   const t2 = await load();
-  return { products: productTypesOf(t2.APP_CONFIG.rows).map((x) => ({ name: x, ...usage(t2, x) })), updated: updates.length };
+  return { products: prodList(t2, productTypesOf(t2.APP_CONFIG.rows)), updated: updates.length };
 }
 /** ลบ Product: ลบไม่ได้ถ้ายังมี Developer / Home Builder หรือเอกสารใช้อยู่ (ให้เปลี่ยนชื่อแทน) และต้องเหลืออย่างน้อย 1 รายการ */
 export async function deleteProduct(name: unknown, actor: string) {
@@ -569,8 +597,10 @@ export async function deleteProduct(name: unknown, actor: string) {
   if (u.developers || u.docs) throw new AccError(409, `ลบ "${old}" ไม่ได้ — ยังถูกใช้อยู่ที่ Developer / Home Builder ${u.developers} รายการ และในเอกสาร ${u.docs} รายการ (ถ้าต้องการเปลี่ยนชื่อ ใช้ปุ่มแก้ไข)`, "IN_USE");
   if (types.length <= 1) throw new AccError(409, "ต้องเหลือ Product อย่างน้อย 1 รายการ", "LOCKED");
   await writeTypes(t, types.filter((x) => x !== old));
+  const details = detailsOf(t);
+  if (old in details) { delete details[old]; await writeDetails(t, details); }
   await writeAudit(actor, "developer_product_type", "config", TYPE_KEY, `ลบ ${old}`);
-  return { products: types.filter((x) => x !== old).map((x) => ({ name: x, ...usage(t, x) })) };
+  return { products: prodList(t, types.filter((x) => x !== old), details) };
 }
 
 export { addProductType };

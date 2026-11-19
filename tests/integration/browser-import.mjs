@@ -481,5 +481,24 @@ try {
     assert.deepEqual(m.errors, []); assert.deepEqual(ob.errors, []);
     ok("หน้า Leads → นำเข้า CSV: ดาวน์โหลดฟอร์ม (มี BOM · บังคับ ชื่อ / เบอร์ / ความต้องการ · ไม่มีช่องสถานะ) · นำเข้าแล้วอยู่ที่ รอติดต่อ · เลือกไฟล์ → ตรวจก่อน (เพิ่ม 1 · เบอร์ซ้ำในไฟล์ข้าม 1 · ไม่มีชื่อ 1) → ยืนยัน → Lead ขึ้นในตาราง + Sheet · วันที่ พ.ศ. แปลงถูก · Role ที่แก้ไม่ได้ไม่เห็นปุ่ม");
   }
+  { // รายละเอียด Product (19/11/2026): เพิ่มในหน้า Product → เลือก Product ในใบเสนอราคาแล้วเติมรายละเอียดให้ · แก้เองได้ · กดใช้รายละเอียดของ Product คืนได้
+    const ap = m.page; await ap.goto(BASE + "/account/products"); await ap.getByText("กำลังโหลด…").waitFor({ state: "detached" });
+    await ap.getByLabel("เพิ่ม Product ใหม่").fill("แพ็กเกจทดสอบรายละเอียด");
+    await ap.getByLabel(/^รายละเอียด Product/).fill("สิ่งที่โครงการได้รับ\n- Content 2 โพสต์\n- Code Grab 100 บาท");
+    await ap.getByRole("button", { name: "＋ เพิ่ม" }).click(); await ap.getByText('เพิ่ม Product "แพ็กเกจทดสอบรายละเอียด" แล้ว').waitFor();
+    const prow = ap.getByRole("row").filter({ hasText: "แพ็กเกจทดสอบรายละเอียด" }); assert.ok((await prow.innerText()).includes("- Content 2 โพสต์"));
+    await prow.getByRole("button", { name: "✎ แก้ไข" }).click(); const ta = ap.getByLabel("รายละเอียด แพ็กเกจทดสอบรายละเอียด");
+    assert.equal(await ta.inputValue(), "สิ่งที่โครงการได้รับ\n- Content 2 โพสต์\n- Code Grab 100 บาท");
+    await ta.fill("สิ่งที่โครงการได้รับ\n- Content 3 โพสต์"); await ap.getByRole("button", { name: "บันทึก", exact: true }).click(); await ap.getByText("บันทึกแล้ว").first().waitFor();
+    assert.ok((await prow.innerText()).includes("- Content 3 โพสต์"));
+    await ap.goto(BASE + "/account/new"); const sel = ap.getByLabel("Product *").first(); await sel.waitFor(); await ap.waitForFunction(() => [...document.querySelectorAll("select option")].some((o) => o.textContent === "แพ็กเกจทดสอบรายละเอียด"));
+    await sel.selectOption("แพ็กเกจทดสอบรายละเอียด"); const desc = ap.getByLabel(/^รายละเอียด \(บรรทัดที่ขึ้นต้นด้วย/).first();
+    assert.equal(await desc.inputValue(), "สิ่งที่โครงการได้รับ\n- Content 3 โพสต์", "เลือก Product แล้วต้องเติมรายละเอียดให้");
+    await desc.fill("แก้เองในเอกสาร"); await ap.getByRole("button", { name: "ใช้รายละเอียดของ Product นี้" }).click();
+    assert.equal(await desc.inputValue(), "สิ่งที่โครงการได้รับ\n- Content 3 โพสต์");
+    assert.equal(await ap.getByRole("button", { name: "ใช้รายละเอียดของ Product นี้" }).count(), 0, "ตรงกับของ Product แล้วไม่ต้องแสดงปุ่ม");
+    assert.deepEqual(m.errors, []);
+    ok("รายละเอียด Product: เพิ่ม / แก้ในหน้า Product (แสดงใต้ชื่อ) · ออกใบเสนอราคาแล้วเลือก Product → เติมรายละเอียดให้ (ขึ้นในเอกสารที่พิมพ์) · แก้เองได้ · ปุ่มใช้รายละเอียดของ Product");
+  }
   console.log(`\nผ่านทั้งหมด ${pass} รายการ`);
 } catch (e) { if (process.env.SHOT_DIR) try { await browser?.contexts().at(-1)?.pages()[0]?.screenshot({ path: process.env.SHOT_DIR + "/fail-import.png", fullPage: true }); } catch { /* */ } console.error("\n✗ FAIL:", e?.message ?? e); console.error(log.split("\n").slice(-20).join("\n")); process.exitCode = 1; } finally { try { await browser?.close(); } catch { /* */ } stop(); process.exit(process.exitCode ?? 0); }

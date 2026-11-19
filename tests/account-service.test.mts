@@ -262,6 +262,24 @@ await t("Product: เพิ่ม · ซ้ำ/ชื่อผิด → ปฏ�
   await A.renameProduct("แพ็กเกจ STD2", "แพ็กเกจ STD", ADMIN);
   await A.deleteProduct("สินค้าทดสอบ", ADMIN); assert.ok(!(await A.listProducts()).products.some((p) => p.name === "สินค้าทดสอบ"));
 });
+await t("รายละเอียด Product (19/11/2026): เพิ่มพร้อมรายละเอียด · แก้ · ย้ายตามชื่อใหม่ · ลบแล้วหาย · ส่งไปหน้าออกเอกสาร (productDetails) · ยาวเกิน → ปฏิเสธ", async () => {
+  const det = "สิ่งที่โครงการได้รับ\r\n- Content รวม 2 โพสต์   \n- Code Grab 100 บาท";
+  let r = await A.addProduct("แพ็กเกจรายละเอียด", ADMIN, det);
+  const got = (n: string) => r.products.find((p) => p.name === n)?.detail;
+  assert.equal(got("แพ็กเกจรายละเอียด"), "สิ่งที่โครงการได้รับ\n- Content รวม 2 โพสต์\n- Code Grab 100 บาท", "ขึ้นบรรทัดใหม่ทำให้เป็นแบบเดียวกัน ตัดช่องว่างท้ายบรรทัด");
+  assert.equal(got("แพ็กเกจ STD"), "", "Product ที่ไม่มีรายละเอียด = ค่าว่าง");
+  r = await A.renameProduct("แพ็กเกจรายละเอียด", "แพ็กเกจรายละเอียด", ADMIN, "รายละเอียดใหม่"); assert.equal(got("แพ็กเกจรายละเอียด"), "รายละเอียดใหม่");
+  r = await A.renameProduct("แพ็กเกจรายละเอียด", "แพ็กเกจ D2", ADMIN); assert.equal(got("แพ็กเกจ D2"), "รายละเอียดใหม่", "เปลี่ยนชื่ออย่างเดียว → รายละเอียดย้ายตาม");
+  assert.equal(got("แพ็กเกจรายละเอียด"), undefined);
+  const meta = await A.listDocs("x@example.com"); assert.equal(meta.productDetails["แพ็กเกจ D2"], "รายละเอียดใหม่"); assert.equal(meta.productDetails["แพ็กเกจรายละเอียด"], undefined);
+  await fails(A.renameProduct("แพ็กเกจ D2", "แพ็กเกจ D2", ADMIN, "x".repeat(2001)), "VALIDATION");
+  r = await A.renameProduct("แพ็กเกจ D2", "แพ็กเกจ D2", ADMIN, "  "); assert.equal(got("แพ็กเกจ D2"), "", "ล้างรายละเอียดได้");
+  await A.renameProduct("แพ็กเกจ D2", "แพ็กเกจ D2", ADMIN, "จะถูกลบ");
+  await A.deleteProduct("แพ็กเกจ D2", ADMIN);
+  r = await A.addProduct("แพ็กเกจ D2", ADMIN); assert.equal(got("แพ็กเกจ D2"), "", "ลบแล้วเพิ่มชื่อเดิมใหม่ → ไม่มีรายละเอียดเก่าค้าง");
+  await A.deleteProduct("แพ็กเกจ D2", ADMIN);
+  const cfg = JSON.parse(rows("APP_CONFIG").find((x) => x.config_key === "product_details")!.config_value); assert.deepEqual(Object.keys(cfg), [], "ไม่มีค่าว่างค้างในตั้งค่า");
+});
 await t("สรุปบัญชี: ยอดขายแยกตามผู้ขาย (ยอดขายรวม / ชำระแล้ว) — ใบเสนอราคาที่ยังไม่ชำระไม่นับเป็นยอดขาย", async () => {
   const { summarize } = await import("../src/lib/account");
   const mk = (o: Record<string, string>) => ({ doc_id: o.doc_id, root_id: o.root_id ?? o.doc_id, doc_type: "quotation", doc_no: o.doc_id, status: "sent", total: "0", wht: "0", paid_amount: "0", due_date: "", doc_date: "2026-11-05", seller_name: "", ...o });

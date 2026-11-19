@@ -18,7 +18,7 @@ async function api(url: string, init?: RequestInit) { const r = await fetch(url,
 export function DocPage({ docType = "quotation", docId, canPay, isSuper = false }: { docType?: DocType; docId?: string; canPay: boolean; isSuper?: boolean }) {
   const router = useRouter();
   const [msg, setMsg] = useState<Msg>(null); const [errs, setErrs] = useState<Record<string, string>>({}); const [busy, setBusy] = useState(false);
-  const [customers, setCustomers] = useState<Customer[]>([]); const [types, setTypes] = useState<string[]>([]); const [cats, setCats] = useState<string[]>(["Product", "Service", "Event"]); const [today, setToday] = useState(""); const [members, setMembers] = useState<string[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]); const [types, setTypes] = useState<string[]>([]); const [details, setDetails] = useState<Record<string, string>>({}); const [cats, setCats] = useState<string[]>(["Product", "Service", "Event"]); const [today, setToday] = useState(""); const [members, setMembers] = useState<string[]>([]);
   const [d, setD] = useState<Detail | null>(null); const [loaded, setLoaded] = useState(false);
   const [f, setF] = useState<Record<string, string>>({ doc_type: docType, doc_date: "", due_date: "", customer_id: "", job_title: "", contact_name: "", contact_phone: "", seller_name: "", customer_address: "", customer_tax_id: "", discount: "0", vat_rate: "0", wht_rate: "0", note: "" });
   const [lines, setLines] = useState<Line[]>([blankLine()]);
@@ -28,7 +28,7 @@ export function DocPage({ docType = "quotation", docId, canPay, isSuper = false 
 
   const load = useCallback(async () => {
     try {
-      const l = await api("/api/account"); setCustomers(l.customers); setTypes(l.types); setCats(l.categories); setToday(l.today); setMembers(l.members ?? []);
+      const l = await api("/api/account"); setCustomers(l.customers); setTypes(l.types); setDetails(l.productDetails ?? {}); setCats(l.categories); setToday(l.today); setMembers(l.members ?? []);
       if (docId) {
         const j: Detail = await api(`/api/account/${docId}`); setD(j);
         const x = j.doc; setF({ doc_type: x.doc_type, doc_date: x.doc_date, due_date: x.due_date, customer_id: x.customer_id, job_title: x.job_title, contact_name: x.contact_name, contact_phone: x.contact_phone, seller_name: x.seller_name, customer_address: x.customer_address, customer_tax_id: x.customer_tax_id, discount: x.discount || "0", vat_rate: x.vat_rate || "0", wht_rate: x.wht_rate || "0", note: x.note });
@@ -43,7 +43,12 @@ export function DocPage({ docType = "quotation", docId, canPay, isSuper = false 
   const doc = d?.doc, isNew = !docId, editable = !docId || !!d?.editable, canType = isNew || (editable && edit), cancelled = doc?.status === "cancelled";
   const paid = Number(doc?.paid_amount ?? 0), payable = doc ? payableOf(doc) : 0, remain = round2(payable - paid), started = !!d?.work_started_at;
   // เปลี่ยนวันที่เอกสาร: ถ้าครบกำหนดยังเป็นค่าอัตโนมัติ (ว่าง หรือ = วันที่เดิม + 7) ให้เลื่อนตามเป็นวันที่ใหม่ + 7
-  const set = (k: string, v: string) => setF((p) => ({ ...p, [k]: v, ...(k === "doc_date" && /^\d{4}-\d{2}-\d{2}$/.test(v) && (!p.due_date || (/^\d{4}-\d{2}-\d{2}$/.test(p.doc_date) && p.due_date === addDays(p.doc_date, DEFAULT_DUE_DAYS))) ? { due_date: addDays(v, DEFAULT_DUE_DAYS) } : {}) })); const setL = (i: number, k: keyof Line, v: string) => setLines((p) => p.map((l, j) => (j === i ? { ...l, [k]: v } : l)));
+  const set = (k: string, v: string) => setF((p) => ({ ...p, [k]: v, ...(k === "doc_date" && /^\d{4}-\d{2}-\d{2}$/.test(v) && (!p.due_date || (/^\d{4}-\d{2}-\d{2}$/.test(p.doc_date) && p.due_date === addDays(p.doc_date, DEFAULT_DUE_DAYS))) ? { due_date: addDays(v, DEFAULT_DUE_DAYS) } : {}) })); const setL = (i: number, k: keyof Line, v: string) => setLines((p) => p.map((l, j) => {
+    if (j !== i) return l;
+    // เลือก Product → เติมรายละเอียดของ Product (19/11/2026) เมื่อช่องรายละเอียดว่าง หรือยังเป็นรายละเอียดของ Product เดิมที่ไม่ได้แก้
+    if (k === "product" && details[v] && (!l.description.trim() || l.description === (details[l.product] ?? ""))) return { ...l, product: v, description: details[v] };
+    return { ...l, [k]: v };
+  }));
   const e = (k: string) => errs[k] ? <span role="alert" className="mt-0.5 block text-xs font-medium text-red-600">⚠ {errs[k]}</span> : null;
   const ic = (k: string) => (errs[k] ? inpErr : inp);
   const nErr = Object.keys(errs).length;
@@ -149,6 +154,7 @@ export function DocPage({ docType = "quotation", docId, canPay, isSuper = false 
                 <label className="text-xs">ราคาต่อหน่วย<input inputMode="decimal" value={l.unit_price} onChange={(e2) => setL(i, "unit_price", e2.target.value)} placeholder="เช่น 5000" className={ic(`lines.${i}.unit_price`)} />{e(`lines.${i}.unit_price`)}</label>
                 <div className="text-xs">ยอดรวม<div className="px-2 py-1.5 text-sm font-semibold">{money(round2((Number(l.qty) || 0) * (Number(l.unit_price) || 0)))}</div></div>
               </div>
+              {details[l.product] && l.description !== details[l.product] && <button type="button" onClick={() => setL(i, "description", details[l.product])} className="float-right text-xs text-brand-700 underline">ใช้รายละเอียดของ Product นี้</button>}
               <label className="block text-xs">รายละเอียด (บรรทัดที่ขึ้นต้นด้วย - จะกลายเป็นเช็กลิสต์ของงาน Production)
                 <textarea value={l.description} onChange={(e2) => setL(i, "description", e2.target.value)} rows={5} placeholder={"เช่น\nสิ่งที่โครงการได้รับ\n- Content รวมโครงการที่เข้าแคมเปญ\n- Code Grab มูลค่า 100 บาท"} className={`${ic(`lines.${i}.description`)} font-mono text-[13px]`} />{e(`lines.${i}.description`)}</label>
               <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
