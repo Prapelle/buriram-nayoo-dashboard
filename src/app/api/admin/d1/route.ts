@@ -68,11 +68,12 @@ async function traceD1(what: string, email: string, role: string) {
     notifications: async () => { const n = await import("@/lib/notify-service"); return Promise.all([n.todosFor(email), n.listNotifs(email)]); },
     perf: async () => (await import("@/lib/perf-service")).getPerfReport(undefined, { email, role }),
     badges: async () => (await import("@/lib/leads-service")).listLeads(),
+    dashboard: async () => (await import("@/lib/dashboard-data")).fetchDashboardData(role as never),
   };
   const job = jobs[what];
   if (!job) return { error: `trace ได้: ${Object.keys(jobs).join(", ")}` };
   D.startTrace(); const t0 = Date.now();
   try { await job(); } finally { /* */ }
   const total = Date.now() - t0, list = D.stopTrace();
-  return { what, total_ms: total, queries: list.length, d1_ms_sum: list.reduce((a, x) => a + x.ms, 0), list };
+  return { what, total_ms: total, queries: list.length, d1_ms_sum: list.reduce((a, x) => a + x.ms, 0), d1_end_ms: Math.max(0, ...list.map((x) => x.startMs + x.ms)), list };
 }

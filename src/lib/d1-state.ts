@@ -16,7 +16,8 @@ export type D1State = { active: string[]; migrating: { group: string; since: str
 const TTL = 3000, MIGRATE_EXPIRE_MS = 120_000;
 let cache: { at: number; state: D1State; meta: Record<string, string> } | null = null;
 let seenVer: string | null = null;
-export const invalidateD1State = () => { cache = null; };
+let inflight: Promise<Record<string, string>> | null = null;
+export const invalidateD1State = () => { cache = null; inflight = null; };
 
 export function parseState(all: Record<string, string>): D1State {
   let active: string[] = [];
@@ -33,7 +34,9 @@ export async function getD1State(): Promise<{ db: D1Like | null; state: D1State;
   const db = await getD1();
   if (!db) return { db: null, state: { active: [], migrating: null }, meta: {} };
   if (cache && Date.now() - cache.at < TTL) return { db, state: cache.state, meta: cache.meta };
-  const meta = await metaGetAll(db);
+  // หลายส่วนของคำขอเดียวกันเรียกพร้อมกัน → อ่าน _meta ครั้งเดียว (20/11/2026)
+  if (!inflight) inflight = metaGetAll(db).finally(() => { inflight = null; });
+  const meta = await inflight;
   // โครงสร้างตารางเปลี่ยนจากเครื่องอื่น (สร้างตาราง / เพิ่มคอลัมน์) → ล้าง cache รายชื่อคอลัมน์ของเครื่องนี้ (20/11/2026)
   const ver = meta[SCHEMA_VER_KEY] ?? "";
   if (seenVer !== null && ver !== seenVer) clearColCache();
