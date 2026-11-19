@@ -5,7 +5,7 @@ import type { NotifItem, Todo } from "@/lib/notify";
 
 /**
  * กระดิ่งแจ้งเตือน (20/11/2026) บนแถบด้านบน
- * - ตัวเลข = งานที่ต้องทำ + การแจ้งเตือนที่ยังไม่อ่าน · โหลดใหม่ทุก 1 นาทีขณะเปิดแท็บนี้อยู่ และเมื่อเปลี่ยนหน้า (ไม่ถี่กว่า 20 วินาที)
+ * - ตัวเลข = งานที่ต้องทำ + การแจ้งเตือนที่ยังไม่อ่าน · โหลดใหม่ทุก 1 นาทีขณะเปิดแท็บนี้อยู่ และเมื่อเปลี่ยนหน้า (ไม่ถี่กว่านาทีละครั้ง)
  * - กดรายการ = เปิดรายการนั้น (และนับว่าอ่านแล้ว)
  */
 type Data = { todos: Todo[]; items: NotifItem[]; unread: number; enabled: boolean };
@@ -27,7 +27,7 @@ export function NotificationBell() {
   const router = useRouter(), path = usePathname();
 
   const load = useCallback(async (force = false) => {
-    if (!force && Date.now() - last.current < 20_000) return;
+    if (!force && Date.now() - last.current < 60_000) return; // เปลี่ยนหน้าบ่อย ๆ ไม่ยิงซ้ำ (ไม่เกินนาทีละครั้ง)
     last.current = Date.now();
     try { const r = await fetch("/api/notifications", { cache: "no-store" }); if (r.ok) setD(await r.json()); } catch { /* ลองใหม่รอบหน้า */ }
   }, []);

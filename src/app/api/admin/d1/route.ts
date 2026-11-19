@@ -13,11 +13,29 @@ function fail(where: string, e: unknown) {
   return NextResponse.json({ error: e instanceof Error ? e.message : "unknown error" }, { status: 500 });
 }
 
-/** สถานะฐานข้อมูล D1 + กลุ่มที่ย้าย (Super Admin เท่านั้น) */
-export async function GET() {
+/** สถานะฐานข้อมูล D1 + กลุ่มที่ย้าย (Super Admin เท่านั้น) · ?ping=1 = วัดเวลาเรียก D1 จากเครื่องที่ตอบ (20/11/2026) */
+export async function GET(req: Request) {
   const g = await requireRole(["super_admin"]);
   if (!g.ok) return g.res;
-  try { return NextResponse.json(await d1Status()); } catch (e) { return fail("/api/admin/d1 GET", e); }
+  try {
+    if (new URL(req.url).searchParams.get("ping")) return NextResponse.json(await pingD1());
+    return NextResponse.json(await d1Status());
+  } catch (e) { return fail("/api/admin/d1 GET", e); }
+}
+
+/** เวลาไป-กลับของคำสั่ง D1 จาก Worker: 5 คำสั่งเรียงกัน + 5 คำสั่งพร้อมกัน · colo = ศูนย์ข้อมูลที่ Worker รัน · served_by = ภูมิภาคของ D1 ที่ตอบ */
+async function pingD1() {
+  const { getD1 } = await import("@/lib/d1");
+  const db = await getD1();
+  if (!db) return { available: false };
+  type R = { results: unknown[]; meta?: Record<string, unknown> };
+  const one = async () => { const t = Date.now(); const r = (await db.prepare("SELECT 1 AS x").all()) as unknown as R; return { ms: Date.now() - t, meta: r.meta ?? {} }; };
+  const seq: number[] = []; let meta: Record<string, unknown> = {};
+  for (let i = 0; i < 5; i++) { const r = await one(); seq.push(r.ms); meta = r.meta; }
+  const t0 = Date.now(); await Promise.all(Array.from({ length: 5 }, one)); const par = Date.now() - t0;
+  let colo = "";
+  try { const { getCloudflareContext } = await import("@opennextjs/cloudflare"); colo = String((getCloudflareContext().cf as Record<string, unknown> | undefined)?.colo ?? ""); } catch { /* */ }
+  return { available: true, colo, sequential_ms: seq, parallel5_ms: par, served_by: meta.served_by_region ?? meta.served_by ?? "", served_by_primary: meta.served_by_primary ?? null };
 }
 
 /** action: init | check | cutover | rollback | unlock (group ใช้กับ check / cutover / rollback) */

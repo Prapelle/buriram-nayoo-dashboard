@@ -16,10 +16,17 @@ import { colLetter } from "./sheets-google";
 const tabOf = (range: string) => (/^'((?:[^']|'')+)'/.exec(range)?.[1] ?? "").replace(/''/g, "'");
 
 const ensured = new WeakSet<object>();
+// ลายนิ้วมือของโครงสร้างตารางที่เกิดบน D1 — ตรงกับค่าใน _meta = สร้างครบแล้ว ไม่ต้องตรวจซ้ำ (20/11/2026)
+// เดิมทุกเครื่องที่เพิ่งเริ่ม (cold start) ตรวจทุกตาราง ~20 คำสั่ง ก่อนตอบคำขอแรก → ตอนนี้ 0 คำสั่งเมื่อโครงสร้างไม่เปลี่ยน
+const NATIVE_KEY = "native_schema";
+const NATIVE_SIG = NATIVE_DEFS.map((d) => `${d.name}:${d.headers.join(",")}`).join("|");
 async function route() {
   const r = await d1Routing();
-  // ตารางที่เกิดบน D1 (Content) — สร้างให้อัตโนมัติครั้งแรกต่อเครื่อง (CREATE IF NOT EXISTS ไม่แตะข้อมูลเดิม)
-  if (r.db && !ensured.has(r.db)) { await D.ensureSchema(r.db, NATIVE_DEFS); ensured.add(r.db); }
+  // ตารางที่เกิดบน D1 (Content ฯลฯ) — สร้างให้อัตโนมัติเมื่อโครงสร้างในโค้ดเปลี่ยน (CREATE IF NOT EXISTS ไม่แตะข้อมูลเดิม)
+  if (r.db && !ensured.has(r.db)) {
+    if (r.meta[NATIVE_KEY] !== NATIVE_SIG) { await D.ensureSchema(r.db, NATIVE_DEFS); await D.metaSet(r.db, NATIVE_KEY, NATIVE_SIG); }
+    ensured.add(r.db);
+  }
   if (r.tabs.size && !r.db) throw new Error("ฐานข้อมูล D1 (binding DB) ไม่พร้อมใช้งาน");
   return r;
 }

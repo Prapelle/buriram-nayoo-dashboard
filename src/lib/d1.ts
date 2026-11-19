@@ -40,11 +40,17 @@ export function colLetter(index: number): string {
 }
 const colIdx = (s: string) => [...s].reduce((n, ch) => n * 26 + ch.charCodeAt(0) - 64, 0) - 1;
 
-// ── รายชื่อคอลัมน์ (cache สั้น ๆ เพราะเปลี่ยนเฉพาะตอนกด เตรียมฐานข้อมูล) ──
+// ── รายชื่อคอลัมน์ (cache ต่อเครื่อง) ──
+// เปลี่ยนเฉพาะตอนสร้างตาราง / เพิ่มคอลัมน์ → ทุกครั้งที่เปลี่ยนจะเขียน _meta "schema_ver" ใหม่
+// เครื่องอื่นอ่าน _meta ทุก ~3 วินาทีอยู่แล้ว (d1-state) เห็นค่าเปลี่ยน → ล้าง cache ทันที · จึงเก็บ cache ได้นาน (20/11/2026: 30 วินาที → 10 นาที)
 const colCache = new Map<string, { at: number; cols: string[] }>();
+const COL_TTL = 10 * 60_000;
+export const SCHEMA_VER_KEY = "schema_ver";
+export const clearColCache = () => colCache.clear();
+async function bumpSchemaVer(db: D1Like) { try { await db.prepare("INSERT INTO _meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(SCHEMA_VER_KEY, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`).run(); } catch { /* ยังไม่มี _meta */ } colCache.clear(); }
 export async function headersOf(db: D1Like, tab: string): Promise<string[]> {
   const hit = colCache.get(tab);
-  if (hit && Date.now() - hit.at < 30_000) return hit.cols;
+  if (hit && Date.now() - hit.at < COL_TTL) return hit.cols;
   const r = await db.prepare(`PRAGMA table_info(${tabName(tab)})`).all<{ name: string; cid: number }>();
   const cols = r.results.sort((a, b) => a.cid - b.cid).map((c) => c.name).filter((n) => n !== "_id");
   if (cols.length) colCache.set(tab, { at: Date.now(), cols });
@@ -297,6 +303,7 @@ async function addMissingColumns(db: D1Like, tab: string, wanted: string[], repo
   if (!add.length) return;
   await runChunked(db, add.map((h) => db.prepare(`ALTER TABLE ${tabName(tab)} ADD COLUMN ${q(h)} TEXT NOT NULL DEFAULT ''`)));
   colCache.delete(tab);
+  await bumpSchemaVer(db);
   if (report) report.addedColumns[tab] = add;
 }
 
@@ -310,6 +317,7 @@ export async function ensureSchema(db: D1Like, defs: TableDef[]): Promise<Schema
     const cols = [...new Set(d.headers.filter(Boolean))];
     return db.prepare(`CREATE TABLE ${tabName(d.name)} (_id INTEGER PRIMARY KEY AUTOINCREMENT${cols.map((c) => `, ${q(c)} TEXT NOT NULL DEFAULT ''`).join("")})`);
   }));
+  if (missing.length) await bumpSchemaVer(db);
   report.createdTables = missing.map((d) => d.name);
   for (const d of defs) if (!missing.includes(d)) await addMissingColumns(db, d.name, d.headers, report);
   colCache.clear();

@@ -12,6 +12,7 @@ echo "== seller-leads"; npx tsx tests/sellerleads.test.ts
 echo "== seller-leads-service"; npx tsx tests/sellerleads-service.test.mts
 echo "== lead-import (นำเข้า Lead จาก CSV)"; npx tsx tests/lead-import.test.mts
 echo "== notify (การแจ้งเตือน)"; npx tsx tests/notify.test.mts
+echo "== d1-cache (ความเร็ว D1)"; npx tsx tests/d1-cache.test.mts
 echo "== callstatus-kpi"; npx tsx tests/callstatus-kpi.test.ts
 echo "== insights";    npx tsx tests/insights.test.ts
 echo "== developers";  npx tsx tests/developers.test.ts
