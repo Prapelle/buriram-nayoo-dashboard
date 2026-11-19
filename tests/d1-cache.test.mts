@@ -66,5 +66,11 @@ await t("ensureColumns / ensureSchema ที่เพิ่มคอลัมน
   await D.ensureColumns(raw as never, "CONTENT_CARDS", ["card_id"]); assert.equal((await D.metaGetAll(raw as never)).schema_ver, v1);
   await D.ensureColumns(raw as never, "CONTENT_CARDS", ["zz_two"]); assert.notEqual((await D.metaGetAll(raw as never)).schema_ver, v1);
 });
+await t("existingTabs: ตารางบน D1 ตรวจจาก D1 (ไม่ถาม Google) · ไม่มีตาราง = ไม่อยู่ในผล", async () => {
+  const { proxy: p4, log: l4 } = counting(raw); D.setD1ForTest(p4 as never); ST.invalidateD1State();
+  const ex = await S.existingTabs(["CONTENT_CARDS", "NOTIFICATIONS"]);
+  assert.ok(ex.has("CONTENT_CARDS") && ex.has("NOTIFICATIONS"));
+  assert.ok(l4.length <= 3, l4.join("\n"));
+});
 D.setD1ForTest(null); ST.invalidateD1State();
 console.log("ผ่านทั้งหมด (cache D1)");

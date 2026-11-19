@@ -13,7 +13,7 @@ import {
   addDays, AUTO_PAYMENT, AUTO_STATUS, bkkDay, isClose, KIND_LABEL, kindOf, type DevKind, autoChanges, CONTACT_COLUMNS, CONTACT_METHODS, NEXT_CONTACT_DAYS, DEFAULT_PRODUCTS, DEV_COLUMNS, DEV_DEFAULT, DEV_EDITABLE, DEV_STATUS, findDevDuplicates, IMPORT_HEADERS, LOG_COLUMNS, nextDevCode, normLine, normName, normPhone,
   PRODUCT_COLUMNS, productDrivenStatus, productState, todayBkk, validateDev, validateProduct, type Dev, type DevDup, type DevProduct,
 } from "./developers";
-import { appendRows, atomicWrite, deleteWhere, listTabs, readTabs, toRow, updateById } from "./sheets";
+import { appendRows, atomicWrite, deleteWhere, existingTabs, readTabs, toRow, updateById } from "./sheets";
 import { casWrite, dedupeCode } from "./row-guard";
 
 export class DevError extends Error {
@@ -27,7 +27,7 @@ const CONFIG_KEY = "developer_products";
 async function load(): Promise<Record<string, Tab>> {
   let t: Record<string, Tab>;
   try {
-    const have = new Set((await listTabs()).map((m) => m.title));
+    const have = await existingTabs([CONTACTS]); // ไม่ถาม Google เมื่อแท็บอยู่บน D1 (20/11/2026)
     t = await readTabs(have.has(CONTACTS) ? [...TABS, CONTACTS] : TABS);
     if (!t[CONTACTS]) t[CONTACTS] = { headers: [], rows: [] };
   } catch { throw new DevError(409, "ยังไม่มีแท็บ Developer — ให้ Admin กด ตั้งค่า → ตั้งค่าระบบ → เตรียม Google Sheet", "SHEET_NOT_READY"); }

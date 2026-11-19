@@ -174,6 +174,11 @@ export async function getRanges(db: D1Like, ranges: string[]): Promise<string[][
   return out;
 }
 
+/** รายชื่อคอลัมน์ของหลายตาราง (ตารางที่ไม่มี = []) — ที่ยังไม่อยู่ใน cache อ่านในรอบเดียว */
+export async function headersMany(db: D1Like, tabs: string[]): Promise<string[][]> {
+  await loadHeaders(db, tabs);
+  return Promise.all(tabs.map((t) => headersOf(db, t)));
+}
 /** อ่านรายชื่อคอลัมน์ของหลายตารางที่ยังไม่อยู่ใน cache ในรอบเดียว */
 async function loadHeaders(db: D1Like, tabs: string[]) {
   const miss = tabs.filter((t) => { const h = colCache.get(t); return !(h && Date.now() - h.at < COL_TTL); });

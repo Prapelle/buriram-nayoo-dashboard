@@ -40,6 +40,18 @@ export async function listTabs(): Promise<G.TabMeta[]> {
   return out;
 }
 
+/**
+ * แท็บไหนมีอยู่บ้าง (20/11/2026) — แท็บที่อยู่บน D1 ตรวจจากรายชื่อคอลัมน์ใน cache (ไม่ต้องถาม Google)
+ * ถาม Google Sheets เฉพาะแท็บที่ยังอยู่บน Sheets (เดิม listTabs() ถาม Google ทุกครั้ง ~0.5–3 วินาที)
+ */
+export async function existingTabs(names: string[]): Promise<Set<string>> {
+  const { db, tabs } = await route();
+  const out = new Set<string>(), onD1 = names.filter((n) => tabs.has(n)), rest = names.filter((n) => !tabs.has(n));
+  if (onD1.length) { const hs = await D.headersMany(db!, onD1); onD1.forEach((n, i) => { if (hs[i].length) out.add(n); }); }
+  if (rest.length) { const g = new Set((await G.listTabs()).map((m) => m.title)); for (const n of rest) if (g.has(n)) out.add(n); }
+  return out;
+}
+
 export const addTabs = G.addTabs;
 export const expandColumns = G.expandColumns;
 
