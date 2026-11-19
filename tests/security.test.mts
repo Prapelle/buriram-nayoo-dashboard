@@ -99,7 +99,7 @@ for (const h of ["/lead-report", "/settings"]) assert.ok(sd.includes(h) && sw.in
 assert.ok(sd.includes("/settings/targets") && !sw.includes("/settings/targets"));
 for (const x of NAV.flatMap((n) => [n, ...(n.children ?? [])])) assert.ok(x.system === "shared" || x.href.startsWith("/" + x.system) || x.href.startsWith("/settings/"), `${x.href}: path ต้องขึ้นต้นด้วยระบบของเมนู`);
 ok(`แยกระบบด้วย path: /dashboard · /work · หน้าเลือกระบบ "/" ทุก Role เข้าได้ · เมนูแต่ละระบบไม่ปนกัน · รายงาน Lead / ตั้งค่า อยู่ทั้งสองระบบ`); ok(`หน้าจอ ${pageFiles.length} หน้า ตรวจ Role ฝั่ง Server (requirePage) · สิทธิ์ AE / Marketing / Admin / Super Admin ตรงตามที่กำหนด · "sales" เดิม = AE`);
-const authSrc = read("src/auth.ts"); assert.ok(/providers:\s*\[Google\]/.test(authSrc) && authSrc.includes("resolveRole(profile.email)") && authSrc.includes("email_verified")); assert.ok(!files.some((f) => /(register|signup|sign-up)/i.test(norm(f))));
+const authSrc = read("src/auth.ts"); assert.ok(/maxAge:\s*30 \* 24 \* 60 \* 60/.test(authSrc) && /RECHECK_MS = 5 \* 60_000/.test(authSrc) && authSrc.includes("Date.now() - Number(token.roleCheckedAt ?? 0) > RECHECK_MS"), "ล็อกอินอยู่ 30 วัน แต่ยังตรวจสิทธิ์ซ้ำทุก 5 นาที"); assert.ok(/providers:\s*\[Google\]/.test(authSrc) && authSrc.includes("resolveRole(profile.email)") && authSrc.includes("email_verified")); assert.ok(!files.some((f) => /(register|signup|sign-up)/i.test(norm(f))));
 ok("ปิด Public Signup: ผู้ให้บริการเดียวคือ Google, อนุญาตเฉพาะอีเมลที่อยู่ใน APP_USERS (หรือ INITIAL_ADMIN_EMAIL) และต้องยืนยันอีเมลแล้ว, ไม่มีหน้า/เส้นทางสมัครสมาชิก");
 
 console.log("3) ความลับต้องไม่ไปถึง Browser");

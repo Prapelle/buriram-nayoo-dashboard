@@ -130,6 +130,14 @@ try {
     for (const as of [OBS, MKT, PRD]) assert.equal(await priceOf(as), "", `ราคาต้องว่างสำหรับ ${as}`);
   }
   r = await call("/dashboard/import", { as: OBS }); assert.ok(r.html.includes("ดูประวัติการนำเข้าได้อย่างเดียว"));
+  { // ล็อกอินครั้งเดียวอยู่ได้ 30 วัน (19/11/2026): หมดอายุ ~30 วันนับจากใช้งานล่าสุด · cookie อายุ 30 วัน
+    const rs = await fetch(BASE + "/api/auth/session", { headers: { cookie: await cookieFor(SALES) } });
+    const js = await rs.json(); const days = (new Date(js.expires).getTime() - Date.now()) / 864e5;
+    assert.ok(days > 29.9 && days <= 30.01, `session ต้องหมดอายุใน 30 วัน (ได้ ${days.toFixed(2)} วัน)`); assert.equal(js.user.role, "ae");
+    const sc = (rs.headers.getSetCookie?.() ?? []).find((c) => c.startsWith("authjs.session-token=")); // ต่ออายุ cookie เมื่อใช้งาน
+    if (sc) { const exp = /Expires=([^;]+)/i.exec(sc)?.[1]; const d = exp ? (new Date(exp).getTime() - Date.now()) / 864e5 : NaN; assert.ok(d > 29.9 && d <= 30.01, sc.replace(/=[^;]{20,}/, "=…")); }
+    ok("Login", "ล็อกอินครั้งเดียวอยู่ได้ 30 วัน (ต่ออายุเมื่อใช้งาน) · ยังตรวจสิทธิ์จาก APP_USERS ทุก 5 นาที");
+  }
   ok("Login", "Observer: ดูทุกหน้า (ยกเว้นตั้งค่าระบบ / ตั้งเป้ารายคน / ส่งออก / การเงิน) · API อ่านได้ · เพิ่ม/แก้/นำเข้า ทุกอย่าง 403");
   for (const p of ["/dashboard", "/dashboard/import", "/dashboard/export", "/work/leads", "/account/revenue", "/account/revenue/import", "/settings/targets"]) { r = await call(p, { as: IMP }); assert.equal(r.status, 200, `${p} as IMP`); }
   ok("Login", "ทุก Role เปิดดูได้ทุกหน้า (11/11/2026) · ตั้งค่าระบบ / ตั้งเป้ารายคน = Super Admin · ส่งออก = Admin ขึ้นไป · หน้าการเงิน = Super Admin, Admin, AE · Admin เข้านำเข้า / ส่งออก / Revenue ได้");

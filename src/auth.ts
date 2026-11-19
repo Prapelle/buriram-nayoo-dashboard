@@ -18,7 +18,9 @@ const RECHECK_MS = 5 * 60_000;
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [Google], // อ่าน AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET จาก env
-  session: { strategy: "jwt", maxAge: 8 * 60 * 60 },
+  // ล็อกอินครั้งเดียวอยู่ได้ 30 วัน (19/11/2026) · ต่ออายุให้เองวันละครั้งเมื่อใช้งาน → ไม่ได้เปิดเกิน 30 วันจึงต้องล็อกอินใหม่
+  // ความปลอดภัย: ยังตรวจสิทธิ์จาก APP_USERS ทุก 5 นาที (RECHECK_MS) — ปิดผู้ใช้ / เปลี่ยน Role มีผลภายใน 5 นาทีแม้ session ยังไม่หมดอายุ
+  session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60, updateAge: 24 * 60 * 60 },
   pages: { signIn: "/login", error: "/login" },
   trustHost: true,
   callbacks: {
