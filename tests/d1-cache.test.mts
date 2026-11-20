@@ -72,5 +72,30 @@ await t("existingTabs: ตารางบน D1 ตรวจจาก D1 (ไม
   assert.ok(ex.has("CONTENT_CARDS") && ex.has("NOTIFICATIONS"));
   assert.ok(l4.length <= 3, l4.join("\n"));
 });
+await t("ตารางใหญ่ที่เปลี่ยนเฉพาะตอนนำเข้า (FB_PAGE_POSTS): อ่านซ้ำไม่ยิง D1 · เขียนในเครื่องนี้ → อ่านใหม่ทันที · เครื่องอื่นเขียน → อ่านใหม่หลังรอบ _meta", async () => {
+  await D.ensureSchema(raw as never, [{ name: "FB_PAGE_POSTS", headers: ["post_id", "reach"] }]);
+  await D.ensureSchema(raw as never, [{ name: "LEADS", headers: ["lead_id"] }]);
+  await D.metaSet(raw as never, "active_groups", JSON.stringify(["fbposts", "leads"])); // ตารางสองกลุ่มนี้อยู่บน D1
+  const { proxy: p5, log: l5 } = counting(raw); D.setD1ForTest(p5 as never); ST.invalidateD1State();
+  await S.appendRows("FB_PAGE_POSTS", [["p1", "10"]]);
+  const sel = () => l5.filter((x) => /SELECT "post_id"|SELECT "reach"|FROM "FB_PAGE_POSTS"/.test(x) && !/COUNT/.test(x)).length + l5.filter((x) => x.startsWith("batch")).length * 0;
+  const r1 = await S.readTab("FB_PAGE_POSTS"); assert.equal(r1.rows.length, 1);
+  const n1 = sel();
+  const r2 = await S.readTab("FB_PAGE_POSTS"); assert.equal(r2.rows.length, 1); assert.equal(sel(), n1, "อ่านซ้ำใช้ cache");
+  await S.appendRows("FB_PAGE_POSTS", [["p2", "20"]]); // เขียนในเครื่องนี้
+  assert.equal((await S.readTab("FB_PAGE_POSTS")).rows.length, 2, "เขียนแล้วเห็นทันที");
+  const ver = (await D.metaGetAll(raw as never))["dv:FB_PAGE_POSTS"]; assert.ok(ver, "เขียนแล้วเปลี่ยนเลขเวอร์ชัน");
+  // เครื่องอื่นเขียนตรง (ไม่ผ่าน cache เครื่องนี้) + เปลี่ยนเลขเวอร์ชัน
+  await raw.prepare(`INSERT INTO "FB_PAGE_POSTS" ("post_id","reach") VALUES ('p3','30')`).run();
+  assert.equal((await S.readTab("FB_PAGE_POSTS")).rows.length, 2, "ก่อนเลขเวอร์ชันเปลี่ยน: ยังใช้ cache");
+  await raw.prepare(`INSERT INTO _meta (key, value) VALUES ('dv:FB_PAGE_POSTS', 'other') ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run();
+  ST.invalidateD1State();
+  assert.equal((await S.readTab("FB_PAGE_POSTS")).rows.length, 3, "เลขเวอร์ชันเปลี่ยน → อ่านใหม่");
+  // ตารางทั่วไป (LEADS) ไม่ cache: เขียนตรงแล้วเห็นทันที
+  await raw.prepare(`INSERT INTO "LEADS" ("lead_id") VALUES ('a')`).run();
+  assert.equal((await S.readTab("LEADS")).rows.length, 1);
+  await raw.prepare(`INSERT INTO "LEADS" ("lead_id") VALUES ('b')`).run();
+  assert.equal((await S.readTab("LEADS")).rows.length, 2, "ตารางทั่วไปอ่านสดเสมอ");
+});
 D.setD1ForTest(null); ST.invalidateD1State();
 console.log("ผ่านทั้งหมด (cache D1)");

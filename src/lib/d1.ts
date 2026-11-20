@@ -119,13 +119,13 @@ export async function getRange(db: D1Like, range: string): Promise<string[][]> {
  * — Dashboard อ่านเป็นร้อย range ต่อคำขอ ถ้าแยกคำสั่งทีละคอลัมน์ ตารางใหญ่จะถูกสแกนซ้ำร้อยรอบ (ช้าและเสียโควตาอ่านแถว)
  * ผลลัพธ์ตรงตัวกับ getRange ทีละอัน · range แบบอื่น (แถวเดียว/ช่วงแถว) ยังอ่านแยกตามเดิม
  */
-export async function getRanges(db: D1Like, ranges: string[]): Promise<string[][][]> {
+export async function getRanges(db: D1Like, ranges: string[], meta?: Record<string, string>): Promise<string[][][]> {
   // ความเร็ว (20/11/2026): D1 อยู่ไกลจากเครื่องที่รัน (~100 ms ต่อรอบ) และทำคำสั่งทีละคำสั่งต่อฐานข้อมูล
   // → รวมทุกคำสั่งอ่านของคำขอนี้เป็น batch เดียว (1 รอบ) แทนการยิงพร้อมกันหลายคำสั่ง (ซึ่ง D1 ต่อคิวทำทีละคำสั่งอยู่ดี)
   const out: string[][][] = new Array(ranges.length);
   const parsed = ranges.map(parseRange);
   await loadHeaders(db, [...new Set(parsed.map((g) => g.tab))]);
-  type Job = { sql: string; binds: unknown[]; take: (rows: Record<string, unknown>[]) => void };
+  type Job = { tab: string; sql: string; binds: unknown[]; take: (rows: Record<string, unknown>[]) => void };
   const jobs: Job[] = [];
   // ทั้งคอลัมน์ / ทั้งแท็บ ของตารางเดียวกัน → อ่านครั้งเดียว
   const groups = new Map<string, number[]>();
@@ -145,7 +145,7 @@ export async function getRanges(db: D1Like, ranges: string[]): Promise<string[][
         out[i] = res;
       }
     };
-    if (cols.length) jobs.push({ sql: `SELECT ${cols.map((c) => q(hdr[c])).join(",")} FROM ${tabName(tab)} ORDER BY _id`, binds: [], take: fill });
+    if (cols.length) jobs.push({ tab, sql: `SELECT ${cols.map((c) => q(hdr[c])).join(",")} FROM ${tabName(tab)} ORDER BY _id`, binds: [], take: fill });
     else fill([]);
   }
   // range แบบอื่น (แถวเดียว / ช่วงแถว) — ผลเหมือน getRange ทีละอัน
@@ -158,9 +158,14 @@ export async function getRanges(db: D1Like, ranges: string[]): Promise<string[][
     const lo = Math.max(g.r1, 2);
     if (g.r2 >= lo && names.length) {
       const limit = g.r2 === Infinity ? -1 : g.r2 - lo + 1;
-      jobs.push({ sql: `SELECT ${names.map(q).join(",")} FROM ${tabName(g.tab)} ORDER BY _id LIMIT ? OFFSET ?`, binds: [limit, lo - 2], take: (rows) => { out[i] = [...head, ...rows.map((r) => names.map((n) => str(r[n])))]; } });
+      jobs.push({ tab: g.tab, sql: `SELECT ${names.map(q).join(",")} FROM ${tabName(g.tab)} ORDER BY _id LIMIT ? OFFSET ?`, binds: [limit, lo - 2], take: (rows) => { out[i] = [...head, ...rows.map((r) => names.map((n) => str(r[n])))]; } });
     } else out[i] = head;
   }
+  // ตารางใหญ่ที่ไม่เปลี่ยน: ใช้ผลเดิมจาก cache · ที่เหลืออ่านใน batch เดียว
+  const keyOf = (j0: Job) => `${j0.sql}|${JSON.stringify(j0.binds)}`;
+  const live = jobs.filter((j0) => { const c = cacheGet(j0.tab, keyOf(j0), meta); if (c) { j0.take(c); return false; } return true; });
+  for (const j0 of live) { const take = j0.take; j0.take = (rows) => { cachePut(j0.tab, keyOf(j0), meta, rows); take(rows); }; }
+  jobs.length = 0; jobs.push(...live);
   if (jobs.length === 1) { const j0 = jobs[0]; j0.take((await db.prepare(j0.sql).bind(...j0.binds).all<Record<string, unknown>>()).results); }
   else if (jobs.length) {
     for (let k = 0; k < jobs.length; k += CHUNK) {
@@ -208,7 +213,7 @@ async function runChunked(db: D1Like, stmts: D1Stmt[]) {
 }
 
 /** เพิ่มแถวต่อท้าย คืนค่า range ที่เขียนรูปแบบเดียวกับ Sheets เช่น 'TAB'!A5:T7 (ใช้หาเลขแถว) */
-export async function appendRows(db: D1Like, tab: string, rows: (string | number)[][]): Promise<string> {
+async function appendRows_(db: D1Like, tab: string, rows: (string | number)[][]): Promise<string> {
   if (!rows.length) return "";
   const hdr = await mustHeaders(db, tab);
   const sql = `INSERT INTO ${tabName(tab)} (${hdr.map(q).join(",")}) VALUES (${hdr.map(() => "?").join(",")})`;
@@ -220,7 +225,7 @@ export async function appendRows(db: D1Like, tab: string, rows: (string | number
 }
 
 /** เขียนทับตาม range (แถวข้อมูลเท่านั้น) — ต้องมีแถวนั้นอยู่แล้ว */
-export async function updateRanges(db: D1Like, data: { range: string; values: (string | number)[][] }[]) {
+async function updateRanges_(db: D1Like, data: { range: string; values: (string | number)[][] }[]) {
   const stmts: D1Stmt[] = [];
   for (const d of data) {
     const g = parseRange(d.range);
@@ -247,7 +252,7 @@ export type AtomicOp =
   | { deleteWhere: string; col: string; value: string }
   | { update: string; idCol: string; id: string; values: (string | number)[] };
 
-export async function casUpdate(db: D1Like, tab: string, idCol: string, id: string, expectUpdatedAt: string, values: (string | number)[]): Promise<boolean> {
+async function casUpdate_(db: D1Like, tab: string, idCol: string, id: string, expectUpdatedAt: string, values: (string | number)[]): Promise<boolean> {
   const hdr = await mustHeaders(db, tab);
   if (!hdr.includes(idCol) || !hdr.includes("updated_at")) throw new Error(`ตาราง ${tab} ไม่มีคอลัมน์ ${idCol} / updated_at`);
   const r = await db.prepare(`UPDATE ${tabName(tab)} SET ${hdr.map((h) => `${q(h)}=?`).join(",")} WHERE ${q(idCol)}=? AND "updated_at"=?`)
@@ -256,14 +261,14 @@ export async function casUpdate(db: D1Like, tab: string, idCol: string, id: stri
 }
 
 /** แก้ทั้งแถวตาม id (ไม่ตรวจ updated_at) — คืนจำนวนแถวที่แก้ (0 = ไม่พบ) · ไม่พึ่งเลขแถว จึงไม่ชนกับการลบ/เพิ่มของคนอื่น (10/11/2026) */
-export async function updateById(db: D1Like, tab: string, idCol: string, id: string, values: (string | number)[]): Promise<number> {
+async function updateById_(db: D1Like, tab: string, idCol: string, id: string, values: (string | number)[]): Promise<number> {
   const hdr = await mustHeaders(db, tab);
   if (!hdr.includes(idCol)) throw new Error(`ตาราง ${tab} ไม่มีคอลัมน์ ${idCol}`);
   const r = await db.prepare(`UPDATE ${tabName(tab)} SET ${hdr.map((h) => `${q(h)}=?`).join(",")} WHERE ${q(idCol)}=?`).bind(...hdr.map((_, i) => str(values[i])), id).run();
   return Number(r.meta.changes);
 }
 /** แก้บางช่องของแถวตาม id — คืนจำนวนแถวที่แก้ */
-export async function patchById(db: D1Like, tab: string, idCol: string, id: string, patch: Record<string, string | number>): Promise<number> {
+async function patchById_(db: D1Like, tab: string, idCol: string, id: string, patch: Record<string, string | number>): Promise<number> {
   const hdr = await mustHeaders(db, tab), cols = Object.keys(patch);
   if (!cols.length) return 0;
   for (const c of [idCol, ...cols]) if (!hdr.includes(c)) throw new Error(`ตาราง ${tab} ไม่มีคอลัมน์ ${c}`);
@@ -280,7 +285,7 @@ export async function selectWhere(db: D1Like, tab: string, where: Record<string,
   return r.results.map((x) => Object.fromEntries(hdr.map((h) => [h, str(x[h])])));
 }
 /** แก้บางช่องของทุกแถวที่ตรงเงื่อนไข (คอลัมน์ = ค่า ทุกคู่ · emptyCol = ช่องที่ต้องว่าง) — คืนจำนวนแถวที่แก้ */
-export async function patchWhere(db: D1Like, tab: string, where: Record<string, string>, patch: Record<string, string>, emptyCol?: string): Promise<number> {
+async function patchWhere_(db: D1Like, tab: string, where: Record<string, string>, patch: Record<string, string>, emptyCol?: string): Promise<number> {
   const hdr = await mustHeaders(db, tab), wc = Object.keys(where), pc = Object.keys(patch);
   if (!pc.length || !wc.length) return 0;
   for (const c of [...wc, ...pc, ...(emptyCol ? [emptyCol] : [])]) if (!hdr.includes(c)) throw new Error(`ตาราง ${tab} ไม่มีคอลัมน์ ${c}`);
@@ -289,14 +294,14 @@ export async function patchWhere(db: D1Like, tab: string, where: Record<string, 
   return Number(r.meta.changes);
 }
 /** ลบแถวที่ค่าในคอลัมน์ col น้อยกว่า value (เทียบข้อความ — ใช้กับวันที่ ISO) — คืนจำนวนแถวที่ลบ */
-export async function deleteBefore(db: D1Like, tab: string, col: string, value: string): Promise<number> {
+async function deleteBefore_(db: D1Like, tab: string, col: string, value: string): Promise<number> {
   const hdr = await mustHeaders(db, tab);
   if (!hdr.includes(col)) throw new Error(`ตาราง ${tab} ไม่มีคอลัมน์ ${col}`);
   const r = await db.prepare(`DELETE FROM ${tabName(tab)} WHERE ${q(col)}<? AND ${q(col)}<>''`).bind(value).run();
   return Number(r.meta.changes);
 }
 /** ลบทุกแถวที่คอลัมน์ col = value — คืนจำนวนแถวที่ลบ */
-export async function deleteWhere(db: D1Like, tab: string, col: string, value: string): Promise<number> {
+async function deleteWhere_(db: D1Like, tab: string, col: string, value: string): Promise<number> {
   const hdr = await mustHeaders(db, tab);
   if (!hdr.includes(col)) throw new Error(`ตาราง ${tab} ไม่มีคอลัมน์ ${col}`);
   const r = await db.prepare(`DELETE FROM ${tabName(tab)} WHERE ${q(col)}=?`).bind(value).run();
@@ -325,14 +330,14 @@ export async function atomicStmts(db: D1Like, ops: AtomicOp[]): Promise<D1Stmt[]
 }
 
 /** ทรานแซกชันเดียว (D1 batch) — ถ้าเกินขนาดชุดเดียวจะแบ่งชุด (ไม่ใช่ทรานแซกชันเดียวแล้ว ใช้กับงานเล็กเท่านั้น) */
-export async function atomic(db: D1Like, ops: AtomicOp[]) {
+async function atomic_(db: D1Like, ops: AtomicOp[]) {
   const stmts = await atomicStmts(db, ops);
   if (!stmts.length) return;
   if (stmts.length > 500) await runChunked(db, stmts); else await db.batch(stmts);
 }
 
 /** ลบแถวตามเลขแถวแบบชีต (แถวถัดไปเลื่อนขึ้น) ห้ามลบแถว header */
-export async function deleteRowAt(db: D1Like, tab: string, rowNumber: number) {
+async function deleteRowAt_(db: D1Like, tab: string, rowNumber: number) {
   if (rowNumber < 2) throw new Error("ไม่สามารถลบแถว header");
   const [id] = await idsAt(db, tab, rowNumber, 1);
   if (id === undefined) return;
@@ -351,7 +356,7 @@ export async function countRows(db: D1Like, tab: string): Promise<number> {
 }
 
 /** ล้างตารางแล้วใส่ข้อมูลใหม่ตามลำดับเดิม (ใช้ตอนย้ายจาก Sheets เท่านั้น — ตารางต้องมีคอลัมน์ครบก่อน) */
-export async function replaceAll(db: D1Like, tab: string, headers: string[], rows: string[][], onProgress?: () => Promise<void>) {
+async function replaceAll_(db: D1Like, tab: string, headers: string[], rows: string[][], onProgress?: () => Promise<void>) {
   const sql = headers.length ? `INSERT INTO ${tabName(tab)} (${headers.map(q).join(",")}) VALUES (${headers.map(() => "?").join(",")})` : "";
   await db.prepare(`DELETE FROM ${tabName(tab)}`).run();
   if (!sql) return;
@@ -411,3 +416,49 @@ export async function metaSet(db: D1Like, key: string, value: string) {
   await db.prepare("INSERT INTO _meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(key, value).run();
 }
 export async function metaDelete(db: D1Like, key: string) { await db.prepare("DELETE FROM _meta WHERE key = ?").bind(key).run(); }
+
+// ── cache ข้อมูลตารางใหญ่ที่เปลี่ยนเฉพาะตอนนำเข้า (20/11/2026) ──
+// ตาราง Marketing / Facebook posts ฯลฯ มีหลายพัน–หมื่นแถว อ่านทุกครั้งที่เปิด Dashboard (~1–6 วินาที)
+// → เก็บผลอ่านไว้ในเครื่อง ผูกกับเลขเวอร์ชันใน _meta "dv:<ตาราง>" · ทุกการเขียนตารางเหล่านี้ (ผ่านไฟล์นี้) เปลี่ยนเลขเวอร์ชัน
+//   เครื่องอื่นเห็นเลขใหม่ภายในรอบอ่าน _meta ถัดไป (~3 วินาที) แล้วอ่านใหม่ · เครื่องที่เขียนล้าง cache ของตัวเองทันที
+const cachedTabs = new Set<string>();
+export function setCachedTabs(tabs: string[]) { cachedTabs.clear(); for (const t of tabs) cachedTabs.add(t); }
+export const dvKey = (tab: string) => `dv:${tab}`;
+const dataCache = new Map<string, { tab: string; ver: string; rows: Record<string, unknown>[] }>();
+const MAX_CACHE = 300;
+export const clearDataCache = () => dataCache.clear();
+async function touched(db: D1Like, tabs: string[]) {
+  const hit = [...new Set(tabs)].filter((t) => cachedTabs.has(t));
+  if (!hit.length) return;
+  for (const [k, v] of dataCache) if (hit.includes(v.tab)) dataCache.delete(k);
+  const ver = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  try { await db.batch(hit.map((t) => db.prepare("INSERT INTO _meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(dvKey(t), ver))); } catch { /* ไม่มี _meta */ }
+}
+const withTouch = <A extends unknown[], R>(fn: (db: D1Like, tab: string, ...a: A) => Promise<R>) =>
+  async (db: D1Like, tab: string, ...a: A): Promise<R> => { try { return await fn(db, tab, ...a); } finally { await touched(db, [tab]); } };
+export const appendRows = withTouch(appendRows_);
+export const casUpdate = withTouch(casUpdate_);
+export const updateById = withTouch(updateById_);
+export const patchById = withTouch(patchById_);
+export const patchWhere = withTouch(patchWhere_);
+export const deleteBefore = withTouch(deleteBefore_);
+export const deleteWhere = withTouch(deleteWhere_);
+export const deleteRowAt = withTouch(deleteRowAt_);
+export const replaceAll = withTouch(replaceAll_);
+export async function updateRanges(db: D1Like, data: { range: string; values: (string | number)[][] }[]) {
+  try { return await updateRanges_(db, data); } finally { await touched(db, data.map((d) => parseRange(d.range).tab)); }
+}
+export async function atomic(db: D1Like, ops: AtomicOp[]) {
+  try { return await atomic_(db, ops); } finally { await touched(db, ops.map((op) => ("insert" in op ? op.insert : "deleteWhere" in op ? op.deleteWhere : op.update))); }
+}
+/** อ่านจาก cache ถ้าเวอร์ชันตรง (ใช้ใน getRanges) */
+function cacheGet(tab: string, key: string, meta?: Record<string, string>) {
+  if (!meta || !cachedTabs.has(tab)) return null;
+  const e = dataCache.get(key);
+  return e && e.ver === (meta[dvKey(tab)] ?? "0") ? e.rows : null;
+}
+function cachePut(tab: string, key: string, meta: Record<string, string> | undefined, rows: Record<string, unknown>[]) {
+  if (!meta || !cachedTabs.has(tab)) return;
+  if (dataCache.size >= MAX_CACHE) dataCache.delete(dataCache.keys().next().value!);
+  dataCache.set(key, { tab, ver: meta[dvKey(tab)] ?? "0", rows });
+}

@@ -7,7 +7,7 @@ import * as G from "./sheets-google";
 import * as D from "./d1";
 import { assertWritable, d1Routing } from "./d1-state";
 import { NATIVE_DEFS } from "./content";
-import { d1SheetId, d1TabOfSheetId } from "./d1-groups";
+import { d1SheetId, d1TabOfSheetId, GROUP_TABS } from "./d1-groups";
 
 export type { TabMeta } from "./sheets-google";
 export { colLetter, toRow, firstRowOf } from "./sheets-google";
@@ -15,6 +15,8 @@ import { colLetter } from "./sheets-google";
 
 const tabOf = (range: string) => (/^'((?:[^']|'')+)'/.exec(range)?.[1] ?? "").replace(/''/g, "'");
 
+// ตารางใหญ่ที่เปลี่ยนเฉพาะตอนนำเข้า → เก็บผลอ่านไว้ในเครื่อง (ดู d1.ts setCachedTabs) (20/11/2026)
+D.setCachedTabs([...GROUP_TABS.marketing, ...GROUP_TABS.fbposts, "SALES_TRANSACTIONS"]);
 const ensured = new WeakSet<object>();
 // ลายนิ้วมือของโครงสร้างตารางที่เกิดบน D1 — ตรงกับค่าใน _meta = สร้างครบแล้ว ไม่ต้องตรวจซ้ำ (20/11/2026)
 // เดิมทุกเครื่องที่เพิ่งเริ่ม (cold start) ตรวจทุกตาราง ~20 คำสั่ง ก่อนตอบคำขอแรก → ตอนนี้ 0 คำสั่งเมื่อโครงสร้างไม่เปลี่ยน
@@ -64,12 +66,12 @@ export async function deleteRow(sheetId: number, rowNumber: number) {
 }
 
 export async function batchGet(ranges: string[]): Promise<string[][][]> {
-  const { db, tabs } = await route();
+  const { db, tabs, meta } = await route();
   if (!tabs.size) return G.batchGet(ranges);
   const out: string[][][] = new Array(ranges.length);
   const rest: number[] = [], mine: number[] = [];
   for (let i = 0; i < ranges.length; i++) (tabs.has(tabOf(ranges[i])) ? mine : rest).push(i);
-  if (mine.length) (await D.getRanges(db!, mine.map((i) => ranges[i]))).forEach((v, k) => { out[mine[k]] = v; });
+  if (mine.length) (await D.getRanges(db!, mine.map((i) => ranges[i]), meta)).forEach((v, k) => { out[mine[k]] = v; });
   if (rest.length) (await G.batchGet(rest.map((i) => ranges[i]))).forEach((v, k) => { out[rest[k]] = v; });
   return out;
 }
