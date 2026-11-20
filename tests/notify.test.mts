@@ -139,5 +139,17 @@ await t("งานที่ต้องทำ: Lead เลยกำหนด/ว
   assert.deepEqual(todos.map((x) => x.key), ["lead:1", "devexp:d1", "card:c1", "report:c2"]);
   assert.match(todos[0].text, /เลยมา 2 วัน$/); assert.equal(todos[0].tone, "red"); assert.match(todos[3].text, /ครบกำหนดรายงานพรุ่งนี้$/);
 });
+await t("ผู้ร่วมงาน / รับงาน เฉพาะคนทำงาน (Super Admin / Admin / AE / Production): เพิ่ม Marketing / Observer ไม่ได้ · กดรับงานไม่ได้ · คนเดิมที่อยู่ในการ์ดคงไว้ได้", async () => {
+  const MK = "mk@example.com", OB = "ob@example.com";
+  await saveUser({ email: MK, display_name: "มาร์เก็ต", role: "marketing" }, ADMIN); await saveUser({ email: OB, display_name: "ผู้สังเกต", role: "observer" }, ADMIN);
+  const b = await CS.getBoard(); assert.ok(!b.users.some((u) => u.email === MK || u.email === OB), "ตัวเลือกผู้ร่วมงานไม่มี Marketing / Observer");
+  for (const e of [MK, OB]) await assert.rejects(CS.saveCard({ title: "x", content_type: "Knowledge", members: [{ email: e, duty: "Writer", is_main: true }] }, ADMIN), (x) => (x as { status?: number }).status === 422, e);
+  await assert.rejects(CS.claimCard(cardId, "Video Creator", MK), (x) => (x as { status?: number }).status === 403);
+  // การ์ดเก่าที่มี Marketing อยู่แล้ว (ก่อนมีกติกา): แก้การ์ดได้โดยไม่ต้องเอาออก
+  const r = await CS.saveCard({ title: "การ์ดเก่า", content_type: "Knowledge", members: [{ email: AE, duty: "Writer", is_main: true }] }, ADMIN);
+  await D.appendRows(db as never, "CONTENT_MEMBERS", [["m-old", r.card_id, MK, "มาร์เก็ต", "Writer", "FALSE", new Date().toISOString()]]);
+  const c = (await CS.getBoard()).cards.find((x) => x.card_id === r.card_id)!;
+  await CS.saveCard({ title: "การ์ดเก่า แก้ชื่อ", content_type: "Knowledge", updated_at_seen: c.updated_at, members: [{ email: AE, duty: "Writer", is_main: true }, { email: MK, duty: "Writer", is_main: false }] }, ADMIN, r.card_id);
+});
 D.setD1ForTest(null); ST.invalidateD1State();
 console.log("ผ่านทั้งหมด (การแจ้งเตือน)");

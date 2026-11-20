@@ -31,6 +31,9 @@ async function load(): Promise<Record<string, Tab>> {
 }
 
 const activeUsers = (t: Record<string, Tab>) => t.APP_USERS.rows.filter((u) => u.email && isTrue(u.active) && normRole(u.role));
+/** คนทำงาน (20/11/2026): ผู้ร่วมงานในการ์ด / รับงานได้เฉพาะ Super Admin, Admin, AE, Production — ไม่รวม Marketing / Observer */
+const WORK_ROLES = ["super_admin", "admin", "ae", "production"];
+const workers = (t: Record<string, Tab>) => activeUsers(t).filter((u) => WORK_ROLES.includes(normRole(u.role) ?? ""));
 const settingOf = (t: Record<string, Tab>, product: string) => t.PRODUCT_SETTINGS.rows.find((s) => s.product === product);
 const membersOf = (t: Record<string, Tab>, cardId: string) => t.CONTENT_MEMBERS.rows.filter((m) => m.card_id === cardId).map((m) => m.email.toLowerCase());
 const userName = (t: Record<string, Tab>, email: string) => { const u = t.APP_USERS.rows.find((x) => x.email.toLowerCase() === email.toLowerCase()); return u ? nameOf(u) : email.split("@")[0]; };
@@ -53,7 +56,7 @@ export async function getBoard() {
   const products = productTypesOf(t.APP_CONFIG.rows);
   return {
     cards, stages: STAGES, today, products, waitKinds: waitKindsOf(t.APP_CONFIG.rows),
-    users: activeUsers(t).map((u) => ({ email: u.email.toLowerCase(), name: nameOf(u) })).sort((a, b) => a.name.localeCompare(b.name, "th")),
+    users: workers(t).map((u) => ({ email: u.email.toLowerCase(), name: nameOf(u) })).sort((a, b) => a.name.localeCompare(b.name, "th")), // ตัวเลือกผู้ร่วมงาน = คนทำงาน
     customers: t.DEVELOPERS.rows.filter((d) => d.developer_id).map((d) => ({ developer_id: d.developer_id, name: d.company_name || d.project_main || d.dev_code })),
     settings: products.map((p) => { const s = settingOf(t, p); return { product: p, content_count: Number(s?.content_count || 0), report_days: Number(s?.report_days || 0) }; }),
   };
@@ -64,9 +67,11 @@ export async function getHistory(cardId: string) {
   return { history: t.CONTENT_HISTORY.rows.filter((h) => h.card_id === cardId).map((h) => ({ ...h, actor_name: userName(t, h.actor) })) };
 }
 
-function checkMembers(t: Record<string, Tab>, input: { email: string }[]) {
-  const known = new Set(activeUsers(t).map((u) => u.email.toLowerCase()));
-  for (const m of input) if (!known.has(m.email)) throw new ContentError(422, `ไม่พบผู้ใช้ ${m.email} (หรือถูกปิดใช้งาน)`, "VALIDATION", { fields: { members: `ไม่พบผู้ใช้ ${m.email}` } });
+function checkMembers(t: Record<string, Tab>, input: { email: string }[], keep: string[] = []) {
+  const known = new Set(workers(t).map((u) => u.email.toLowerCase()));
+  // คนที่อยู่ในการ์ดอยู่แล้ว (ก่อนมีกติกาคนทำงาน) คงไว้ได้ ไม่บังคับเอาออก · เพิ่มใหม่ได้เฉพาะคนทำงาน
+  for (const e of keep) known.add(e.toLowerCase());
+  for (const m of input) if (!known.has(m.email)) throw new ContentError(422, `ผู้ร่วมงาน ${m.email} ต้องเป็นผู้ใช้ที่ทำงาน (Super Admin / Admin / AE / Production) และยังเปิดใช้งาน`, "VALIDATION", { fields: { members: `ไม่พบผู้ใช้ ${m.email}` } });
 }
 async function replaceMembers(t: Record<string, Tab>, cardId: string, input: { email: string; duty: string; is_main: boolean }[], now: string) {
   // ลบของเดิม + ใส่ชุดใหม่ ตาม card_id ในชุดเดียว (ไม่ใช้เลขแถว — คนอื่นแก้การ์ดอื่นพร้อมกันไม่กระทบ)
@@ -88,7 +93,7 @@ export async function saveCard(input: Record<string, unknown>, actor: string, id
   const v = validateCard(input);
   if (!v.ok) throw new ContentError(422, "ข้อมูลไม่ถูกต้อง", "VALIDATION", { fields: v.errors });
   const t = await load(), c = v.value, now = new Date().toISOString();
-  checkMembers(t, c.members); // ตรวจก่อนเขียนอะไรทั้งนั้น
+  checkMembers(t, c.members, id ? membersOf(t, id) : []); // ตรวจก่อนเขียนอะไรทั้งนั้น
   let customer_name = "", developer_id = c.developer_id;
   if (developer_id) {
     const d = t.DEVELOPERS.rows.find((x) => x.developer_id === developer_id);
@@ -178,7 +183,7 @@ export async function claimCard(id: string, dutyRaw: unknown, actor: string) {
   const t = await load(), c = t.CONTENT_CARDS.rows.find((r) => r.card_id === id);
   if (!c) throw new ContentError(404, "ไม่พบการ์ด (อาจถูกลบ)", "NOT_FOUND");
   const me = actor.toLowerCase();
-  if (!activeUsers(t).some((u) => u.email.toLowerCase() === me)) throw new ContentError(403, "ไม่พบผู้ใช้ของคุณ (หรือถูกปิดใช้งาน)", "FORBIDDEN");
+  if (!workers(t).some((u) => u.email.toLowerCase() === me)) throw new ContentError(403, "รับงานได้เฉพาะคนทำงาน (Super Admin / Admin / AE / Production)", "FORBIDDEN");
   const cur = t.CONTENT_MEMBERS.rows.filter((m) => m.card_id === id);
   const mine = cur.find((m) => m.email.toLowerCase() === me);
   if (mine && mine.duty === duty) return { ok: true, already: true };
