@@ -426,11 +426,11 @@ export function setCachedTabs(tabs: string[]) { cachedTabs.clear(); for (const t
 export const dvKey = (tab: string) => `dv:${tab}`;
 const dataCache = new Map<string, { tab: string; ver: string; rows: Record<string, unknown>[] }>();
 const MAX_CACHE = 300;
-export const clearDataCache = () => dataCache.clear();
+export const clearDataCache = () => { dataCache.clear(); cells = 0; };
 async function touched(db: D1Like, tabs: string[]) {
   const hit = [...new Set(tabs)].filter((t) => cachedTabs.has(t));
   if (!hit.length) return;
-  for (const [k, v] of dataCache) if (hit.includes(v.tab)) dataCache.delete(k);
+  for (const [k, v] of dataCache) if (hit.includes(v.tab)) { cells -= cellsOf(v.rows); dataCache.delete(k); }
   const ver = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   try { await db.batch(hit.map((t) => db.prepare("INSERT INTO _meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(dvKey(t), ver))); } catch { /* ไม่มี _meta */ }
 }
@@ -457,8 +457,15 @@ function cacheGet(tab: string, key: string, meta?: Record<string, string>) {
   const e = dataCache.get(key);
   return e && e.ver === (meta[dvKey(tab)] ?? "0") ? e.rows : null;
 }
+// จำกัดขนาด cache (จำนวนช่องข้อมูลรวม) ไม่ให้หน่วยความจำของเครื่องเต็ม — ลบรายการเก่าสุดก่อน
+const MAX_CELLS = 600_000;
+let cells = 0;
+const cellsOf = (rows: Record<string, unknown>[]) => rows.length * (rows[0] ? Object.keys(rows[0]).length : 0);
 function cachePut(tab: string, key: string, meta: Record<string, string> | undefined, rows: Record<string, unknown>[]) {
   if (!meta || !cachedTabs.has(tab)) return;
-  if (dataCache.size >= MAX_CACHE) dataCache.delete(dataCache.keys().next().value!);
-  dataCache.set(key, { tab, ver: meta[dvKey(tab)] ?? "0", rows });
+  const n = cellsOf(rows);
+  if (n > MAX_CELLS / 2) return; // ใหญ่เกินไป ไม่เก็บ
+  const old = dataCache.get(key); if (old) { cells -= cellsOf(old.rows); dataCache.delete(key); }
+  while (dataCache.size && (dataCache.size >= MAX_CACHE || cells + n > MAX_CELLS)) { const [k, v] = dataCache.entries().next().value!; cells -= cellsOf(v.rows); dataCache.delete(k); }
+  dataCache.set(key, { tab, ver: meta[dvKey(tab)] ?? "0", rows }); cells += n;
 }

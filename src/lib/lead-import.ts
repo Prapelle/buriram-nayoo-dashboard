@@ -57,6 +57,8 @@ export function importRowToInput(map: (string | undefined)[], cells: unknown[], 
   const o: Record<string, string> = {};
   map.forEach((f, j) => { if (f) o[f] = String(cells[j] ?? "").trim(); });
   for (const k of ["received_at", "next_follow_up_at"]) if (o[k]) o[k] = importDate(o[k]);
+  // เบอร์จาก Excel ที่เก็บเป็นตัวเลข เลข 0 นำหน้าหาย (812345678) → เติม 0
+  if (/^[1-9]\d{8}$/.test(o.phone ?? "")) o.phone = "0" + o.phone;
   if (!o.received_at) o.received_at = today;
   o.source_channel = o.source_channel ? channelOf(o.source_channel) : "Unknown";
   // เริ่มที่ "รอติดต่อ" เสมอ: ฝั่งซื้อ/เช่า/สร้าง = Call Status · ฝั่งขาย = Sell Status

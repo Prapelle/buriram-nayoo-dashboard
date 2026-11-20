@@ -23,7 +23,8 @@ export function downloadLeadTemplate() {
 async function readGrid(file: File): Promise<string[][]> {
   if (/\.xlsx$/i.test(file.name)) {
     const { sheet } = await readXlsx(await file.arrayBuffer(), "");
-    return sheet.rows.map((r) => r.map((c) => (c === null ? "" : typeof c === "number" && c > 30000 && c < 80000 && Number.isInteger(c) ? new Date(Date.UTC(1899, 11, 30) + c * 864e5).toISOString().slice(0, 10) : String(c))));
+    // ส่งเป็นข้อความตามเดิม — เซิร์ฟเวอร์แปลงเลขวันที่ของ Excel เฉพาะคอลัมน์วันที่ (เดิมแปลงทุกคอลัมน์ ทำให้ตัวเลขอย่างราคา 50000 กลายเป็นวันที่)
+    return sheet.rows.map((r) => r.map((c) => (c === null ? "" : String(c))));
   }
   return parseCsv(await readTextFile(file));
 }

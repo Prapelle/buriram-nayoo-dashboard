@@ -37,6 +37,12 @@ await t("ฟอร์ม CSV: หัวคอลัมน์ทุกช่อ�
   const oo = importRowToInput(om, ["ข", "0811", "ซื้อ", "Hot", "จอง"], "2026-11-12"); assert.equal(oo.call_status, "รอติดต่อ"); assert.equal(oo.buy_status, undefined);
 });
 
+await t("เบอร์จาก Excel ที่เป็นตัวเลข (0 นำหน้าหาย) → เติม 0 · เบอร์ปกติไม่เปลี่ยน", () => {
+  const map = H.map((h) => LEAD_IMPORT_HEADERS[headKey(h)]);
+  assert.equal(importRowToInput(map, row({ "ชื่อลูกค้า": "ก", "เบอร์โทร": "812345678", "ความต้องการ": "ซื้อ" }), "2026-11-12").phone, "0812345678");
+  assert.equal(importRowToInput(map, row({ "ชื่อลูกค้า": "ก", "เบอร์โทร": "044-123-456", "ความต้องการ": "ซื้อ" }), "2026-11-12").phone, "044-123-456");
+  assert.equal(importRowToInput(map, row({ "ชื่อลูกค้า": "ก", "เบอร์โทร": "0812345678", "ความต้องการ": "ซื้อ", "ช่วงราคา": "50000" }), "2026-11-12").price_range, "50000", "ตัวเลขในคอลัมน์อื่นไม่ถูกแปลงเป็นวันที่");
+});
 await initializeSpreadsheet("admin@example.com");
 await saveLead({ received_at: "2026-11-01", source_channel: "Referral", customer_name: "สมชาย เดิม", phone: "081-111-1111", need: "ซื้อ" }, "sales@example.com");
 await saveLead({ received_at: "2026-11-01", source_channel: "Referral", customer_name: "สมหญิง ขายบ้าน", phone: "0822222222", line_id: "@somying", need: "ขาย" }, "sales@example.com");
