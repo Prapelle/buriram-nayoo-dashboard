@@ -31,6 +31,11 @@ const EXPECT: Record<string, string[] | "public" | Record<string, string[]>> = {
   "src/app/api/account/files/route.ts": { GET: ["admin", "ae"], POST: ["admin"], DELETE: ["super_admin"] }, "src/app/api/account/customers/route.ts": { GET: VIEW, POST: ["admin", "ae"], DELETE: ["super_admin"] }, "src/app/api/account/products/route.ts": { GET: VIEW, POST: ["admin", "ae"], PATCH: ["admin", "ae"], DELETE: ["admin"] }, "src/app/api/production/route.ts": { GET: VIEW, PATCH: ["admin"] },
   "src/app/api/content/route.ts": { GET: VIEW, POST: ["admin", "ae", "production"], PATCH: ["admin", "ae", "production"], DELETE: ["ae"] }, "src/app/api/content/wait/route.ts": { POST: ["admin", "ae", "production"], DELETE: ["admin", "ae", "production"] }, "src/app/api/content/history/route.ts": VIEW, "src/app/api/content/match/route.ts": ["admin", "ae", "production"], "src/app/api/content/report/route.ts": { GET: VIEW, POST: ["admin", "ae", "production"] }, "src/app/api/content/metrics/route.ts": VIEW, "src/app/api/content/products/route.ts": { GET: VIEW, PUT: ["admin", "ae"] },
   "src/app/api/targets/route.ts": { GET: VIEW, POST: ["admin"] },
+  // Production note (24/11/2026): ทุก Role ดูรายการ / ปลดล็อก / เปิดดูรหัสผ่าน (ต้องใส่รหัสเปิดดู) · Admin ขึ้นไปแก้ · Super Admin ตั้งรหัสเปิดดู
+  "src/app/api/prod-notes/route.ts": { GET: VIEW, POST: ["admin"] },
+  "src/app/api/prod-notes/unlock/route.ts": { POST: VIEW },
+  "src/app/api/prod-notes/reveal/route.ts": { POST: VIEW },
+  "src/app/api/prod-notes/code/route.ts": { GET: ["super_admin"], POST: ["super_admin"] },
   "src/app/api/notifications/route.ts": { GET: VIEW, POST: VIEW }, // การแจ้งเตือน (20/11/2026): ทุก Role · เห็น/อ่านเฉพาะของตัวเอง
   "src/app/api/perf/report/route.ts": VIEW, // Admin เห็นทุกคน · Role อื่นเห็นของตัวเอง (กรองฝั่ง Server)
   "src/app/api/perf/settings/route.ts": ["super_admin"], // ประสิทธิภาพรายคน: ตำแหน่ง / เป้า / วันหยุด (5/11/2026)
@@ -163,9 +168,9 @@ assert.equal(csvSafe(5), 5); ok("ข้อความที่ขึ้นต�
 {
   const { navFor } = await import("../src/lib/roles");
   const kids = (r: "super_admin" | "admin" | "marketing" | "ae" | "observer") => navFor(r).find((n) => n.label === "ตั้งค่า");
-  assert.deepEqual(kids("super_admin")!.children!.map((c) => c.href), ["/settings", "/settings/targets", "/settings/import-guide", "/settings/metrics", "/settings/performance"]); assert.equal(kids("super_admin")!.href, "/settings");
-  assert.deepEqual(kids("admin")!.children!.map((c) => c.href), ["/settings/targets", "/settings/import-guide", "/settings/metrics"]);
-  for (const r of ["marketing", "ae", "observer"] as const) assert.deepEqual(kids(r)!.children!.map((c) => c.href), ["/settings/targets", "/settings/import-guide", "/settings/metrics"], r);
+  assert.deepEqual(kids("super_admin")!.children!.map((c) => c.href), ["/settings", "/settings/targets", "/settings/import-guide", "/settings/metrics", "/settings/production-notes", "/settings/performance"]); assert.equal(kids("super_admin")!.href, "/settings");
+  assert.deepEqual(kids("admin")!.children!.map((c) => c.href), ["/settings/targets", "/settings/import-guide", "/settings/metrics", "/settings/production-notes"]);
+  for (const r of ["marketing", "ae", "observer"] as const) assert.deepEqual(kids(r)!.children!.map((c) => c.href), ["/settings/targets", "/settings/import-guide", "/settings/metrics", "/settings/production-notes"], r);
   ok("เมนู ตั้งค่า: Super Admin เห็นทั้งหมด · Role อื่นเห็น เป้าหมาย / คู่มือนำเข้า / คำอธิบายตัวเลข (ไม่เห็น ตั้งค่าระบบ / ตั้งเป้ารายคน)");
 }
 console.log(`\nผ่านทั้งหมด ${pass} รายการ`);

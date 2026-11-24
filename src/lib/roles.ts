@@ -82,6 +82,7 @@ export const NAV: NavItem[] = [
     { href: "/settings/targets", label: "เป้าหมายรายเดือน", roles: ALL, icon: "target", system: "dashboard" },
     { href: "/settings/import-guide", label: "คู่มือนำเข้าข้อมูล", roles: ALL, icon: "book", system: "dashboard" },
     { href: "/settings/metrics", label: "คำอธิบายตัวเลข", roles: MKT, icon: "info", system: "shared" },
+    { href: "/settings/production-notes", label: "Production note", roles: ALL, icon: "book", system: "shared" }, // ทุกคนดู · Admin+ แก้ · รหัสผ่านต้องใส่รหัสเปิดดู (24/11/2026)
     { href: "/settings/performance", label: "ตั้งเป้าประสิทธิภาพรายคน", roles: SUPER, icon: "target", system: "shared" }, // ตำแหน่ง / เป้ารายคน / วันหยุด (5/11/2026)
   ] },
   // คู่มือการใช้งานแบบเป็นขั้นตอน (5/11/2026): อยู่ล่างสุดของเมนูแต่ละระบบ · Dashboard ไม่มี (มี คู่มือนำเข้าข้อมูล / คำอธิบายตัวเลข อยู่แล้ว)

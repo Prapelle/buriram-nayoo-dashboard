@@ -2,6 +2,7 @@ import { requirePage } from "@/lib/page-guard";
 import { HealthCheck } from "@/components/HealthCheck";
 import { UsersManager } from "@/components/UsersManager";
 import { BackupGuide } from "@/components/BackupGuide";
+import { ProdNoteCode } from "@/components/ProdNotes";
 
 export default async function SettingsPage() {
   await requirePage("/settings");
@@ -12,6 +13,11 @@ export default async function SettingsPage() {
         <h2 className="mb-1 font-semibold">สมาชิกและสิทธิ์</h2>
         <p className="mb-4 text-sm text-slate-600">เพิ่มสมาชิกด้วยอีเมล Google แล้วเลือก Role · ข้อมูลเก็บในแท็บ APP_USERS ของ Google Sheet</p>
         <UsersManager />
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-white p-5">
+        <h2 className="mb-1 font-semibold">รหัสเปิดดูรหัสผ่าน (Production note)</h2>
+        <p className="mb-4 text-sm text-slate-600">ทุกคนต้องใส่รหัสนี้ก่อนดูรหัสผ่านในหน้า ตั้งค่า → Production note (เห็นได้ 5 นาที) · ระบบเก็บเป็นค่าแฮช ไม่มีใครอ่านรหัสนี้กลับได้ ลืมแล้วให้ตั้งใหม่</p>
+        <ProdNoteCode />
       </div>
       <div className="rounded-xl border border-slate-200 bg-white p-5">
         <h2 className="mb-1 font-semibold">สำรองข้อมูล</h2>
