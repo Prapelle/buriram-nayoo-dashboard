@@ -103,7 +103,6 @@ export function ContentBoard({ canDelete, readOnly = false, me = "" }: { canDele
   }
 
   const chip = (c: Card) => {
-    const main = c.members.find((m) => m.is_main);
     return (
       <>
         <div className="font-medium leading-snug">{c.title}</div>
@@ -115,10 +114,14 @@ export function ContentBoard({ canDelete, readOnly = false, me = "" }: { canDele
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
           <span className="font-mono">{c.card_code}</span>
-          {main ? <span>👤 {main.name}</span> : c.members[0] && <span>👤 {c.members[0].name}</span>}{c.members.length > 1 && <span>+{c.members.length - 1}</span>}
           {c.planned_date && !c.published_at && <span>วันลง {dmy(c.wait.planned_eff || c.planned_date)}{c.wait.planned_eff && c.wait.planned_eff !== c.planned_date && <span className="text-slate-400"> (เลื่อนจาก {dmy(c.planned_date)})</span>}</span>}
           {c.published_at && <span>เผยแพร่ {dmy(c.published_at)}</span>}
         </div>
+        {c.members.length > 0 && ( // ผู้ร่วมงานทุกคน (24/11/2026) · คนหลักขึ้นก่อน ตัวหนา
+          <ul aria-label="ผู้ร่วมงาน" className="mt-1 flex flex-wrap gap-1 text-[11px]">
+            {[...c.members].sort((a, b) => Number(b.is_main) - Number(a.is_main)).map((m) => (
+              <li key={m.email} title={m.duty} className={`rounded-full px-1.5 py-0.5 ${m.is_main ? "bg-brand-50 font-semibold text-brand-800" : "bg-slate-100 text-slate-700"}`}>👤 {m.name}</li>))}
+          </ul>)}
         {c.wait.open && (
           <div role={c.wait.alert ? "alert" : undefined} className={`mt-1 rounded px-1.5 py-0.5 text-xs ${c.wait.alert ? "bg-red-100 font-semibold text-red-700" : "bg-amber-100 text-amber-800"}`}>
             ⏳ รอลูกค้า ({c.wait.open.kind}) มาแล้ว {c.wait.open.days} วันทำการ{c.wait.alert && " — เกิน 3 วัน ควรตามลูกค้า"}
@@ -273,6 +276,9 @@ function CardDialog({ board, card, canDelete, onClose, onDone }: { board: Board;
   useEffect(() => { if (card) api(`/api/content/history?id=${card.card_id}`).then((j) => setHist(j.history)).catch(() => setHist([])); }, [card]);
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => { setF((p) => ({ ...p, [k]: v })); setErr((e) => ({ ...e, [k]: "" })); };
   const inReport = !!card && isReportStage(card.stage);
+  const [stage, setStage] = useState(card?.stage ?? "IDEA");
+  // ช่วงรายงานใช้ได้เฉพาะงานขาย · คงสถานะปัจจุบันไว้ในรายการเสมอ
+  const stageOpts = [...new Set([...PROD_STAGES, ...(f.sales_tag ? REPORT_STAGES : []), ...(card ? [card.stage] : [])])];
   const [waitKind, setWaitKind] = useState<string>(board.waitKinds[0] ?? "");
   const isMember = !!card && card.members.length > 0; // ปุ่มใช้ได้เสมอ — server ตรวจว่าเป็นผู้ร่วมงานจริง และตอบเหตุผลกลับมา
   async function waitAct(start: boolean) {
@@ -293,7 +299,17 @@ function CardDialog({ board, card, canDelete, onClose, onDone }: { board: Board;
 
   async function save() {
     setSaving(true); setTop(""); setErr({});
-    try { await api("/api/content", send("POST", { ...f, members, card_id: card?.card_id, updated_at_seen: card?.updated_at })); onDone(card ? `บันทึก ${card.card_code} แล้ว` : "เพิ่ม Content แล้ว (อยู่คอลัมน์ IDEA)"); }
+    try {
+      const r = await api("/api/content", send("POST", { ...f, members, card_id: card?.card_id, updated_at_seen: card?.updated_at })) as { updated_at?: string };
+      // เปลี่ยนสถานะงานจากหน้าแก้ไข (24/11/2026): บันทึกข้อมูลก่อน แล้วย้ายช่องตามกติกาเดียวกับการลากบนบอร์ด
+      if (card && stage !== card.stage) {
+        try {
+          const m = await api("/api/content", send("PATCH", { card_id: card.card_id, stage, updated_at_seen: r.updated_at })) as { stage: string; auto?: boolean };
+          onDone(`บันทึก ${card.card_code} แล้ว · สถานะ ${card.stage} → ${m.stage}${m.auto ? " (เลื่อนอัตโนมัติ)" : ""}`); return;
+        } catch (e) { onDone(`บันทึก ${card.card_code} แล้ว แต่เปลี่ยนสถานะไม่สำเร็จ: ${e instanceof Error ? e.message : "ลองใหม่"}`); return; }
+      }
+      onDone(card ? `บันทึก ${card.card_code} แล้ว` : "เพิ่ม Content แล้ว (อยู่คอลัมน์ IDEA)");
+    }
     catch (e) { const x = e as Error & { fields?: Record<string, string> }; setErr(x.fields ?? {}); setTop(x.message); } finally { setSaving(false); }
   }
   async function del() {
@@ -307,6 +323,8 @@ function CardDialog({ board, card, canDelete, onClose, onDone }: { board: Board;
         <div className="flex items-center justify-between"><h2 className="text-base font-semibold">{card ? `${card.card_code} · ${card.stage}` : "เพิ่ม Content"}</h2><button type="button" onClick={onClose} aria-label="ปิด" className="px-2 text-xl leading-none">×</button></div>
         {top && <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{top}</p>}
         {field("title", "ชื่อ Content *", <input value={f.title} onChange={(e) => set("title", e.target.value)} className={cls("title")} autoFocus />)}
+        {card && field("stage", "สถานะงาน", <select value={stage} onChange={(e) => setStage(e.target.value)} className={cls("stage")} aria-label="สถานะงาน">
+          {stageOpts.map((x) => <option key={x} value={x}>{x}{x === card.stage ? " (ปัจจุบัน)" : ""}</option>)}</select>)}
         <div className="grid gap-3 sm:grid-cols-2">
           {field("content_type", "ประเภท Content", <select value={f.content_type} onChange={(e) => set("content_type", e.target.value)} className={cls("content_type")}><option value="">—</option>{CONTENT_TYPES.map((x) => <option key={x}>{x}</option>)}</select>)}
           {field("planned_date", "วันลง (กำหนดเผยแพร่)", <input type="date" value={f.planned_date} onChange={(e) => set("planned_date", e.target.value)} className={cls("planned_date")} />)}

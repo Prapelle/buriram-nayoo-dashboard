@@ -113,7 +113,7 @@ export async function saveCard(input: Record<string, unknown>, actor: string, id
     await replaceMembers(t, rec.card_id, c.members, now);
     await notifyCardMembers(rec, [], c.members.map((m) => m.email), actor);
     await writeAudit(actor, "content_create", "content_card", rec.card_id, `${rec.card_code} ${rec.title}`);
-    return { card_id: rec.card_id, card_code: rec.card_code };
+    return { card_id: rec.card_id, card_code: rec.card_code, updated_at: rec.updated_at };
   }
   const i = t.CONTENT_CARDS.rows.findIndex((r) => r.card_id === id);
   if (i < 0) throw new ContentError(404, "ไม่พบการ์ด (อาจถูกลบ)", "NOT_FOUND");
@@ -128,7 +128,7 @@ export async function saveCard(input: Record<string, unknown>, actor: string, id
   await notifyCardMembers(rec, membersOf(t, id), c.members.map((m) => m.email), actor);
   if (c.members.some((m) => ART_DUTIES.includes(m.duty))) await resolveClaims(id);
   await writeAudit(actor, "content_update", "content_card", id, `${cur.card_code} ${rec.title}`);
-  return { card_id: id, card_code: cur.card_code };
+  return { card_id: id, card_code: cur.card_code, updated_at: rec.updated_at };
 }
 
 /**

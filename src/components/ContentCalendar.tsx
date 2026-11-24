@@ -8,7 +8,7 @@ import { useMemo, useState } from "react";
  * - ลากการ์ดที่ยังไม่เผยแพร่ไปวางวันอื่น = เลื่อนวันลง · ลากจากช่อง "ยังไม่กำหนดวัน" = ตั้งวันลง
  * - มือถือแสดงเป็นรายการตามวัน (เลื่อนวันผ่านฟอร์มแก้ไขการ์ด)
  */
-type CalCard = Record<string, string> & { wait: { planned_eff: string; report_due_eff: string } };
+type CalCard = Record<string, string> & { wait: { planned_eff: string; report_due_eff: string }; members?: { email: string; name: string; is_main?: boolean }[] };
 
 const DONE_REPORT = new Set(["รายงานเสร็จแล้ว", "ส่งให้ลูกค้าแล้ว"]);
 const WD = ["จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส.", "อา."];
@@ -50,16 +50,18 @@ export function ContentCalendar<C extends CalCard>({ cards, today, stageCls, bus
   const byId = (id: string) => cards.find((c) => c.card_id === id);
   const drop = (day: string) => { const c = byId(dragId); setDragId(""); setOver(""); if (c && !readOnly && !c.published_at && calDayOf(c) !== day) onReschedule(c, day); };
 
+  // 1 งานในปฏิทิน (24/11/2026): ชื่องาน · ผู้ร่วมงานทุกคน · สถานะงาน
   const item = (c: C, compact: boolean) => {
     const movable = !readOnly && !c.published_at && !busy.has(c.card_id);
+    const people = [...(c.members ?? [])].sort((a, b) => Number(!!b.is_main) - Number(!!a.is_main)).map((m) => m.name);
     return (
       <button key={c.card_id} type="button" onClick={() => onOpen(c)} draggable={movable}
         onDragStart={(e) => { e.dataTransfer.setData("text/plain", c.card_id); e.dataTransfer.effectAllowed = "move"; setDragId(c.card_id); }} onDragEnd={() => { setDragId(""); setOver(""); }}
-        title={`${c.card_code} ${c.title} · ${c.stage}${c.published_at ? " · เผยแพร่แล้ว" : movable ? " · ลากเพื่อเลื่อนวันลง" : ""}`}
-        className={`flex w-full items-center gap-1.5 rounded bg-white px-1.5 py-1 text-left text-xs shadow-sm ${c.sales_tag === "TRUE" ? "border-2 border-red-500" : "border border-slate-200"} ${movable ? "cursor-grab active:cursor-grabbing" : ""} ${busy.has(c.card_id) || dragId === c.card_id ? "opacity-40" : ""}`}>
-        <span aria-hidden className={`h-2.5 w-2.5 shrink-0 rounded-full ${stageCls[c.stage] ?? "bg-slate-200"}`} />
-        <span className={`min-w-0 flex-1 ${compact ? "truncate" : ""}`}>{c.published_at && "✓ "}{c.title}</span>
-        {!compact && <span className="shrink-0 text-[11px] text-slate-500">{c.stage}</span>}
+        title={`${c.card_code} ${c.title} · ${c.stage}${people.length ? ` · ${people.join(", ")}` : ""}${c.published_at ? " · เผยแพร่แล้ว" : movable ? " · ลากเพื่อเลื่อนวันลง" : ""}`}
+        className={`block w-full rounded bg-white px-1.5 py-1 text-left text-xs shadow-sm ${c.sales_tag === "TRUE" ? "border-2 border-red-500" : "border border-slate-200"} ${movable ? "cursor-grab active:cursor-grabbing" : ""} ${busy.has(c.card_id) || dragId === c.card_id ? "opacity-40" : ""}`}>
+        <span className={`block font-medium leading-snug ${compact ? "line-clamp-2" : ""}`}>{c.published_at && "✓ "}{c.title}</span>
+        {people.length > 0 && <span className="mt-0.5 block text-[11px] leading-snug text-slate-600">👤 {people.join(", ")}</span>}
+        <span className="mt-0.5 flex items-center gap-1 text-[11px] text-slate-500"><span aria-hidden className={`h-2 w-2 shrink-0 rounded-full ${stageCls[c.stage] ?? "bg-slate-200"}`} />{c.stage}</span>
       </button>);
   };
   const reportTag = (c: C) => (
