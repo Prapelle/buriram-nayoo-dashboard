@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/Skeleton";
 import { Notice, type Msg } from "@/components/Toast";
 import { BoardScroller, BoardTabs } from "@/components/Board";
 import { ContentCalendar } from "@/components/ContentCalendar";
+import { CardComments } from "@/components/CardComments";
 import { btn } from "@/components/PageHeader";
 import { thDate, thDateTime } from "@/lib/thdate";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -12,7 +13,7 @@ import { CONTENT_TYPES, DUTIES, PROD_STAGES, REPORT_STAGES, SALES_GOALS, isRepor
 
 type Member = { email: string; name: string; duty: string; is_main: boolean };
 type Wait = { open: { kind: string; since: string; days: number } | null; alert: boolean; prod_days: number; report_days: number; planned_eff: string; report_due_eff: string };
-type Card = Record<string, string> & { due: "none" | "upcoming" | "due" | "overdue"; members: Member[]; wait: Wait };
+type Card = Record<string, string> & { due: "none" | "upcoming" | "due" | "overdue"; members: Member[]; wait: Wait; comment_count?: number };
 type Board = { waitKinds: string[]; cards: Card[]; today: string; products: string[]; users: { email: string; name: string }[]; customers: { developer_id: string; name: string }[]; settings: { product: string; content_count: number; report_days: number }[] };
 type Metrics = { scope: "lifetime" | "daily" | "none"; as_of: string; permalink: string; views: number; reach: number; reactions: number; comments: number; shares: number; link_clicks: number; total_clicks: number };
 type Hist = { from_stage: string; to_stage: string; actor_name: string; at: string; note: string };
@@ -30,7 +31,8 @@ async function api(url: string, init?: RequestInit) {
 }
 const send = (method: string, body: unknown): RequestInit => ({ method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
-export function ContentBoard({ canDelete, readOnly = false, me = "" }: { canDelete: boolean; readOnly?: boolean; me?: string }) {
+/** canComment = เขียนความคิดเห็นได้ (ทุก Role ยกเว้น Observer) · canModerate = ลบความคิดเห็นของคนอื่นได้ (Super Admin / Admin) */
+export function ContentBoard({ canDelete, readOnly = false, me = "", canComment = false, canModerate = false }: { canDelete: boolean; readOnly?: boolean; me?: string; canComment?: boolean; canModerate?: boolean }) {
   const [state, setState] = useState<"loading" | "ok" | "error">("loading");
   const [b, setB] = useState<Board | null>(null);
   const [msg, setMsg] = useState<Msg>(null);
@@ -114,6 +116,7 @@ export function ContentBoard({ canDelete, readOnly = false, me = "" }: { canDele
         </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
           <span className="font-mono">{c.card_code}</span>
+          {!!c.comment_count && <span title="ความคิดเห็น" aria-label={`ความคิดเห็น ${c.comment_count}`}>💬 {c.comment_count}</span>}
           {c.planned_date && !c.published_at && <span>วันลง {dmy(c.wait.planned_eff || c.planned_date)}{c.wait.planned_eff && c.wait.planned_eff !== c.planned_date && <span className="text-slate-400"> (เลื่อนจาก {dmy(c.planned_date)})</span>}</span>}
           {c.published_at && <span>เผยแพร่ {dmy(c.published_at)}</span>}
         </div>
@@ -181,7 +184,7 @@ export function ContentBoard({ canDelete, readOnly = false, me = "" }: { canDele
           </BoardScroller>
           <p className="text-xs text-slate-500">• 7 คอลัมน์แรก = ช่วงผลิต · 4 คอลัมน์หลัง = ช่วงรายงานลูกค้า (เฉพาะ Content ที่ติดแท็กงานขาย) · งานขายที่เผยแพร่แล้วจะเลื่อนไป "รอครบเพื่อทำรายงาน" อัตโนมัติ พร้อมวันครบกำหนดจากระยะติดตามผล · ลากบนมือถือไม่สะดวก ใช้เมนูสถานะบนการ์ดแทน</p>
         </>)}
-      {!edit && viewId && b && (() => { const vc = b.cards.find((x) => x.card_id === viewId); return vc ? <CardView card={vc} onClose={() => setViewId("")} onEdit={readOnly ? undefined : () => { setViewId(""); setEdit(vc); }}
+      {!edit && viewId && b && (() => { const vc = b.cards.find((x) => x.card_id === viewId); return vc ? <CardView card={vc} me={me} canComment={canComment} canModerate={canModerate} onClose={() => setViewId("")} onEdit={readOnly ? undefined : () => { setViewId(""); setEdit(vc); }}
         onClaim={!readOnly && me && vc.stage === ART_STAGE && !vc.members.some((m) => m.email.toLowerCase() === me.toLowerCase()) ? (d) => void claim(vc, d) : undefined} claiming={busy.has(vc.card_id)} /> : null; })()}
       {edit && b && !readOnly && <CardDialog board={b} card={edit === "new" ? null : edit} canDelete={canDelete} onClose={() => setEdit(null)} onDone={(t) => { setEdit(null); setMsg({ type: "ok", text: t }); void load(true); }} />}
     </div>
@@ -189,7 +192,7 @@ export function ContentBoard({ canDelete, readOnly = false, me = "" }: { canDele
 }
 
 /** ดูข้อมูลการ์ด (อ่านอย่างเดียว) — กด แก้ไข เพื่อเปิดฟอร์มเดิม */
-function CardView({ card, onClose, onEdit, onClaim, claiming }: { card: Card; onClose: () => void; onEdit?: () => void; onClaim?: (duty: string) => void; claiming?: boolean }) {
+function CardView({ card, me, canComment, canModerate, onClose, onEdit, onClaim, claiming }: { card: Card; me: string; canComment: boolean; canModerate: boolean; onClose: () => void; onEdit?: () => void; onClaim?: (duty: string) => void; claiming?: boolean }) {
   const [duty, setDuty] = useState(ART_DUTIES[0]);
   const [hist, setHist] = useState<Hist[] | null>(null);
   const [mx, setMx] = useState<Metrics | null | undefined>(undefined);
@@ -256,6 +259,7 @@ function CardView({ card, onClose, onEdit, onClaim, claiming }: { card: Card; on
           </div>)}
         <details className="text-xs text-slate-600"><summary className="cursor-pointer">ประวัติสถานะ{hist ? ` (${hist.length})` : ""}</summary>
           <ul className="mt-1 space-y-0.5">{(hist ?? []).map((h, i) => <li key={i}>{thDateTime(h.at)} · {h.actor_name} · {h.from_stage || "สร้าง"} → {h.to_stage}{h.note && ` · ${h.note}`}</li>)}</ul></details>
+        <CardComments cardId={card.card_id} me={me} canPost={canComment} canModerate={canModerate} />
         <div className="flex items-center gap-2 border-t border-slate-200 pt-3">
           {onEdit && <button type="button" onClick={onEdit} className={btn.primary} autoFocus>แก้ไข</button>}
           <button type="button" onClick={onClose} className={btn.secondary}>ปิด</button>

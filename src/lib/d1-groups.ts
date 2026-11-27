@@ -7,6 +7,7 @@ import { TABS } from "./schema";
 import { PERF_TABS } from "./perf";
 import { NOTIF_TAB } from "./notify";
 import { NOTES_TAB } from "./prod-notes-schema";
+import { COMMENTS_TAB, COMMENT_FILES_TAB } from "./content-comments-schema";
 
 const MARKETING_TABS = ["IMPORT_BATCHES", "IMPORT_ERRORS", ...TABS.filter((t) => t.group === "marketing" && t.name !== "FB_PAGE_POSTS").map((t) => t.name)];
 
@@ -24,7 +25,7 @@ export const GROUP_TABS: Record<string, string[]> = {
 };
 
 /** ตารางที่ "เกิดบน D1" ไม่มีต้นทางใน Google Sheets — ใช้ D1 เสมอเมื่อผูก binding DB (ไม่ต้องย้าย/สลับ) */
-export const NATIVE_TABS = ["CONTENT_CARDS", "CONTENT_MEMBERS", "CONTENT_HISTORY", "PRODUCT_SETTINGS", "CONTENT_WAITS", ...PERF_TABS, NOTIF_TAB, NOTES_TAB];
+export const NATIVE_TABS = ["CONTENT_CARDS", "CONTENT_MEMBERS", "CONTENT_HISTORY", "PRODUCT_SETTINGS", "CONTENT_WAITS", ...PERF_TABS, NOTIF_TAB, NOTES_TAB, COMMENTS_TAB, COMMENT_FILES_TAB];
 
 export const tabsOfGroups = (groups: string[]) => groups.flatMap((g) => GROUP_TABS[g] ?? []);
 

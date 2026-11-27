@@ -12,6 +12,7 @@ import { notifyCardMembers, notifyCardMove, notifyCardReschedule, resolveClaims 
 import { ART_DUTIES } from "./notify";
 import { normRole } from "./roles";
 import { dedupeCode } from "./row-guard";
+import { commentCounts, purgeCardComments } from "./content-comments";
 import { appendRows, atomicWrite, casRow, deleteWhere, patchById, readTabs, toRow, updateById } from "./sheets";
 
 export class ContentError extends Error {
@@ -43,7 +44,7 @@ const dayOf = (iso: string) => (iso ? new Date(new Date(iso).getTime() + 7 * 360
 const waitsOf = (t: Record<string, Tab>, cardId: string): WaitRow[] => t.CONTENT_WAITS.rows.filter((w) => w.card_id === cardId).map((w) => ({ card_id: w.card_id, kind: w.kind, started_day: dayOf(w.started_at), ended_day: dayOf(w.ended_at) }));
 
 export async function getBoard() {
-  const t = await load(), today = todayBkk(), hol = holidaysOf(t);
+  const [t, cmts] = await Promise.all([load(), commentCounts()]), today = todayBkk(), hol = holidaysOf(t);
   const members = new Map<string, Rec[]>();
   for (const m of t.CONTENT_MEMBERS.rows) if (m.card_id) (members.get(m.card_id) ?? members.set(m.card_id, []).get(m.card_id)!).push(m);
   const cards = t.CONTENT_CARDS.rows.filter((c) => c.card_id).sort((a, b) => (a.stage_at || "").localeCompare(b.stage_at || "") || a.card_code.localeCompare(b.card_code)).map((c) => ({
@@ -52,6 +53,7 @@ export async function getBoard() {
       return { wait: { open: w.open, alert: w.alert, prod_days: w.prod, report_days: w.report, planned_eff: w.plannedEff, report_due_eff: w.reportDueEff }, due: reportDue({ ...c, report_due_date: w.reportDueEff || c.report_due_date }, today) };
     })(),
     members: (members.get(c.card_id) ?? []).map((m) => ({ email: m.email, name: userName(t, m.email), duty: m.duty, is_main: isTrue(m.is_main) })),
+    comment_count: cmts.get(c.card_id) ?? 0,
   }));
   const products = productTypesOf(t.APP_CONFIG.rows);
   return {
@@ -229,6 +231,7 @@ export async function deleteCard(id: string, actor: string) {
   const cur = t.CONTENT_CARDS.rows[i];
   await atomicWrite([{ deleteWhere: "CONTENT_MEMBERS", col: "card_id", value: id }, { deleteWhere: "CONTENT_WAITS", col: "card_id", value: id },
     { deleteWhere: "CONTENT_HISTORY", col: "card_id", value: id }, { deleteWhere: "CONTENT_CARDS", col: "card_id", value: id }]);
+  await purgeCardComments([id]);
   await writeAudit(actor, "content_delete", "content_card", id, `${cur.card_code} ${cur.title}`);
 }
 
@@ -287,6 +290,7 @@ export async function deleteCardsForJobs(jobIds: string[]) {
   if (!cards.length) return { deleted: 0 };
   await atomicWrite(cards.flatMap((c) => [{ deleteWhere: "CONTENT_MEMBERS", col: "card_id", value: c.card_id }, { deleteWhere: "CONTENT_WAITS", col: "card_id", value: c.card_id },
     { deleteWhere: "CONTENT_HISTORY", col: "card_id", value: c.card_id }, { deleteWhere: "CONTENT_CARDS", col: "card_id", value: c.card_id }]));
+  await purgeCardComments(cards.map((c) => c.card_id));
   return { deleted: cards.length };
 }
 

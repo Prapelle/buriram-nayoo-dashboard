@@ -11,8 +11,8 @@ export const NOTIF_DEFS = [{ name: NOTIF_TAB, headers: NOTIF_COLUMNS }];
 export const NOTIF_RETENTION_DAYS = 90;
 export const NOTIF_LIST_LIMIT = 50;
 
-export type NotifKind = "assign" | "change" | "member" | "claim";
-export const NOTIF_KIND_LABEL: Record<NotifKind, string> = { assign: "มอบหมายให้คุณ", change: "มีการเปลี่ยนแปลง", member: "เพิ่มคุณในการ์ด", claim: "รอคนรับงาน" };
+export type NotifKind = "assign" | "change" | "member" | "claim" | "comment";
+export const NOTIF_KIND_LABEL: Record<NotifKind, string> = { assign: "มอบหมายให้คุณ", change: "มีการเปลี่ยนแปลง", member: "เพิ่มคุณในการ์ด", claim: "รอคนรับงาน", comment: "ความคิดเห็นใหม่" };
 
 /** ช่องของบอร์ด Content ที่ต้องมีคนทำงานกราฟิก / วิดีโอ */
 export const ART_STAGE = "ART WORK / VIDEO";

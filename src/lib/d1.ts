@@ -284,6 +284,13 @@ export async function selectWhere(db: D1Like, tab: string, where: Record<string,
   const r = await db.prepare(sql).bind(...cols.map((c) => where[c])).all<Record<string, unknown>>();
   return r.results.map((x) => Object.fromEntries(hdr.map((h) => [h, str(x[h])])));
 }
+/** นับจำนวนแถวแยกตามค่าในคอลัมน์ (เช่น จำนวนความคิดเห็นต่อการ์ด) — คืน Map ค่า → จำนวน */
+export async function countBy(db: D1Like, tab: string, col: string): Promise<Map<string, number>> {
+  const hdr = await mustHeaders(db, tab);
+  if (!hdr.includes(col)) throw new Error(`ตาราง ${tab} ไม่มีคอลัมน์ ${col}`);
+  const r = await db.prepare(`SELECT ${q(col)} AS k, COUNT(*) AS n FROM ${tabName(tab)} GROUP BY ${q(col)}`).all<{ k: unknown; n: unknown }>();
+  return new Map(r.results.map((x) => [str(x.k), Number(x.n)]));
+}
 /** แก้บางช่องของทุกแถวที่ตรงเงื่อนไข (คอลัมน์ = ค่า ทุกคู่ · emptyCol = ช่องที่ต้องว่าง) — คืนจำนวนแถวที่แก้ */
 async function patchWhere_(db: D1Like, tab: string, where: Record<string, string>, patch: Record<string, string>, emptyCol?: string): Promise<number> {
   const hdr = await mustHeaders(db, tab), wc = Object.keys(where), pc = Object.keys(patch);

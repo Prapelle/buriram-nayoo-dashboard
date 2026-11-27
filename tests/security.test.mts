@@ -31,6 +31,9 @@ const EXPECT: Record<string, string[] | "public" | Record<string, string[]>> = {
   "src/app/api/account/files/route.ts": { GET: ["admin", "ae"], POST: ["admin"], DELETE: ["super_admin"] }, "src/app/api/account/customers/route.ts": { GET: VIEW, POST: ["admin", "ae"], DELETE: ["super_admin"] }, "src/app/api/account/products/route.ts": { GET: VIEW, POST: ["admin", "ae"], PATCH: ["admin", "ae"], DELETE: ["admin"] }, "src/app/api/production/route.ts": { GET: VIEW, PATCH: ["admin"] },
   "src/app/api/content/route.ts": { GET: VIEW, POST: ["admin", "ae", "production"], PATCH: ["admin", "ae", "production"], DELETE: ["ae"] }, "src/app/api/content/wait/route.ts": { POST: ["admin", "ae", "production"], DELETE: ["admin", "ae", "production"] }, "src/app/api/content/history/route.ts": VIEW, "src/app/api/content/match/route.ts": ["admin", "ae", "production"], "src/app/api/content/report/route.ts": { GET: VIEW, POST: ["admin", "ae", "production"] }, "src/app/api/content/metrics/route.ts": VIEW, "src/app/api/content/products/route.ts": { GET: VIEW, PUT: ["admin", "ae"] },
   "src/app/api/targets/route.ts": { GET: VIEW, POST: ["admin"] },
+  // ความคิดเห็นในการ์ด Content (27/11/2026): ทุก Role ดู · เขียน/แก้/ลบ ทุก Role ยกเว้น Observer (แก้เฉพาะของตัวเอง · ลบของคนอื่นเฉพาะ Admin ขึ้นไป ตรวจใน service)
+  "src/app/api/content/comments/route.ts": { GET: VIEW, POST: ["admin", "ae", "marketing", "production"], PATCH: ["admin", "ae", "marketing", "production"], DELETE: ["admin", "ae", "marketing", "production"] },
+  "src/app/api/content/comments/file/route.ts": { GET: VIEW },
   // Production note (24/11/2026): ทุก Role ดูรายการ / ปลดล็อก / เปิดดูรหัสผ่าน (ต้องใส่รหัสเปิดดู) · Admin ขึ้นไปแก้ · Super Admin ตั้งรหัสเปิดดู
   "src/app/api/prod-notes/route.ts": { GET: VIEW, POST: ["admin"] },
   "src/app/api/prod-notes/unlock/route.ts": { POST: VIEW },

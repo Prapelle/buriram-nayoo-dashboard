@@ -123,6 +123,13 @@ export async function notifyCardReschedule({ card, members, actor }: CardEvt, fr
     await notify(members.map((m) => ({ to: m, kind: "change", title: `${who} เลื่อนวันลงการ์ด ${card.card_code} ${card.title}`, body: `${fromDay || "(ยังไม่กำหนด)"} → ${toDay}`, href: cardHref(card.card_id), ref_type: "card", ref_id: card.card_id })), actor);
   } catch (e) { logError("notify.cardReschedule", e); }
 }
+/** การ์ด Content มีความคิดเห็นใหม่ (27/11/2026): แจ้งผู้ร่วมงานในการ์ด (ไม่แจ้งคนเขียน) */
+export async function notifyCardComment(card: Row, members: string[], actor: string, text: string) {
+  try {
+    const us = await users(), who = nameOfEmail(us, actor), snippet = text.replace(/\s+/g, " ").slice(0, 120);
+    await notify(members.map((m) => ({ to: m, kind: "comment", title: `${who} แสดงความคิดเห็นในการ์ด ${card.card_code} ${card.title}`, body: snippet, href: cardHref(card.card_id), ref_type: "card_comment", ref_id: card.card_id })), actor);
+  } catch (e) { logError("notify.cardComment", e); }
+}
 /** มีคนรับงานการ์ดแล้ว → การแจ้งเตือน "เข้ามารับงาน" ของการ์ดนั้นที่ยังไม่อ่าน = อ่านแล้ว */
 export async function resolveClaims(cardId: string) {
   try { const db = await getD1(); if (db) await D.patchWhere(db, NOTIF_TAB, { kind: "claim", ref_id: cardId }, { read_at: new Date().toISOString() }, "read_at"); } catch (e) { logError("notify.resolveClaims", e); }

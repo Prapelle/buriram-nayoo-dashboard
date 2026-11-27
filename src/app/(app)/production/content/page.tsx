@@ -12,7 +12,8 @@ export default async function ContentPage() {
     <section className="max-w-[1600px] space-y-4">
       <PageHeader crumb="Production" title="บอร์ด Content" sub="ผลิต Content ตั้งแต่ไอเดียถึงเผยแพร่ แล้วต่อด้วยรายงานลูกค้า (เฉพาะงานขาย) · เปิด Job แล้วการ์ดสร้างให้ตามจำนวนโพสต์ของ Product" />
       <ProductionTabs active="content" />
-      <ContentBoard canDelete={role === "super_admin" || role === "ae"} readOnly={!canEditContent(role)} me={me} />
+      <ContentBoard canDelete={role === "super_admin" || role === "ae"} readOnly={!canEditContent(role)} me={me}
+        canComment={role !== "observer"} canModerate={role === "super_admin" || role === "admin"} />
     </section>
   );
 }
